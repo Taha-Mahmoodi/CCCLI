@@ -1,0 +1,34 @@
+import { MemoRecorder } from "@/components/MemoRecorder";
+import { MemoList } from "@/components/MemoList";
+import { VoiceCommands } from "@/components/VoiceCommands";
+
+export default function Home() {
+  return (
+    <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-5 py-8 pb-40">
+      <section aria-labelledby="page-title" className="flex flex-col gap-2">
+        <h1 id="page-title" className="text-2xl font-semibold tracking-tight">
+          Your radio
+        </h1>
+        <p className="text-muted-foreground">
+          Record a voice memo and it joins your stream. Press play to listen like radio — one memo
+          after another, until the stream ends.
+        </p>
+      </section>
+
+      <section
+        aria-label="Record a memo"
+        className="flex flex-col items-center gap-5 rounded-2xl border border-border p-6"
+      >
+        <MemoRecorder />
+        <VoiceCommands />
+      </section>
+
+      <section aria-labelledby="stream-title" className="flex flex-col gap-3">
+        <h2 id="stream-title" className="text-lg font-semibold">
+          Your stream
+        </h2>
+        <MemoList />
+      </section>
+    </div>
+  );
+}

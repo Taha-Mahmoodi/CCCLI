@@ -1,0 +1,23 @@
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  // Pin the workspace root to this project. Without it, Next walks up and finds
+  // a stray ~/package-lock.json, picks the home dir as root, and traces the
+  // wrong files into the standalone output.
+  turbopack: {
+    root: import.meta.dirname,
+  },
+  // Standalone output => small, self-contained Docker runtime image.
+  // Only for the Docker build (BUILD_STANDALONE=1); a normal build keeps
+  // `next start` fully supported for local/CI e2e.
+  output: process.env.BUILD_STANDALONE === "1" ? "standalone" : undefined,
+  reactStrictMode: true,
+  images: {
+    formats: ["image/avif", "image/webp"],
+  },
+  // ponytail: GSAP is code-split via dynamic import at its call sites, not a
+  // manual webpack cacheGroup — Next 16 builds with Turbopack, which ignores
+  // custom webpack config. Load GSAP + plugins lazily instead.
+};
+
+export default nextConfig;

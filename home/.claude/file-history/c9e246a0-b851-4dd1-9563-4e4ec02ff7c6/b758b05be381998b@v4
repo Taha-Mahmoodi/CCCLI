@@ -1,0 +1,95 @@
+import { z } from "zod";
+
+export const ROLES = [
+  "BLIND_TRAVELER",
+  "FAMILY",
+  "CLINICIAN",
+  "ENGINEER",
+  "SUPPORTER",
+] as const;
+export type RoleValue = (typeof ROLES)[number];
+
+export const ROLE_LABELS: Record<RoleValue, string> = {
+  BLIND_TRAVELER: "Blind traveler",
+  FAMILY: "Family member",
+  CLINICIAN: "Clinician (orientation & mobility)",
+  ENGINEER: "Engineer / contributor",
+  SUPPORTER: "Supporter",
+};
+
+export const signupSchema = z.object({
+  email: z.email("Enter a valid email address."),
+  password: z.string().min(8, "Use at least 8 characters."),
+  displayName: z.string().trim().min(1, "Tell us what to call you.").max(80),
+  role: z.enum(ROLES),
+});
+
+export const loginSchema = z.object({
+  email: z.email(),
+  password: z.string().min(1),
+});
+
+export type SignupInput = z.infer<typeof signupSchema>;
+
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => (v ? v : undefined));
+
+export const profileSchema = z.object({
+  displayName: z.string().trim().min(1, "Tell us what to call you.").max(80),
+  bio: optionalText(400),
+  region: optionalText(80),
+});
+
+export const waitlistSchema = z.object({
+  region: optionalText(80),
+  deviceContext: optionalText(400),
+});
+
+export const FOCUS_AREAS = [
+  { value: "haptics", label: "Haptics and the buzz-language" },
+  { value: "sensing", label: "Physical sensing (ToF, radar, ultrasonic)" },
+  { value: "exoskeleton", label: "The steering exoskeleton" },
+  { value: "ai-assist", label: "AI assist (signs, naming, routes)" },
+  { value: "app", label: "This web app and the Commons" },
+] as const;
+
+const FOCUS_VALUES = FOCUS_AREAS.map((f) => f.value) as [string, ...string[]];
+
+export const contributorSchema = z.object({
+  githubUrl: z
+    .string()
+    .trim()
+    .url("Enter a valid URL.")
+    .optional()
+    .or(z.literal(""))
+    .transform((v) => (v ? v : undefined)),
+  focusAreas: z.array(z.enum(FOCUS_VALUES)).max(FOCUS_AREAS.length),
+  note: optionalText(600),
+});
+
+// ---- Social platform ----
+
+export const POST_MAX = 2000;
+export const COMMENT_MAX = 1000;
+
+export const postSchema = z.object({
+  body: z
+    .string()
+    .trim()
+    .min(1, "Write something to share.")
+    .max(POST_MAX, `Keep it under ${POST_MAX} characters.`),
+});
+
+export const commentSchema = z.object({
+  body: z
+    .string()
+    .trim()
+    .min(1, "Write a reply.")
+    .max(COMMENT_MAX, `Keep it under ${COMMENT_MAX} characters.`),
+});

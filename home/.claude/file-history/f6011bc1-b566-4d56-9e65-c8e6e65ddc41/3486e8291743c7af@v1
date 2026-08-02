@@ -1,0 +1,101 @@
+import Link from "next/link";
+import { getProfile, homeForRole } from "@/lib/auth";
+import { signOutAction } from "@/app/(auth)/actions";
+import { Logo } from "@/components/shared/Logo";
+import { Container } from "@/components/shared/Container";
+import { Button } from "@/components/ui/Button";
+import { t } from "@/lib/i18n";
+import { type UserRole } from "@/lib/supabase/types";
+
+const NAV_BY_ROLE: Record<
+  UserRole,
+  {
+    href: string;
+    labelKey:
+      | "nav.browse"
+      | "nav.account"
+      | "nav.dashboard"
+      | "nav.sessions"
+      | "admin.navOverview"
+      | "admin.navApprovals"
+      | "admin.navReports"
+      | "admin.navUsers"
+      | "admin.navActivity";
+  }[]
+> = {
+  customer: [
+    { href: "/browse", labelKey: "nav.browse" },
+    { href: "/account", labelKey: "nav.account" },
+  ],
+  provider: [
+    { href: "/provider/dashboard", labelKey: "nav.dashboard" },
+    { href: "/provider/sessions", labelKey: "nav.sessions" },
+  ],
+  admin: [
+    { href: "/admin", labelKey: "admin.navOverview" },
+    { href: "/admin/providers", labelKey: "admin.navApprovals" },
+    { href: "/admin/reports", labelKey: "admin.navReports" },
+    { href: "/admin/users", labelKey: "admin.navUsers" },
+    { href: "/admin/activity", labelKey: "admin.navActivity" },
+  ],
+};
+
+export async function AppHeader() {
+  const profile = await getProfile();
+
+  return (
+    <header className="border-b border-border bg-surface">
+      <Container className="flex items-center justify-between gap-4 py-3">
+        <Link
+          href={profile ? homeForRole(profile.role) : "/"}
+          className="rounded-sm"
+          aria-label={`${t("app.name")}, ${t("nav.home").toLowerCase()}`}
+        >
+          <Logo height={36} />
+        </Link>
+
+        <nav aria-label={t("nav.menu")}>
+          <ul className="flex items-center gap-1 sm:gap-2">
+            {profile ? (
+              <>
+                {NAV_BY_ROLE[profile.role].map((item) => (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      className="inline-flex min-h-12 items-center rounded-btn px-3 text-base font-bold text-ink hover:bg-primary-tint/50"
+                    >
+                      {t(item.labelKey)}
+                    </Link>
+                  </li>
+                ))}
+                <li>
+                  <form action={signOutAction}>
+                    <Button type="submit" variant="ghost">
+                      {t("nav.signOut")}
+                    </Button>
+                  </form>
+                </li>
+              </>
+            ) : (
+              <>
+                <li>
+                  <Link
+                    href="/signin"
+                    className="inline-flex min-h-12 items-center rounded-btn px-3 text-base font-bold text-primary hover:bg-primary-tint/50"
+                  >
+                    {t("nav.signIn")}
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/signup" className="rounded-btn">
+                    <Button>{t("nav.signUp")}</Button>
+                  </Link>
+                </li>
+              </>
+            )}
+          </ul>
+        </nav>
+      </Container>
+    </header>
+  );
+}

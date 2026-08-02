@@ -1,0 +1,12 @@
+# ---- Database (PostgreSQL) ----
+# Local dev / docker-compose default:
+DATABASE_URL="postgresql://third_eye:third_eye@localhost:5432/third_eye?schema=public"
+
+# ---- Auth.js (NextAuth v5) ----
+# Generate with: openssl rand -base64 32
+AUTH_SECRET="replace-with-a-32-byte-base64-secret"
+# Public origin of the app (used for callbacks). In prod set to your domain.
+AUTH_URL="http://localhost:3000"
+
+# ---- App ----
+NODE_ENV="development"

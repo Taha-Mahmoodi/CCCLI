@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "status": "no-cli",
+  "cached_at": 1782983367182,
+  "key": {
+    "home": "/Users/taha",
+    "gbrain_home": "",
+    "path_hash": "941802890339c1cd",
+    "gbrain_bin_path": "",
+    "gbrain_version": "",
+    "config_mtime": 0,
+    "config_size": 0,
+    "probe_timeout_ms": 15000
+  }
+}

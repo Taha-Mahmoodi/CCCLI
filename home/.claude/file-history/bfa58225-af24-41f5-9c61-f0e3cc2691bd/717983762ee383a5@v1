@@ -1,0 +1,166 @@
+# backend/tests/visits/test_router.py
+import uuid
+
+import pytest
+
+pytestmark = pytest.mark.asyncio
+
+TENANT_HEADER = "X-Tenant-Id"
+
+
+async def _register(client, tenant_id, email, role):
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": "hunter2pass", "role": role},
+        headers={TENANT_HEADER: tenant_id},
+    )
+    return response.json()["access_token"]
+
+
+async def _me(client, token):
+    response = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    return response.json()
+
+
+async def test_rep_can_check_in_remotely(client):
+    tenant_id = str(uuid.uuid4())
+    token = await _register(client, tenant_id, "rep@example.com", "rep")
+
+    response = await client.post(
+        "/api/v1/visits/check-in",
+        json={"latitude": 5.0, "longitude": 5.0, "notes": "remote visit"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["zone_id"] is None
+    assert body["geofence_verified"] is False
+
+
+async def test_manager_cannot_check_in(client):
+    tenant_id = str(uuid.uuid4())
+    token = await _register(client, tenant_id, "mgr@example.com", "manager")
+
+    response = await client.post(
+        "/api/v1/visits/check-in",
+        json={"latitude": 5.0, "longitude": 5.0},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 403
+
+
+async def test_check_in_to_zone_and_check_out(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    rep_token = await _register(client, tenant_id, "rep@example.com", "rep")
+    rep_id = (await _me(client, rep_token))["id"]
+
+    zone_response = await client.post(
+        "/api/v1/zones",
+        json={
+            "name": "Downtown",
+            "boundary": {"type": "Polygon", "coordinates": [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]]},
+        },
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+    zone_id = zone_response.json()["id"]
+    await client.post(
+        f"/api/v1/zones/{zone_id}/assignments",
+        json={"rep_id": rep_id},
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+
+    checkin_response = await client.post(
+        "/api/v1/visits/check-in",
+        json={"zone_id": zone_id, "latitude": 5.0, "longitude": 5.0},
+        headers={"Authorization": f"Bearer {rep_token}"},
+    )
+    assert checkin_response.status_code == 201
+    assert checkin_response.json()["geofence_verified"] is True
+    visit_id = checkin_response.json()["id"]
+
+    checkout_response = await client.post(
+        f"/api/v1/visits/{visit_id}/check-out",
+        headers={"Authorization": f"Bearer {rep_token}"},
+    )
+    assert checkout_response.status_code == 200
+    assert checkout_response.json()["checked_out_at"] is not None
+
+
+async def test_check_out_unknown_visit_returns_404(client):
+    tenant_id = str(uuid.uuid4())
+    token = await _register(client, tenant_id, "rep@example.com", "rep")
+
+    response = await client.post(
+        f"/api/v1/visits/{uuid.uuid4()}/check-out",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+
+
+async def test_check_out_twice_returns_409(client):
+    tenant_id = str(uuid.uuid4())
+    token = await _register(client, tenant_id, "rep@example.com", "rep")
+    checkin = await client.post(
+        "/api/v1/visits/check-in",
+        json={"latitude": 1.0, "longitude": 1.0},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    visit_id = checkin.json()["id"]
+    await client.post(f"/api/v1/visits/{visit_id}/check-out", headers={"Authorization": f"Bearer {token}"})
+
+    second = await client.post(f"/api/v1/visits/{visit_id}/check-out", headers={"Authorization": f"Bearer {token}"})
+
+    assert second.status_code == 409
+
+
+async def test_rep_lists_only_own_visits(client):
+    tenant_id = str(uuid.uuid4())
+    token_a = await _register(client, tenant_id, "rep-a@example.com", "rep")
+    token_b = await _register(client, tenant_id, "rep-b@example.com", "rep")
+    await client.post(
+        "/api/v1/visits/check-in", json={"latitude": 1.0, "longitude": 1.0},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    await client.post(
+        "/api/v1/visits/check-in", json={"latitude": 2.0, "longitude": 2.0},
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+
+    response = await client.get("/api/v1/visits", headers={"Authorization": f"Bearer {token_a}"})
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+
+async def test_manager_lists_all_tenant_visits(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    rep_token = await _register(client, tenant_id, "rep@example.com", "rep")
+    await client.post(
+        "/api/v1/visits/check-in", json={"latitude": 1.0, "longitude": 1.0},
+        headers={"Authorization": f"Bearer {rep_token}"},
+    )
+
+    response = await client.get("/api/v1/visits", headers={"Authorization": f"Bearer {mgr_token}"})
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+
+async def test_get_visit_belonging_to_other_rep_returns_404(client):
+    tenant_id = str(uuid.uuid4())
+    token_a = await _register(client, tenant_id, "rep-a@example.com", "rep")
+    token_b = await _register(client, tenant_id, "rep-b@example.com", "rep")
+    checkin = await client.post(
+        "/api/v1/visits/check-in", json={"latitude": 1.0, "longitude": 1.0},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    visit_id = checkin.json()["id"]
+
+    response = await client.get(f"/api/v1/visits/{visit_id}", headers={"Authorization": f"Bearer {token_b}"})
+
+    assert response.status_code == 404

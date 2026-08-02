@@ -1,0 +1,85 @@
+import './globals.css';
+import type { ReactNode } from 'react';
+import type { Metadata, Viewport } from 'next';
+import Nav from '@/components/Nav';
+import Footer from '@/components/Footer';
+import ClientBootstrap from '@/components/ClientBootstrap';
+import AudioTour from '@/components/AudioTour';
+import VoiceAssistant from '@/components/VoiceAssistant';
+import AnalyticsTracker from '@/components/AnalyticsTracker';
+import BugReportWidget from '@/components/BugReportWidget';
+import JsonLd from '@/components/JsonLd';
+import { SITE, pageMetadata, organizationJsonLd } from '@/lib/seo';
+import { ThemeProvider } from '@/lib/context/theme-context';
+import { NavProvider } from '@/lib/context/nav-context';
+
+// Root metadata — every route inherits these and overrides via
+// its own generateMetadata() / pageMetadata() calls.
+export const metadata: Metadata = {
+  ...pageMetadata({
+    title: SITE.defaultTitle,
+    description: SITE.description,
+    path: '/',
+  }),
+  title: {
+    default: SITE.defaultTitle,
+    template: SITE.titleTemplate,
+  },
+  applicationName: SITE.name,
+  authors: [{ name: SITE.orgLegalName }],
+  creator: SITE.orgLegalName,
+  publisher: SITE.orgLegalName,
+  keywords: [
+    'accessibility', 'assistive technology', 'screen reader',
+    'visual impairment', 'blind', 'low vision', 'NGO', 'open source',
+  ],
+  formatDetection: { email: false, address: false, telephone: false },
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#f7f2e9' },
+    { media: '(prefers-color-scheme: dark)',  color: '#100e17' },
+  ],
+};
+
+export default function RootLayout({ children }: { children: ReactNode }) {
+  return (
+    <html lang="en" data-theme="dark" data-text-size="a" suppressHydrationWarning>
+      <head>
+        {/*
+          Tiny blocking inline script — restores the user's saved
+          theme + text-size BEFORE the first paint, so dark / high-
+          contrast users don't see a white flash while ClientBootstrap
+          hydrates. The keys match lib/client/theme.ts exactly.
+          Static export: no per-request nonce; CSP for inline scripts
+          is enforced via nginx (script-src 'self' 'sha256-...').
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "(function(){try{var T=['light','dark','high-contrast'];var S=['a','a-plus','a-plus-plus'];var t=localStorage.getItem('teww-theme');var s=localStorage.getItem('teww-size');if(!T.indexOf||T.indexOf(t)<0)t='dark';if(S.indexOf(s)<0)s='a';var r=document.documentElement;r.setAttribute('data-theme',t);r.setAttribute('data-text-size',s);}catch(_){}})();",
+          }}
+        />
+        <JsonLd data={organizationJsonLd()} />
+      </head>
+      <body>
+        <a href="#main" className="skip-link">Skip to main content</a>
+        <ThemeProvider>
+          <NavProvider>
+            <Nav />
+            <main id="main">{children}</main>
+            <Footer />
+            <ClientBootstrap />
+            <AudioTour />
+            <VoiceAssistant />
+            <AnalyticsTracker />
+            <BugReportWidget />
+          </NavProvider>
+        </ThemeProvider>
+      </body>
+    </html>
+  );
+}

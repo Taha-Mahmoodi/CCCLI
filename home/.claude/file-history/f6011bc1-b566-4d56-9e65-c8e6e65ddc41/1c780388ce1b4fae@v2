@@ -1,0 +1,13 @@
+import * as React from "react";
+
+/**
+ * Static, non-interactive label (e.g. a listener's topic). For a toggleable
+ * version use <Chip>. v2: quiet tint fill, no border.
+ */
+export function Tag({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center rounded-pill bg-primary-tint px-3 py-1 text-sm font-bold text-primary-dark">
+      {children}
+    </span>
+  );
+}

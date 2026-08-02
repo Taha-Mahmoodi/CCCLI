@@ -1,0 +1,6 @@
+plugins {
+  id("org.jetbrains.kotlin.jvm")
+}
+
+// The shared engine (RadioEngine.kt) — a pure-Kotlin module the app depends on.
+// Also compiles standalone via kotlinc in the `android-core` CI job.

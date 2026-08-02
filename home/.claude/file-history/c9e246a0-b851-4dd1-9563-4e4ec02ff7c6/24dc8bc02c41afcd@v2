@@ -1,0 +1,64 @@
+"use server";
+
+import { AuthError } from "next-auth";
+import { prisma } from "@/lib/db";
+import { hashPassword } from "@/lib/auth-password";
+import { signupSchema } from "@/lib/validation";
+import { signIn } from "@/lib/auth";
+
+export type AuthActionState = { error?: string };
+
+// On success, signIn throws a NEXT_REDIRECT that Next handles — we must rethrow
+// anything that is not an AuthError (bad credentials) so the redirect happens.
+export async function signUp(
+  _prev: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  const parsed = signupSchema.safeParse({
+    email: formData.get("email"),
+    password: formData.get("password"),
+    displayName: formData.get("displayName"),
+    role: formData.get("role"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Please check the form." };
+  }
+  const { email, password, displayName, role } = parsed.data;
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing) {
+    return { error: "An account with that email already exists." };
+  }
+
+  const passwordHash = await hashPassword(password);
+  await prisma.user.create({
+    data: { email, passwordHash, role, profile: { create: { displayName } } },
+  });
+
+  try {
+    await signIn("credentials", { email, password, redirectTo: "/app" });
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return { error: "Account created — please sign in." };
+    }
+    throw error;
+  }
+  return {};
+}
+
+export async function login(
+  _prev: AuthActionState,
+  formData: FormData,
+): Promise<AuthActionState> {
+  const email = String(formData.get("email") ?? "");
+  const password = String(formData.get("password") ?? "");
+  try {
+    await signIn("credentials", { email, password, redirectTo: "/app" });
+  } catch (error) {
+    if (error instanceof AuthError) {
+      return { error: "Invalid email or password." };
+    }
+    throw error;
+  }
+  return {};
+}

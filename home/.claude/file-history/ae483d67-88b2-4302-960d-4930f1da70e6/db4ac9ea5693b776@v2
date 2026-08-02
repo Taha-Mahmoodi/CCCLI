@@ -1,0 +1,69 @@
+"use client";
+
+// One memo, rendered as a card — the v1 deck's unit. A memo is "written or
+// voice": the transcript is the readable face of the card, the Play button is
+// the voice. Presentational only; the deck (SwipeDeck) owns gestures, focus,
+// and the action buttons, so this stays reusable and testable.
+
+import { Heart, Play } from "lucide-react";
+import { formatDuration, spokenDuration } from "@/lib/format";
+import { displayTranscript } from "@/lib/types";
+import type { Memo } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+export function MemoCard({
+  memo,
+  index,
+  showTranscript = true,
+  onPlay,
+}: {
+  memo: Memo;
+  index: number;
+  showTranscript?: boolean;
+  onPlay: () => void;
+}) {
+  const transcript = displayTranscript(memo);
+  const isCorrected = !!memo.correctedTranscript;
+
+  return (
+    <div className="flex h-full flex-col gap-5 rounded-3xl border border-border bg-card p-6 shadow-sm">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-muted-foreground">Memo {index + 1}</p>
+          <p className="text-lg font-semibold">{formatDuration(memo.durationMs)}</p>
+        </div>
+        {memo.liked && (
+          <Heart className="size-6 fill-current text-primary" aria-label="You liked this memo" />
+        )}
+      </div>
+
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 text-center">
+        <Button
+          type="button"
+          size="icon"
+          className="size-20 rounded-full"
+          aria-label={`Play memo ${index + 1}, ${spokenDuration(memo.durationMs)}`}
+          onClick={onPlay}
+        >
+          <Play className="size-8" aria-hidden="true" />
+        </Button>
+
+        {showTranscript ? (
+          transcript ? (
+            <p className={cn("text-base leading-relaxed text-foreground/90")}>
+              {transcript}
+              {!isCorrected && (
+                <span className="ms-1 text-xs text-muted-foreground">
+                  (machine transcript — may contain errors)
+                </span>
+              )}
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">Voice memo — press play to listen.</p>
+          )
+        ) : null}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,71 @@
+import random, math
+
+W, H = 900, 300
+FONT = 'SFMono-Regular, Menlo, Consolas, monospace'
+PURPLE = '#8B7BFF'
+SPARK = '#F5A623'
+CY = 150
+
+p = [f'<svg width="{W}" height="{H}" viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="git-a-profile — forge a one-of-a-kind GitHub profile, org, or project README">']
+p.append('<title>git-a-profile</title>')
+p.append('''<defs>
+  <radialGradient id="bg" cx="50%" cy="42%" r="75%"><stop offset="0%" stop-color="#15172b"/><stop offset="100%" stop-color="#05060d"/></radialGradient>
+  <filter id="glow" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>''')
+p.append(f'<rect width="{W}" height="{H}" fill="url(#bg)"/>')
+
+# constellation dots, twinkling
+rnd = random.Random(21)
+for _ in range(110):
+    x, y = rnd.uniform(0, W), rnd.uniform(0, H)
+    r = rnd.uniform(0.3, 1.0); o = rnd.uniform(0.07, 0.28); d = rnd.uniform(3, 6.5); b = rnd.uniform(0, 5)
+    p.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.2f}" fill="#9fb0d6" opacity="{o:.2f}"><animate attributeName="opacity" values="{o:.2f};{o*0.3:.2f};{o:.2f}" dur="{d:.1f}s" begin="{b:.1f}s" repeatCount="indefinite"/></circle>')
+
+# top-left terminal cue
+p.append(f'<circle cx="30" cy="34" r="5" fill="#ff5f56"/><circle cx="48" cy="34" r="5" fill="#ffbd2e"/><circle cx="66" cy="34" r="5" fill="#27c93f"/>')
+p.append(f'<text x="86" y="38" font-family="{FONT}" font-size="12" fill="#8b8fa3">profiles &#8212; forged, not templated</text>')
+
+# wordmark: git · a · profile  with the dots as small glowing planets
+# measure roughly in monospace at fs=52 => ~31px/char
+fs = 50
+parts = [('git', '#ffffff'), ('a', '#ffffff'), ('profile', '#ffffff')]
+# build a centered line: "git" DOT "a" DOT "profile"
+seg = "git   a   profile"
+total_w = len(seg) * (fs*0.6)
+x0 = (W - total_w) / 2
+# draw text pieces + orbiting dots between
+p.append(f'<text x="{W/2}" y="{CY+8}" text-anchor="middle" font-family="{FONT}" font-size="{fs}" font-weight="700" fill="#f2f2f4">git</text>')
+# positions for the two separators relative to center
+# simpler: render three words with fixed gaps using tspans and put glowing orbs at the gaps
+p.pop()  # remove the simple one, do a structured layout
+gap = 46
+w_git = 3 * fs*0.6
+w_a = 1 * fs*0.6
+w_prof = 7 * fs*0.6
+line_w = w_git + gap + w_a + gap + w_prof
+lx = (W - line_w) / 2
+p.append(f'<text x="{lx}" y="{CY+8}" font-family="{FONT}" font-size="{fs}" font-weight="700" fill="#f2f2f4">git</text>')
+orb1 = lx + w_git + gap/2
+p.append(f'<circle cx="{orb1}" cy="{CY-8}" r="6" fill="{PURPLE}" filter="url(#glow)"/>')
+ax = lx + w_git + gap
+p.append(f'<text x="{ax}" y="{CY+8}" font-family="{FONT}" font-size="{fs}" font-weight="700" fill="{PURPLE}">a</text>')
+orb2 = ax + w_a + gap/2
+p.append(f'<circle cx="{orb2}" cy="{CY-8}" r="6" fill="{SPARK}" filter="url(#glow)"/>')
+px = ax + w_a + gap
+p.append(f'<text x="{px}" y="{CY+8}" font-family="{FONT}" font-size="{fs}" font-weight="700" fill="#f2f2f4">profile</text>')
+# blinking cursor
+curx = px + w_prof + 8
+p.append(f'<rect x="{curx}" y="{CY-30}" width="16" height="40" fill="{PURPLE}"><animate attributeName="opacity" values="1;1;0;0" keyTimes="0;0.5;0.5;1" dur="1.1s" repeatCount="indefinite"/></rect>')
+
+# animated forge sweep under the wordmark
+p.append(f'<line x1="{lx}" y1="{CY+30}" x2="{lx+line_w+24}" y2="{CY+30}" stroke="#2a2f45" stroke-width="2"/>')
+p.append(f'<circle cx="{lx}" cy="{CY+30}" r="4" fill="{SPARK}" filter="url(#glow)">'
+         f'<animate attributeName="cx" values="{lx};{lx+line_w+24};{lx}" dur="4s" repeatCount="indefinite"/></circle>')
+
+# tagline
+p.append(f'<text x="{W/2}" y="{CY+74}" text-anchor="middle" font-family="{FONT}" font-size="14" fill="#b9bccb">Forge a one-of-a-kind GitHub profile, org, or project README.</text>')
+p.append(f'<text x="{W/2}" y="{CY+98}" text-anchor="middle" font-family="{FONT}" font-size="11" fill="#6b7280">research &#8594; design &#8594; build &#8594; verify &#183; human gates &#183; no templates</text>')
+
+p.append('</svg>')
+open('/private/tmp/claude-501/-Users-taha/51b90afe-944f-4f8c-a234-21ade39239a8/scratchpad/gap_banner.svg','w').write('\n'.join(p))
+print('done')

@@ -1,0 +1,182 @@
+@import "tailwindcss";
+
+/* =====================================================================
+   HEARD — Design tokens (ported from the design system colors_and_type.css)
+   Warm, trustworthy, accessible-first. Body floor 18px. AA floor, AAA body.
+   Fonts (Lora display + Nunito Sans body) are loaded via next/font in
+   app/layout.tsx and exposed as --font-lora / --font-nunito-sans.
+   ===================================================================== */
+
+@theme {
+  /* ---- Color: brand palette (exact tokens from brief) ------------- */
+  --color-bg: #fbf7f2; /* warm off-white page background */
+  --color-surface: #ffffff; /* cards, sheets */
+  --color-surface-sunk: #f4eee5; /* recessed wells, track backgrounds */
+
+  --color-ink: #2a2622; /* primary text (warm near-black) */
+  --color-ink-soft: #6b6259; /* secondary text */
+  --color-ink-faint: #948b81; /* tertiary / placeholder */
+
+  --color-primary: #136f63; /* calm teal — trust; primary buttons */
+  --color-primary-dark: #0e5249; /* hover / active */
+  --color-primary-tint: #e4efec; /* teal wash — selected chips, fills */
+
+  --color-accent: #e08a3c; /* warm amber — tips, gentle highlights */
+  --color-accent-dark: #c4732c; /* amber hover / active */
+  --color-accent-tint: #fbebd9; /* amber wash */
+  --color-accent-strong: #8a4f15; /* darker amber — AA text on accent-tint (≥4.5:1) */
+
+  --color-success: #2e7d5b; /* available / positive (pair w/ text) */
+  --color-success-tint: #e3f0ea;
+  --color-success-strong: #236449; /* darker green — AA text on success-tint (≥4.5:1) */
+  --color-alert: #b23a2e; /* errors / safety (pair w/ text) */
+  --color-alert-tint: #f7e6e3;
+
+  --color-border: #ece3d8; /* hairlines, dividers */
+  --color-border-strong: #d9ccbc; /* input borders, stronger separation */
+  --color-focus: #1b6fb0; /* high-visibility focus ring (3px) */
+
+  /* ---- Type families --------------------------------------------- */
+  --font-display: var(--font-lora), Georgia, "Times New Roman", serif;
+  --font-body: var(--font-nunito-sans), system-ui, -apple-system, sans-serif;
+
+  /* ---- Type scale (rem from 16px root). Body floor = 18px -------- */
+  --text-xs: 0.875rem; /* 14px — meta / fine print */
+  --text-sm: 1rem; /* 16px — labels, secondary */
+  --text-base: 1.125rem; /* 18px — BODY MINIMUM */
+  --text-lg: 1.25rem; /* 20px — large body / lead */
+  --text-h3: 1.5rem; /* 24px */
+  --text-h2: 1.875rem; /* 30px */
+  --text-h1: 2.375rem; /* 38px */
+  --text-display: 2.875rem; /* 46px */
+
+  --leading-tight: 1.2;
+  --leading-snug: 1.35;
+  --leading-body: 1.6;
+
+  /* ---- Radii ----------------------------------------------------- */
+  --radius-sm: 8px;
+  --radius-btn: 12px;
+  --radius-card: 16px;
+  --radius-lg: 24px;
+  --radius-pill: 999px;
+
+  /* ---- Shadows — soft, low, warm --------------------------------- */
+  --shadow-xs: 0 1px 2px rgba(42, 38, 34, 0.05);
+  --shadow-sm: 0 2px 8px rgba(42, 38, 34, 0.06);
+  --shadow-md: 0 6px 20px rgba(42, 38, 34, 0.08);
+  --shadow-lg: 0 14px 40px rgba(42, 38, 34, 0.12);
+
+  /* ---- Layout ----------------------------------------------------- */
+  /* Desktop-first. The main section spans 85% of the viewport, capped so text
+     lines stay readable for the low-vision audience on very large monitors.
+     Exposed as the `app` container size → utilities `max-w-app` / `w-app`. */
+  --container-app: 1500px;
+
+  /* ---- Min interactive target ------------------------------------ */
+  --tap-min: 48px;
+
+  /* ---- Motion (gentle; respect reduced-motion) ------------------- */
+  --ease-warm: cubic-bezier(0.33, 0.1, 0.25, 1);
+}
+
+/* =====================================================================
+   SEMANTIC ELEMENT DEFAULTS
+   In @layer base so Tailwind utilities (e.g. text-surface on a heading over
+   the teal panel) can override these element defaults — unlayered rules would
+   otherwise win over layered utilities in the cascade.
+   ===================================================================== */
+
+@layer base {
+  html {
+    font-size: 16px;
+  }
+
+  body {
+    background: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    font-size: var(--text-base);
+    line-height: var(--leading-body);
+    font-weight: 400;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    /* Inherit color (ink by default) so a coloured parent — e.g. the teal auth
+       panel with text-surface — recolours headings without a specificity fight. */
+    color: inherit;
+    line-height: var(--leading-tight);
+    text-wrap: balance;
+    margin: 0;
+  }
+  h1 {
+    font-size: var(--text-h1);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  h2 {
+    font-size: var(--text-h2);
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  h3 {
+    font-size: var(--text-h3);
+    font-weight: 700;
+  }
+
+  p {
+    margin: 0;
+    text-wrap: pretty;
+  }
+
+  a {
+    color: var(--color-primary);
+    text-underline-offset: 3px;
+  }
+  a:hover {
+    color: var(--color-primary-dark);
+  }
+}
+
+/* ---- Universal visible focus — the single most important rule ----- */
+:where(
+    a,
+    button,
+    input,
+    select,
+    textarea,
+    [tabindex],
+    [role="button"],
+    [role="tab"],
+    [role="switch"]
+  ):focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--color-focus);
+  border-radius: var(--radius-sm);
+}
+
+/* Gentle waveform used by the voice player; static under reduced motion. */
+@keyframes wf {
+  from {
+    transform: scaleY(0.4);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

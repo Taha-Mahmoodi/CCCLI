@@ -1,0 +1,62 @@
+# Canin
+
+**A dental clinic management system.**
+
+Canin is a full-featured practice-management application for a specialist dental
+clinic in Herat, Afghanistan. It covers the whole clinical and administrative
+workflow: patient registration, per-tooth clinical records, lab orders,
+prescriptions, financials, and multi-user access control.
+
+> A [Cyborg Tech Creative Agency](https://github.com/CyborgTech-co) project.
+
+---
+
+## What it does
+
+- **Patients** — registration and full patient histories
+- **Clinical records** — per-tooth charting and treatment records
+- **Lab orders** — track work sent to and returned from the lab
+- **Prescriptions** — issue and record prescriptions
+- **Financials** — billing and payment tracking
+- **Access control** — multi-user accounts with role-based permissions
+- **Multilingual** — Farsi, Pashto, and English, with RTL support
+- **PWA** — installable, with offline support via a service worker
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Backend | PHP 7.4+, CodeIgniter 3 (MVC) |
+| Database | MariaDB / MySQL |
+| Frontend | Bootstrap 5, AJAX, DataTables, Select2, Toastr.js |
+| Dates | Jalali / Shamsi calendar throughout |
+| i18n | Farsi (fa), Pashto (pa), English (en); cookie-based, RTL for fa/pa |
+| App | PWA (`manifest.json` + service worker) |
+
+## Project structure
+
+```text
+canin/
+  application/
+    controllers/   # Admin, Login, and feature controllers
+    models/        # Data access
+    views/         # UI templates
+    config/        # CodeIgniter and app configuration
+  system/          # CodeIgniter 3 framework
+  assets/          # Static assets
+  docs/            # Project documentation
+```
+
+## Getting started
+
+Requirements: PHP 7.4+, MariaDB/MySQL, a web server with URL rewriting.
+
+1. Create the database and import the provided schema.
+2. Configure `application/config/database.php` with your credentials.
+3. Set `base_url` in `application/config/config.php`.
+4. Point your web server at the project root and open it in a browser.
+
+## Documentation
+
+Deeper project context, module notes, and structure live in `CANIN.md` and the
+`docs/` directory.

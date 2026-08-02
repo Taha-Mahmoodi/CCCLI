@@ -1,0 +1,39 @@
+import { MemoRecorder } from "@/components/MemoRecorder";
+import { SwipeDeck } from "@/components/SwipeDeck";
+import { StreamSection } from "@/components/StreamSection";
+import { VoiceCommands } from "@/components/VoiceCommands";
+
+export default function Home() {
+  return (
+    <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-8 px-5 py-8 pb-40">
+      <section aria-labelledby="page-title" className="flex flex-col gap-2">
+        <h1 id="page-title" className="text-2xl font-semibold tracking-tight">
+          Your deck
+        </h1>
+        <p className="text-muted-foreground">
+          One memo at a time. Like it, skip it, or like and move on — by swipe, by button, or by
+          arrow keys. Every card is a voice memo you can play, with its words on the front.
+        </p>
+      </section>
+
+      <section
+        aria-label="Record a memo"
+        className="flex flex-col items-center gap-5 rounded-2xl border border-border p-6"
+      >
+        <MemoRecorder />
+        <VoiceCommands />
+      </section>
+
+      <SwipeDeck />
+
+      <details className="rounded-2xl border border-border">
+        <summary className="cursor-pointer list-none px-4 py-3 font-medium">
+          Browse your stream as a list
+        </summary>
+        <div className="border-t border-border px-4 py-4">
+          <StreamSection />
+        </div>
+      </details>
+    </div>
+  );
+}

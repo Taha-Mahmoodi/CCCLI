@@ -1,0 +1,50 @@
+import base64, os
+
+BASE = '/private/tmp/claude-501/-Users-taha/51b90afe-944f-4f8c-a234-21ade39239a8/scratchpad'
+OUT = f'{BASE}/assets/badges'
+os.makedirs(OUT, exist_ok=True)
+
+def b64(path):
+    with open(path, 'rb') as f:
+        return base64.b64encode(f.read()).decode()
+
+piiix_logo = b64(f'{BASE}/logos/piiix40.png')
+cyborg_logo = b64(f'{BASE}/logos/cyborg40.png')
+
+H = 30
+FS = 12.5
+CW = 7.5           # monospace char advance at FS
+PAD_L = 8
+LOGO = 20
+GAP = 8
+PAD_R = 12
+FONT = 'SFMono-Regular, Menlo, Consolas, monospace'
+
+def esc(s):
+    return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+def badge(fname, text, color, png_b64=None, te_mark=False):
+    text_x = PAD_L + (LOGO + GAP if (png_b64 or te_mark) else 4)
+    text_w = len(text) * CW
+    W = round(text_x + text_w + PAD_R)
+    ty = H / 2 + FS * 0.35
+    p = [f'<svg width="{W}" height="{H}" viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg">']
+    p.append(f'<defs><clipPath id="lg"><rect x="{PAD_L}" y="{(H-LOGO)/2}" width="{LOGO}" height="{LOGO}" rx="4"/></clipPath></defs>')
+    p.append(f'<rect width="{W}" height="{H}" rx="7" fill="{color}"/>')
+    ly = (H - LOGO) / 2
+    if png_b64:
+        p.append(f'<image x="{PAD_L}" y="{ly}" width="{LOGO}" height="{LOGO}" clip-path="url(#lg)" href="data:image/png;base64,{png_b64}"/>')
+    elif te_mark:
+        p.append(f'<rect x="{PAD_L}" y="{ly}" width="{LOGO}" height="{LOGO}" rx="4" fill="#ffffff"/>')
+        p.append(f'<text x="{PAD_L + LOGO/2}" y="{H/2 + 4.2}" text-anchor="middle" font-family="{FONT}" font-size="11" font-weight="700" fill="{color}">TE</text>')
+    p.append(f'<text x="{text_x}" y="{ty:.1f}" font-family="{FONT}" font-size="{FS}" font-weight="600" fill="#ffffff">{esc(text)}</text>')
+    p.append('</svg>')
+    with open(f'{OUT}/{fname}', 'w') as f:
+        f.write('\n'.join(p))
+    print(f'{fname}  W={W}')
+
+badge('piiix.svg',      'Founder · PIIIX',            '#6C63FF', png_b64=piiix_logo)
+badge('cyborg.svg',     'Co-founder · Cyborg Tech',   '#CE2B2C', png_b64=cyborg_logo)
+badge('teww.svg',       'CTO · Third Eye Worldwide',  '#D63384', te_mark=True)
+badge('alkharazmi.svg', 'Consultant · Alkharazmi',    '#16A34A')
+print('done')

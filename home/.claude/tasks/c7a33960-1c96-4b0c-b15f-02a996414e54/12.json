@@ -1,0 +1,9 @@
+{
+  "id": "12",
+  "subject": "Task 12: AGENTS.md router",
+  "description": "Resident router under 200 lines with routing table and stated scope limits",
+  "activeForm": "Writing AGENTS.md",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

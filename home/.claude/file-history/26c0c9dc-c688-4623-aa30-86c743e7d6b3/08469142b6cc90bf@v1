@@ -1,0 +1,288 @@
+# Loop 1 — Market & Message
+
+**Goal:** end this loop knowing what the site has to achieve in numbers, who it is
+for, what they compare it against, what they will object to, what is actually true,
+and what must not break. Every decision downstream is derived from this loop. Nothing
+after it guesses.
+
+**Output:** `BRIEF.md` (the one source), `EVIDENCE.md` (every claim, sourced),
+`redirects.csv` (`§13`), and `baseline/` (the numbers before anything changed).
+
+```text
+1a INTAKE ─► 1b STAKEHOLDERS ─► 1c MARKET ─► 1d EVIDENCE ─► 1e SYNTHESIS ─► Gate A
+   goal +       sales, support     competitors,  claims,       BRIEF.md
+   vision       the objections     VOC, search   crawl,        + message hierarchy
+                they actually      demand        redirects,    + translation table
+                hear                             baseline
+```
+
+The order is deliberate. Intake first because the goal frames everything and unprimed
+answers are better answers. Stakeholders second because sales and support know the
+objections the founder has stopped hearing. Market third. Evidence last, because by
+then you know which claims matter enough to substantiate.
+
+Much of 1c and 1d is autonomous and runs in parallel with 1a and 1b — dispatch
+`market-analyst`, `voice-miner`, and `evidence-auditor` early and let them work while
+you talk.
+
+---
+
+## 1a — Intake (`§0`)
+
+**The conductor runs this. Never delegate it** — a subagent cannot talk to the human.
+
+This is the most expensive step in the pipeline to get wrong, and the instinct to run
+discovery cheap is exactly backwards ([`MODELS.md`](../MODELS.md)). Everything
+downstream consumes `BRIEF.md`. If the session is on a lower tier, say so once here
+and continue either way.
+
+Ask **one question at a time**. Open-ended. Do not offer multiple choice — the answer
+has to be theirs. Follow the thread. React to what they actually said before moving on.
+
+### The goal
+
+> What is the one action you want someone to take on this site?
+>
+> How many of those do you get a month right now, and out of how many visitors?
+>
+> What number would make this project obviously worth doing?
+>
+> What is one of those worth to you, and what proportion close?
+>
+> What happens if this doesn't work — what is the actual consequence, and by when?
+>
+> Who inside your company has to be happy with this, and who can say yes on their own?
+
+That last question is `§1`. Get one name, written down, before Gate A. Everyone
+else's feedback is input.
+
+### The vision
+
+> What should someone feel in the first three seconds, before they have read a word?
+>
+> Name a site — in any industry — that made you jealous. What specifically did it do?
+>
+> If this company were a physical place, what is it: a workshop, a bank, a lab, a
+> market stall, a members' club?
+>
+> Should it feel like it was made in 1972, 2004, or 2041?
+>
+> What is the one thing on your current site you would keep, and the one you would
+> burn?
+
+### The business
+
+> Describe your best customer. Not the biggest — the one you wish you had ten more of.
+>
+> What just happened in their week that made them go looking? Be specific about the
+> week.
+>
+> What do they do today instead of buying from you?
+>
+> Why do people say no? Give me the last three.
+>
+> What do you turn down, and what does turning it down cost you?
+>
+> Who is the competitor you lose to most, and what do they get wrong?
+>
+> What do you know about this market that your competitors have not worked out yet?
+>
+> If a customer had to explain you to their boss in one sentence, what would you want
+> them to say?
+
+### The practical set
+
+> What is the offer today — what does someone actually get when they say yes, and how
+> long do they wait? (Walk the friction ladder in [`CONVERSION.md`](../CONVERSION.md))
+>
+> Every number you want on the site — where did each one come from, and when was it
+> last true? (`§6`)
+>
+> Which customer logos can we use, and do you have that in writing? (`§25`)
+>
+> What cannot be shown at all: clients under NDA, unlaunched products, numbers that
+> were never public?
+>
+> Must-haves — anything you explicitly want in it.
+>
+> Do-nots — colors, words, styles, a competitor's look, a phrase legal hates.
+>
+> Which markets and sectors do you sell into? (Drives [`COMPLIANCE.md`](../COMPLIANCE.md))
+>
+> Where does it deploy, and whose account is it on?
+>
+> After launch, who changes the pricing page, and what did they change on the current
+> site in the last six months? (`ARCHITECTURE.md` — take the second answer as the real
+> one)
+
+Invite references throughout: sites, brands, a physical space, a magazine, a store.
+Feel is an input.
+
+**Record verbatim.** Their actual sentences become the company register in
+`POSITIONING.md §11`. Paraphrase destroys the only voice sample there is.
+
+If they don't know an answer, offer directions and let them react. Do not stall.
+
+## 1b — The stakeholder round
+
+The founder's answers are one view, and usually the oldest one. Twenty minutes each
+with the people who talk to customers is the cheapest research in this pipeline.
+
+| Who | Ask |
+|---|---|
+| **Sales** | What is the first question on every call? What objection kills deals? Which page do you send, and what do you have to explain because the site doesn't? What do you wish you could stop repeating? |
+| **Support** | What do customers get wrong about what this does? What do they say when they are annoyed? What do the good ones say when they get it? |
+| **Customer success / churn** | Why do people leave, and what did they expect that they did not get? A site that oversells produces churn, and the client will not connect the two |
+| **The person who answers the inbox** | What actually arrives through the form? Is any of it useful? |
+| **Product / engineering** | What is genuinely hard about this that competitors cannot copy? What are we claiming that is not quite true yet? |
+
+The last question in that final row protects `§6` and it is easier to get from an
+engineer than from a founder.
+
+Two conflicts will surface: sales wanting the site to qualify harder and marketing
+wanting more leads, and the founder's description not matching what support hears.
+Both go to Gate A as findings, not as things you resolved on your own.
+
+## 1c — Market
+
+Two autonomous jobs, dispatched in parallel.
+
+### Competitor teardown (`market-analyst`)
+
+3–6 competitors — the ones that actually appear when the ICP searches, not the ones
+on the board slide. Chart each per `POSITIONING.md §5`: hero line verbatim, claimed
+differentiator, lead proof, pricing visibility, offer and its friction, style family,
+palette, page shape.
+
+Then read the chart, which is the top-tier half: where they cluster, what position is
+empty, and what the buyer's comparison looks like when they open three tabs.
+
+### Voice of the customer (`voice-miner`)
+
+`§5`, and the highest-leverage research in the loop.
+
+Sources, in rough order of value: the client's own support tickets and sales-call
+notes, review platforms for the client and every competitor, the relevant subreddit or
+forum, competitor churn complaints, and Search Console's existing query data.
+
+What comes back: 10–20 recurring phrases with fingerprints on them, the top objections
+ranked by frequency, the words customers use for the *problem* (which is almost never
+the words the client uses for the *product*), and the outcomes they say they got.
+
+**Competitor reviews are the richest source available.** The one-star reviews of the
+market leader are a list of the objections this client can answer, written by the
+people who have them.
+
+### Search demand ([`SEO.md`](../SEO.md))
+
+What the ICP types, sorted by intent. It decides which pages exist, so it belongs here
+rather than in Loop 5.
+
+## 1d — Evidence, the crawl, and the baseline
+
+`evidence-auditor` runs all three.
+
+### Substantiate the claims (`§6`, hard)
+
+Every number, superlative, comparison, and certification the client wants on the site,
+with its source and its date. Rank each on the proof ladder (`POSITIONING.md §10`).
+Anything unsourced comes back as a question, not as a cut you made silently.
+
+Hunt for a rank-1 proof point. Most clients have one and do not know it — a support
+metric, a churn number, a customer who will say a sentence on the record, a public
+benchmark. Finding one is often the highest-value thing this loop does.
+
+### Crawl the old site and build the redirect map (`§13`, hard)
+
+Per [`SEO.md`](../SEO.md) Part 1: sitemap, crawl, Search Console's 12-month page list,
+analytics landing pages, backlinks, paid landing pages. Then `redirects.csv`, one row
+per existing URL, 301s, no chains, nearest relevant target.
+
+This is mechanical and it is not optional when a site already exists.
+
+### Capture the baseline ([`MEASURE.md`](../MEASURE.md))
+
+Export and screenshot into `runs/<slug>/baseline/`: sessions, conversions, conversion
+rate, traffic by source, top 20 landing pages, top 20 queries, Core Web Vitals — all
+for the last 12 months.
+
+Ten minutes, and it is the only reason Loop 8 can say anything honest. Analytics
+properties get reconfigured mid-project and the comparison disappears with them.
+
+### Brand audit (`§12`)
+
+Per `POSITIONING.md §12`. Sample the palette from what exists, check type licensing,
+find what fails contrast, and separate load-bearing from accidental. Write the
+extension you propose. **A rebrand is a Gate A decision, never drift.**
+
+## 1e — Synthesis
+
+Now write the strategy, following [`POSITIONING.md`](../POSITIONING.md) exactly:
+
+1. **The goal in numbers** — with the baseline beside it
+2. **ICP** — role, company shape, buying committee, trigger, alternatives
+3. **Jobs to be done** — three, ranked, in the customer's words
+4. **Category** — compete, subdivide, or create, with the cost named
+5. **Competitive reading** — cluster, empty position, the comparison they will run
+6. **Positioning statement** — the forced sentence, passing the competitor test and
+   the proof test
+7. **Anti-positioning** — until one entry hurts
+8. **Message hierarchy** — five levels, and every page will map to it
+9. **Objection ladder** — ranked from VOC, each with where it is felt
+10. **Proof ladder** — every claim ranked, weak ones demoted or cut
+11. **Voice** — customer lexicon and company register, kept separate
+12. **Brand** — load-bearing, accidental, broken, and the proposed extension
+13. **Site shape and page list** — from [`ARCHITECTURE.md`](../ARCHITECTURE.md)
+14. **The translation table** — every row filled
+
+This is top-tier work and the conductor does it rather than a worker.
+
+## Write the outputs
+
+**`EVIDENCE.md`** — every claim, its source, its date, its rank, and where it will
+appear. Contradictions between sources. What was cut. The permissions status of every
+logo and testimonial (`§25`).
+
+**`BRIEF.md`** — the intake record verbatim, the stakeholder findings, the evidence
+summary, the competitive chart and its reading, the VOC extract, and all fourteen
+synthesis sections.
+
+**`redirects.csv`** and **`baseline/`** — as above.
+
+> ## Gate A — human decision
+>
+> The named decision-maker from `§1` decides. Present:
+>
+> - The goal in numbers, and the baseline it is measured against
+> - ICP, the trigger, and the buying committee
+> - Positioning statement and anti-positioning — expect resistance to the entries that
+>   hurt, and hold them
+> - The competitive gap you found, and whether to occupy it
+> - The offer and its rung on the friction ladder (`CONVERSION.md §1`) — bring the
+>   ladder, not one answer
+> - The top three objections and where each gets answered
+> - Every claim that failed substantiation, and what happens to it (`§6`)
+> - The page list, the site shape, and who edits it afterward
+> - The redirect map, and any ranking page whose message the redesign would change
+> - The deploy target and whose accounts everything sits on
+>
+> Bring 2–3 readings where the strategy is genuinely ambiguous (`§4`), not one answer.
+> They approve, adjust, or send you back. Do not proceed without a decision.
+>
+> The site shape and the page list are settled here and not revisited. Discovering at
+> Loop 4 that the buying committee needs a security page means rebuilding the shell,
+> the nav, and the share layer.
+
+## Skip costs
+
+| Skipping | Costs |
+|---|---|
+| 1a Intake | The goal in numbers and the constraint underneath the brief. Gate A becomes taste and Loop 8 has nothing to grade. Highest-cost skip in the pipeline |
+| 1b Stakeholders | The objections that actually stop deals. You answer the ones the founder remembers |
+| 1c Competitors | The fence and the empty position. `§3` becomes guesswork |
+| 1c VOC | The customer's words (`§5`). Copy reverts to company vocabulary — the most common reason a well-designed site converts badly |
+| 1d Evidence | `§6` is hard. Not skippable in substance, only in thoroughness — and thoroughness is what keeps a stale number off the homepage |
+| 1d Crawl / redirects | `§13` is hard. Not available |
+| 1d Baseline | Loop 8 becomes an opinion. Ten minutes |
+| 1d Brand audit | What is load-bearing. Design drifts into an unsigned rebrand |
+| 1e Synthesis | The message hierarchy and translation table. Design and copy stop being derivable |

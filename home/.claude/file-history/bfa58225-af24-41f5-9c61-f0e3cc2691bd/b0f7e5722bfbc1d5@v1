@@ -1,0 +1,225 @@
+import uuid
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from app.pings.service import record_ping
+
+pytestmark = pytest.mark.asyncio
+
+
+async def test_record_ping_creates_a_row(db_session):
+    tenant_id = uuid.uuid4()
+    rep_id = uuid.uuid4()
+    recorded_at = datetime.now(timezone.utc) - timedelta(minutes=2)
+
+    ping = await record_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep_id, recorded_at=recorded_at,
+        latitude=1.5, longitude=2.5, accuracy=10.0, idempotency_key="key-1",
+    )
+
+    assert ping.tenant_id == tenant_id
+    assert ping.rep_id == rep_id
+    assert ping.latitude == 1.5
+    assert ping.idempotency_key == "key-1"
+
+
+async def test_record_ping_with_same_idempotency_key_returns_existing_row_not_a_new_one(db_session):
+    tenant_id = uuid.uuid4()
+    rep_id = uuid.uuid4()
+    recorded_at = datetime.now(timezone.utc)
+
+    first = await record_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep_id, recorded_at=recorded_at,
+        latitude=1.0, longitude=1.0, accuracy=None, idempotency_key="dup-key",
+    )
+    second = await record_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep_id, recorded_at=recorded_at,
+        latitude=999.0, longitude=999.0, accuracy=None, idempotency_key="dup-key",
+    )
+
+    assert second.id == first.id
+    # The second call's (deliberately different) coordinates must NOT overwrite
+    # the first — idempotent replay returns what was already recorded.
+    assert second.latitude == 1.0
+
+
+async def test_record_ping_same_key_different_rep_creates_separate_rows(db_session):
+    tenant_id = uuid.uuid4()
+    recorded_at = datetime.now(timezone.utc)
+
+    first = await record_ping(
+        db_session, tenant_id=tenant_id, rep_id=uuid.uuid4(), recorded_at=recorded_at,
+        latitude=1.0, longitude=1.0, accuracy=None, idempotency_key="shared-key",
+    )
+    second = await record_ping(
+        db_session, tenant_id=tenant_id, rep_id=uuid.uuid4(), recorded_at=recorded_at,
+        latitude=2.0, longitude=2.0, accuracy=None, idempotency_key="shared-key",
+    )
+
+    assert first.id != second.id
+
+
+async def test_record_ping_handles_integrity_error_race_condition(db_session, monkeypatch):
+    """Verify that IntegrityError from concurrent identical idempotency_key inserts
+    is handled gracefully: the race loser re-queries and returns the winner's row.
+
+    This test simulates the race window: record_ping()'s pre-check SELECT reports
+    "no duplicate found" while a real duplicate row already exists and is committed.
+    The pre-check passes but db.commit() then hits the uq_location_pings_tenant_rep_key
+    constraint and raises IntegrityError, which must be caught, rolled back, re-queried,
+    and the existing row returned (no exception).
+    """
+    from app.pings.models import LocationPing
+
+    tenant_id = uuid.uuid4()
+    rep_id = uuid.uuid4()
+    recorded_at = datetime.now(timezone.utc)
+    key = "race-key"
+
+    # Simulate the "other" concurrent call that already won the race and committed
+    existing_ping = LocationPing(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        rep_id=rep_id,
+        recorded_at=recorded_at,
+        latitude=5.0,
+        longitude=5.0,
+        accuracy=None,
+        idempotency_key=key,
+    )
+    db_session.add(existing_ping)
+    await db_session.commit()
+
+    # Force record_ping()'s pre-check SELECT to report "no duplicate found" (simulating
+    # the race window where this call's pre-check ran before the other one committed).
+    # Only the first execute() call is faked; anything after falls through to the real session.
+    class _NoMatch:
+        def scalar_one_or_none(self):
+            return None
+
+    original_execute = db_session.execute
+    calls = {"n": 0}
+
+    async def fake_execute(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            # First execute (the pre-check SELECT) returns "no match"
+            return _NoMatch()
+        # All subsequent execute calls use the real session
+        return await original_execute(*args, **kwargs)
+
+    monkeypatch.setattr(db_session, "execute", fake_execute)
+
+    # record_ping() now passes the faked pre-check, tries to INSERT, hits the real
+    # constraint, catches IntegrityError, re-queries, and returns the existing row.
+    result = await record_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep_id, recorded_at=recorded_at,
+        latitude=999.0, longitude=999.0, accuracy=None, idempotency_key=key,
+    )
+
+    assert result.id == existing_ping.id
+    assert result.latitude == 5.0  # Winner's data preserved, not overwritten
+
+
+async def test_prune_old_pings_requires_no_tenant_context(db_session):
+    """Verify that prune_old_pings raises AssertionError if called with
+    current_tenant_id set, preventing silent mis-scoping to one tenant."""
+    from app.core.tenancy import current_tenant_id, install_tenancy_filter
+    from app.pings.models import LocationPing
+    from app.pings.service import prune_old_pings
+
+    install_tenancy_filter()
+    tenant_id = uuid.uuid4()
+
+    # Create and commit an old ping for this tenant
+    old_ping = LocationPing(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        rep_id=uuid.uuid4(),
+        recorded_at=datetime.now(timezone.utc) - timedelta(days=60),
+        latitude=0.0,
+        longitude=0.0,
+        accuracy=None,
+        idempotency_key="old-key",
+    )
+    db_session.add(old_ping)
+    await db_session.commit()
+
+    # Set current_tenant_id and call prune_old_pings — should raise AssertionError
+    token = current_tenant_id.set(tenant_id)
+    try:
+        with pytest.raises(AssertionError, match="prune_old_pings must run with no tenant context"):
+            await prune_old_pings(db_session)
+    finally:
+        current_tenant_id.reset(token)
+
+
+async def test_prune_old_pings_works_with_no_tenant_context(db_session):
+    """Verify that prune_old_pings correctly prunes rows across all tenants when current_tenant_id is None."""
+    from app.pings.models import LocationPing
+    from app.pings.service import prune_old_pings
+    from sqlalchemy import select
+
+    tenant_a = uuid.uuid4()
+    tenant_b = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+
+    # Create pings for tenant A (old and new)
+    old_ping_a = LocationPing(
+        id=uuid.uuid4(),
+        tenant_id=tenant_a,
+        rep_id=uuid.uuid4(),
+        recorded_at=now - timedelta(days=60),
+        latitude=1.0,
+        longitude=1.0,
+        accuracy=None,
+        idempotency_key="old-a",
+    )
+    new_ping_a = LocationPing(
+        id=uuid.uuid4(),
+        tenant_id=tenant_a,
+        rep_id=uuid.uuid4(),
+        recorded_at=now - timedelta(minutes=5),
+        latitude=2.0,
+        longitude=2.0,
+        accuracy=None,
+        idempotency_key="new-a",
+    )
+
+    # Create pings for tenant B (old and new)
+    old_ping_b = LocationPing(
+        id=uuid.uuid4(),
+        tenant_id=tenant_b,
+        rep_id=uuid.uuid4(),
+        recorded_at=now - timedelta(days=60),
+        latitude=3.0,
+        longitude=3.0,
+        accuracy=None,
+        idempotency_key="old-b",
+    )
+    new_ping_b = LocationPing(
+        id=uuid.uuid4(),
+        tenant_id=tenant_b,
+        rep_id=uuid.uuid4(),
+        recorded_at=now - timedelta(minutes=5),
+        latitude=4.0,
+        longitude=4.0,
+        accuracy=None,
+        idempotency_key="new-b",
+    )
+
+    db_session.add_all([old_ping_a, new_ping_a, old_ping_b, new_ping_b])
+    await db_session.commit()
+
+    # Prune old pings with no tenant context set
+    deleted_count = await prune_old_pings(db_session, retention_days=30)
+
+    # Should have deleted both old pings (across tenants)
+    assert deleted_count == 2
+
+    # Verify new pings still exist for both tenants
+    result = await db_session.execute(select(LocationPing).order_by(LocationPing.latitude))
+    remaining = list(result.scalars().all())
+    assert len(remaining) == 2
+    assert [p.latitude for p in remaining] == [2.0, 4.0]

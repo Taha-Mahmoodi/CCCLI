@@ -1,0 +1,12 @@
+const container = document.querySelector('.leaflet-container');
+function dblClickAt(x, y) {
+  const opts = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y };
+  container.dispatchEvent(new MouseEvent('dblclick', opts));
+}
+// "New York" label was near (30, 133) in the last screenshot.
+dblClickAt(30, 133);
+dblClickAt(30, 133);
+dblClickAt(30, 133);
+dblClickAt(30, 133);
+dblClickAt(30, 133);
+'zoomed';

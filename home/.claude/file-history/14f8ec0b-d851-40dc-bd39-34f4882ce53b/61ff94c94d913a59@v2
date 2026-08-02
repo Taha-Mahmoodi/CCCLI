@@ -1,0 +1,262 @@
+# HEARD Research & Launch Strategy
+
+**Applied research and strategy documentation for HEARD: A platform connecting isolated individuals with trained peer listeners from underemployed populations.**
+
+`Status: Active Research & Launch Planning` · `Phase: Pre-Launch` · `Focus: Loneliness, Disability Employment, Social Connection`
+
+> **Repository:** Evidence base, research findings, LinkedIn launch strategy, and implementation guides for HEARD  
+> **Related Application:** [heard-backup](https://github.com/Taha-Mahmoodi/heard-backup) — The HEARD platform codebase
+
+---
+
+## What Is HEARD?
+
+HEARD is a two-sided impact platform:
+
+1. **For listeners:** Dignified, remote-first paid work for people the job market too often ignores — blind and disabled people, elderly individuals, and displaced persons. The job: listen with full presence to people who feel alone.
+
+2. **For callers:** A place to talk to a real human being who will listen without judgment, fix-it advice, or rushing. A response to the loneliness epidemic.
+
+### The Insight
+
+People society overlooks—the blind, the disabled, the elderly, the displaced—are often extraordinary at the exact skills that matter most: patience, presence, the ability to sit with someone without fixing them.
+
+HEARD takes a skill the job market undervalues and builds dignified paid work around it.
+
+---
+
+## Key Research Findings
+
+### The Loneliness Epidemic
+
+- **WHO, June 2025:** Loneliness accounts for approximately **871,000 deaths per year globally** — about 100 deaths per hour
+- **US Surgeon General, May 2023:** Social disconnection is **as dangerous as smoking 15 cigarettes a day**
+- **APA "Stress in America," 2025:** 54% of US adults feel isolated often or some of the time
+- **APA 2025 Survey:** 69% of US adults said they needed more emotional support than they received
+
+### Blind and Disabled Employment
+
+- **Only ~44% of working-age Americans who are blind are employed** versus 77% for people without disabilities (National Research and Training Center on Blindness and Low Vision)
+- **Remote work driver:** Working from home drove a rise in employment of ~250,000 disabled workers by 2024, explaining 68-85% of post-COVID full-time employment gains for people with physical disabilities (Bloom, Dahl & Rooth, NBER 2024)
+
+### Peer Support Effectiveness
+
+- **BMC Medicine, 2024:** Consistent evidence that peer support improves hope, empowerment, and recovery for people with mental health challenges
+- **Marmalade Trust, 2025:** 96% of participants felt "quite" or "extremely connected" after structured conversations about loneliness
+
+### Populations We Serve
+
+| Population | Key Stat | Source |
+|------------|----------|--------|
+| **Elderly isolation** | 33% of adults 50-80 felt lonely in past year | University of Michigan, 2024 |
+| **Care home loneliness** | ~61% of residents moderately lonely, ~35% severely lonely | Gardiner et al. meta-analysis |
+| **Refugee loneliness** | 15.9-47.7% experience loneliness (higher than general population) | Nguyen et al., 2024 |
+| **Asylum seekers in limbo** | ~50% experience depression | Côté-Olijnyk, 2024 meta-analysis |
+| **Reminiscence therapy efficacy** | Medium-to-large effect on reducing depressive symptoms in older adults | Frontiers in Psychiatry, 2023 |
+
+See [docs/STATISTICS.md](docs/STATISTICS.md) for complete citations and methodology.
+
+---
+
+## Repository Structure
+
+```
+heard-research/
+├── README.md                              # this file
+├── LICENSE                                # MIT
+│
+├── docs/
+│   ├── PLATFORM_OVERVIEW.md              # What HEARD is and how it works
+│   ├── RESEARCH_FINDINGS.md              # Key research insights (brief)
+│   ├── STATISTICS.md                     # Detailed statistics with citations
+│   ├── LINKEDIN_STRATEGY.md              # Best practices, timing, metrics
+│   ├── LAUNCH_CAMPAIGN_STRATEGY.md       # Full launch campaign playbook
+│   ├── POSTS.md                          # 11 ready-to-publish founder voice posts
+│   └── POSTING_CALENDAR.md               # 4-week calendar and sequencing
+│
+├── research/
+│   ├── sources/                          # PDFs and links to primary sources
+│   ├── citations.bib                     # BibTeX bibliography of all sources
+│   └── methodology.md                    # How the research was compiled
+│
+└── .gitignore
+```
+
+---
+
+## LinkedIn Launch Strategy
+
+### Quick Summary
+
+- **Cadence:** 3-4 posts per week from founder's personal profile
+- **Format:** 800-1000 characters, strong hook in first two lines, 3-5 hashtags
+- **Timing:** Tuesday-Thursday, 9-11am or 3-6pm (test both)
+- **Engagement:** Reply in first 60 minutes, reshare via org page within hours
+- **Algorithm focus:** Dwell time, thoughtful replies, shares (not just likes)
+
+### Why This Strategy Works
+
+LinkedIn's 2025-2026 algorithm rewards:
+1. **Founder authenticity** — personal profiles massively outperform org pages (organic company reach is minimal)
+2. **Early engagement** — the first 60-120 minutes determine reach trajectory
+3. **Dwell time** — longer, thoughtful posts and comments are ranked higher
+4. **Native content** — links in first comment (not body) protect reach
+
+### The 11 Posts
+
+Ready-to-publish, no rewrites needed:
+
+1. **Founder origin story** — "I am blind. For a long time, the world decided that meant I had nothing to offer."
+2. **Loneliness epidemic** — WHO 871,000 deaths stat + Surgeon General 15-cigarettes-a-day
+3. **Blind employment** — Honest 44% vs 77% framing, remote work as the driver
+4. **Call for listeners** — "We are hiring our first listeners"
+5. **For people who need to talk** — "Some days you don't need advice. You just need someone to hear you."
+6. **The science of being heard** — Peer support research, Marmalade Trust 96%
+7. **Elderly isolation** — University of Michigan 33% + reminiscence therapy
+8. **Refugees & displaced** — Loneliness prevalence data + empathy narrative
+9. **Reframing work** — "We keep asking disabled people to prove they can do the job"
+10. **Call to follow & share** — Movement-building language
+11. **Personal founder reflection** — "The hardest part was the silence"
+
+See [docs/POSTS.md](docs/POSTS.md) for full text of all 11 posts ready to copy-paste.
+
+---
+
+## 4-Week Posting Calendar
+
+| Week | Theme | Tuesday | Wednesday | Thursday |
+|------|-------|---------|-----------|----------|
+| **1** | Awareness & origin | Post 1 (founder story) | Post 2 (loneliness epidemic) | Post 3 (blind employment) |
+| **2** | The offer | Post 4 (call for listeners) | Post 5 (for those who need to talk) | Post 6 (science of being heard) |
+| **3** | Who we serve | Post 7 (elderly) | Post 8 (refugees) | Post 9 (reframing work) |
+| **4** | Momentum | Post 10 (follow & share) | Post 11 (founder reflection) | Reshare best-performing post |
+
+**Sequencing logic:**
+- Week 1: Establish founder and "why"
+- Week 2: Make the two core asks (be a listener / use HEARD)
+- Week 3: Humanize each population served
+- Week 4: Convert attention into follows and shares, loop high performers back
+
+---
+
+## Key Recommendations Before Launch
+
+### Three Things to Verify
+
+1. **Platform mechanics** — Confirm HEARD positions itself as explicitly non-clinical (peer support, not therapy)
+2. **Founder origin story** — Verify Posts 1 and 11 reflect the founder's actual lived experience
+3. **Links & landing pages** — Test heard.teww.org and ensure signup flows work
+
+### Critical Best Practices
+
+1. **Links in first comment, never body** — Remove preview cards to protect reach
+2. **Lead with the hook** — Only first two lines show before "see more"
+3. **Keep 1/3 posts stats, 2/3 story** — Data should support narrative, not replace it
+4. **Reshares matter** — Activate 5-10 supporters to reshare with their own comment (highest leverage)
+5. **Reply in first hour** — 60 minutes determines reach trajectory
+6. **Track the right metrics** — Comments and shares (not likes) signal algorithmic preference
+
+### Benchmarks That Would Change The Plan
+
+- **Flat reach after 2 weeks** → increase cadence to 5 posts/week (data supports more posts, not fewer)
+- **Strong performance on specific pillars** (e.g., refugee posts) → create carousel or video series on that theme
+- **Evening engagement clusters** → shift posting window to 3-6pm
+- **Better results from org-page reshares** → invest in team comments and supporter activation
+
+---
+
+## How to Use This Repository
+
+### For Founder & Team
+
+1. **Read first:** [docs/PLATFORM_OVERVIEW.md](docs/PLATFORM_OVERVIEW.md) and [docs/RESEARCH_FINDINGS.md](docs/RESEARCH_FINDINGS.md) (10 min)
+2. **Review strategy:** [docs/LINKEDIN_STRATEGY.md](docs/LINKEDIN_STRATEGY.md) and [docs/POSTING_CALENDAR.md](docs/POSTING_CALENDAR.md) (10 min)
+3. **Copy posts:** Open [docs/POSTS.md](docs/POSTS.md), copy each post to a draft, schedule in Buffer/Hootsuite
+4. **Verify claims:** Check [docs/STATISTICS.md](docs/STATISTICS.md) before publishing; cite sources if asked
+5. **Monitor performance:** Track reach, comments, shares against calendar; adjust timing/cadence as needed
+
+### For Advisors, Partners, Board
+
+1. Start with [Research Findings (brief)](docs/RESEARCH_FINDINGS.md)
+2. Deep-dive: [docs/STATISTICS.md](docs/STATISTICS.md) with full citations
+3. Debate strategy: [docs/LINKEDIN_STRATEGY.md](docs/LINKEDIN_STRATEGY.md) has evidence for timing/cadence choices
+
+### For Researchers & Academic Reference
+
+1. [docs/STATISTICS.md](docs/STATISTICS.md) — all findings with publication dates and sources
+2. [research/citations.bib](research/citations.bib) — BibTeX for all sources
+3. [research/methodology.md](research/methodology.md) — how the research base was compiled
+
+---
+
+## Important Caveats
+
+### Do NOT Use
+
+- ❌ The "70% unemployment" figure as a hard stat — it's explicitly labeled a myth by the National Research and Training Center on Blindness and Low Vision
+- ✅ Use instead: "about 44% of working-age blind adults are employed, versus about 77% without disabilities"
+
+### Verify Before Publishing
+
+- Platform-specific claims (how listeners are paid, trained, evaluated)
+- Founder biography and origin story
+- Crisis-resource disclaimers for vulnerable users (recommend a note like peer orgs such as Marmalade Trust include)
+
+### Ethical Framing
+
+- **Frame peer support as connection and hope, not clinical treatment** — the research shows peer support improves hope and empowerment; clinical symptom improvement is mixed
+- This also reduces legal and safeguarding risk
+- All posts are written with this framing ("not therapy," "not medical advice," focus on being heard)
+
+---
+
+## Sources & Attribution
+
+All statistics cited in this repository come from 2023-2026 sources (except foundational longitudinal studies) and are verified against named organizations:
+
+- World Health Organization Commission on Social Connection (June 2025)
+- US Surgeon General advisory (May 2023)
+- National Research and Training Center on Blindness and Low Vision (Mississippi State)
+- WHO Commission on Social Connection
+- Bureau of Labor Statistics (2024)
+- BMC Medicine umbrella review (2024)
+- Marmalade Trust (2025)
+- And 20+ peer-reviewed journals and reports
+
+See [docs/STATISTICS.md](docs/STATISTICS.md) and [research/citations.bib](research/citations.bib) for complete attribution.
+
+---
+
+## Contributing
+
+This is a living research repository. If you:
+
+- Find additional sources that strengthen the evidence base
+- Have field observations from HEARD users (qualitative data)
+- Discover errors or outdated statistics
+- Have ideas for post variations or campaign pivots
+
+Please open an issue or submit a pull request.
+
+---
+
+## License
+
+- **Documentation & Research:** Creative Commons Attribution 4.0 (CC-BY-4.0)
+- **Sample posts & strategy:** MIT (feel free to adapt, remix, and redistribute)
+
+---
+
+## Contact
+
+For questions about the research base, strategy, or platform:
+- Open an [Issue](https://github.com/sadeqisaidmohaddes-star/heard-research/issues)
+- Or contact the HEARD team via [heard-backup](https://github.com/Taha-Mahmoodi/heard-backup)
+
+---
+
+**Last Updated:** July 2026  
+**Status:** Pre-Launch, Active Research  
+**Next Review:** Monthly (post-launch cadence)
+
+_This repository documents the evidence base and strategy behind HEARD. The mission: connect people who feel alone with people who have learned to listen deeply._

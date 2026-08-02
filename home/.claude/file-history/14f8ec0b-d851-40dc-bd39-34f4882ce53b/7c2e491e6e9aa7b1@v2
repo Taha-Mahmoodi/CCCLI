@@ -1,0 +1,61 @@
+Third Eye Kit — Node A: Upper Ranging (Glasses)
+================================================
+
+MICROCONTROLLER: Arduino Mini Pro (3.3V or 5V)
+
+SENSOR WIRING (HC-SR04 Ultrasonic):
+────────────────────────────────────
+  Sensor Pin | Arduino Pin | Function
+  ─────────────────────────────────────
+  VCC        | +5V         | Power (5V)
+  GND        | GND         | Ground
+  TRIG       | D9          | Trigger pulse
+  ECHO       | D10         | Echo measurement
+
+AUDIO OUTPUT (3.5mm Headphone Jack):
+──────────────────────────────────────
+  Jack Pin   | Arduino Pin | Function
+  ─────────────────────────────────────
+  Left       | D11         | Audio signal (PWM)
+  Right      | D11         | Audio signal (PWM)
+  Ground     | GND         | Ground
+
+OPTIONAL HAPTIC (Vibration Motor):
+───────────────────────────────────
+  Motor Pin  | Arduino Pin | Function
+  ─────────────────────────────────────
+  Positive   | D6          | Control signal
+  Negative   | GND         | Ground
+
+POWER:
+──────
+  Lithium cell (1.5V) or AA battery
+  Connected to Arduino RAW pin or USB power during development
+
+FIRMWARE CONFIGURATION (node_a.ino):
+────────────────────────────────────
+  #define TRIG_PIN  9      // Trigger pin
+  #define ECHO_PIN  10     // Echo pin
+  #define AUDIO_PIN 11     // Audio feedback (PWM)
+  #define ALERT_CM  70     // Alert distance in cm (TUNE THIS PER USER)
+
+TUNING NOTES:
+─────────────
+- ALERT_CM typically ranges 50–90 cm depending on user height and walking speed
+- Start at 70 cm and adjust based on field testing
+- Document final value in build log
+
+TESTING:
+────────
+1. Upload firmware to Arduino Mini
+2. Open Serial Monitor (9600 baud)
+3. Slowly move obstacle (hand, book) across sensor cone
+4. Verify audio tone plays when distance < ALERT_CM
+5. Adjust ALERT_CM until feedback distance feels natural for user
+
+TROUBLESHOOTING:
+────────────────
+- No audio output: Check headphone jack connection, verify D11 is PWM-capable
+- Distance always 0: Check HC-SR04 power and pin connections
+- Erratic readings: Sensor may be damaged; try spare HC-SR04
+

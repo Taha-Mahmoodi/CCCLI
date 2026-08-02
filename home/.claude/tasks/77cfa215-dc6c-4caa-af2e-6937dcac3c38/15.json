@@ -1,0 +1,9 @@
+{
+  "id": "15",
+  "subject": "Write Graph engine structural spec doc",
+  "description": "Save structure-only design doc to docs/superpowers/specs, no code, commit.",
+  "activeForm": "Writing Graph engine spec doc",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

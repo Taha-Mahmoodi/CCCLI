@@ -1,0 +1,62 @@
+import * as THREE from "three";
+import { mockProjects } from "./data";
+import { buildGalaxy, layoutGalaxies, type GalaxyNode } from "./galaxy";
+import { createStage, softSprite } from "./scene";
+import { createStarfield, tickStarfield } from "./starfield";
+
+const NOW = Date.now();
+const stage = createStage();
+const { scene, camera, composer, controls } = stage;
+
+const stars = createStarfield();
+scene.add(stars);
+
+const sprite = softSprite();
+const nodes: GalaxyNode[] = mockProjects(NOW).map((p) =>
+  buildGalaxy(p, NOW, sprite),
+);
+layoutGalaxies(nodes);
+nodes.forEach((n) => scene.add(n.group));
+
+// Opening moment (per spec): start far out, fly into the biggest galaxy.
+const biggest = nodes.reduce((a, b) => (a.radius > b.radius ? a : b));
+const target = biggest.group.position.clone();
+const FLIGHT_MS = 4200;
+const camFrom = new THREE.Vector3(target.x + 900, 420, target.z + 900);
+const camTo = new THREE.Vector3(
+  target.x + biggest.radius * 2.6,
+  biggest.radius * 1.1,
+  target.z + biggest.radius * 2.6,
+);
+camera.position.copy(camFrom);
+controls.target.copy(target);
+controls.enabled = false; // OrbitControls damping would fight the flight lerp
+
+const start = performance.now();
+const easeInOut = (t: number) =>
+  t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+let flying = true;
+
+function animate(): void {
+  requestAnimationFrame(animate);
+  const elapsed = performance.now() - start;
+
+  if (flying) {
+    const t = easeInOut(Math.min(elapsed / FLIGHT_MS, 1));
+    camera.position.lerpVectors(camFrom, camTo, t);
+    camera.lookAt(target);
+    if (elapsed >= FLIGHT_MS) {
+      flying = false;
+      controls.enabled = true; // hand off cleanly once the flight lands
+    }
+  }
+
+  const time = elapsed / 1000;
+  tickStarfield(stars, time);
+  for (const n of nodes) n.group.rotation.y += n.spinSpeed * 0.016;
+
+  if (!flying) controls.update();
+  composer.render();
+}
+
+animate();

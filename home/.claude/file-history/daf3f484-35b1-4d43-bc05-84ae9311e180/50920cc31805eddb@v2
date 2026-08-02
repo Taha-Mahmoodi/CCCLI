@@ -1,0 +1,44 @@
+import { describe, expect, it } from "vitest";
+import { CATALOG, RewardStore, STARDUST_BY_TIER } from "./rewards";
+
+function memStorage() {
+  const m = new Map<string, string>();
+  return {
+    getItem: (k: string) => m.get(k) ?? null,
+    setItem: (k: string, v: string) => void m.set(k, v),
+  };
+}
+
+describe("badge catalog", () => {
+  it("has unique ids and valid tiers", () => {
+    const ids = new Set(CATALOG.map((b) => b.id));
+    expect(ids.size).toBe(CATALOG.length);
+    expect(CATALOG.every((b) => b.tier in STARDUST_BY_TIER)).toBe(true);
+  });
+  it("covers all three tiers", () => {
+    expect(new Set(CATALOG.map((b) => b.tier)).size).toBe(3);
+  });
+});
+
+describe("RewardStore", () => {
+  it("awards once, pays tier stardust, and persists", () => {
+    const storage = memStorage();
+    const s = new RewardStore(storage);
+    const badge = s.award("first-flight");
+    expect(badge?.name).toBe("First Flight");
+    expect(s.stardust).toBe(STARDUST_BY_TIER.common);
+    expect(s.award("first-flight")).toBeNull(); // idempotent
+    expect(s.stardust).toBe(STARDUST_BY_TIER.common);
+
+    const reloaded = new RewardStore(storage);
+    expect(reloaded.has("first-flight")).toBe(true);
+    expect(reloaded.stardust).toBe(STARDUST_BY_TIER.common);
+  });
+  it("ignores unknown ids and survives corrupt state", () => {
+    const storage = memStorage();
+    storage.setItem("yz-rewards-v1", "not json");
+    const s = new RewardStore(storage);
+    expect(s.award("no-such-badge")).toBeNull();
+    expect(s.stardust).toBe(0);
+  });
+});

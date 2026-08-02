@@ -1,0 +1,22 @@
+// Transcript search — pure filter over the stream. Matches the displayed
+// transcript (correction or machine) and the "memo N" label, case-insensitive.
+import type { Memo } from "./types";
+import { displayTranscript } from "./types";
+
+export function memoMatchesQuery(memo: Memo, index: number, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  if (displayTranscript(memo).toLowerCase().includes(q)) return true;
+  if (`memo ${index + 1}`.includes(q)) return true;
+  return false;
+}
+
+/** Keeps original stream indices so playback still targets the right memo. */
+export function filterMemos(
+  memos: Memo[],
+  query: string,
+): { memo: Memo; index: number }[] {
+  return memos
+    .map((memo, index) => ({ memo, index }))
+    .filter(({ memo, index }) => memoMatchesQuery(memo, index, query));
+}

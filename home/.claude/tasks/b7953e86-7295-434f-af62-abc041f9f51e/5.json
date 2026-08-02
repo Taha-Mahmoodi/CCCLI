@@ -1,0 +1,8 @@
+{
+  "id": "5",
+  "subject": "Video/audio player controls",
+  "description": "loops/04-build.md Video section: design the player chrome itself (play/pause, scrubber, volume, captions toggle) — currently silent, defaults to browser controls.",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

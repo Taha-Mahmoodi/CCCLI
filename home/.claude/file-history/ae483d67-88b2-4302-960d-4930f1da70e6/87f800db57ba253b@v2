@@ -1,0 +1,268 @@
+"use client";
+
+// The v1 card deck — the primary home experience. Memos are a stack of cards;
+// you decide on the top one and the next appears (the stream still ends, #3).
+//
+// v1 reverses spec principles 5 & 6 to a gesture-led model (recorded, with
+// dissent, in the spec). The accessibility FLOOR that keeps that from locking
+// blind users out — and it is a floor, not optional:
+//   • every action has a visible, labelled button (Skip / Like / Like & next)
+//   • every action has a keyboard shortcut (← skip, → like, Shift+→ like & next)
+//   • every action announces via the shared aria-live region
+//   • the persistent RadioPlayer (media-transport route) stays mounted in the
+//     layout, so eyes-free pocket playback is never removed.
+// Swipe/hold are additive pointer sugar on top of that floor.
+
+import { useMemo, useRef, useState } from "react";
+import { Heart, RotateCcw, SkipForward, ThumbsDown } from "lucide-react";
+import { usePlayer } from "@/stores/player";
+import { orderedQueue } from "@/lib/channels";
+import { announce, prefersReducedMotion } from "@/lib/a11y";
+import { classifySwipe, isDoubleActivation, SWIPE_THRESHOLD_PX } from "@/lib/gestures";
+import { MemoCard } from "@/components/MemoCard";
+import { Button } from "@/components/ui/button";
+
+function now(): number {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
+}
+
+export function SwipeDeck() {
+  const memos = usePlayer((s) => s.memos);
+  const activeChannel = usePlayer((s) => s.activeChannel);
+  const shuffle = usePlayer((s) => s.shuffle);
+  const shuffleOrder = usePlayer((s) => s.shuffleOrder);
+  const showTranscripts = usePlayer((s) => s.showTranscripts);
+  const toggleLike = usePlayer((s) => s.toggleLike);
+  const playFrom = usePlayer((s) => s.playFrom);
+
+  const queue = useMemo(
+    () => orderedQueue(memos, activeChannel, shuffle ? shuffleOrder : null),
+    [memos, activeChannel, shuffle, shuffleOrder],
+  );
+
+  const [cursor, setCursor] = useState(0);
+  const [drag, setDrag] = useState<{ dx: number; dy: number } | null>(null);
+  const lastLikeTs = useRef<number | null>(null);
+  const pointerStart = useRef<{ x: number; y: number; id: number } | null>(null);
+
+  // A new queue (channel / shuffle change) restarts the deck at the top. This is
+  // the "adjust state during render" pattern — resetting here, not in an effect,
+  // avoids a wasted render and the set-state-in-effect rule.
+  const queueKey = `${activeChannel}|${shuffle}`;
+  const [prevQueueKey, setPrevQueueKey] = useState(queueKey);
+  if (queueKey !== prevQueueKey) {
+    setPrevQueueKey(queueKey);
+    setCursor(0); // ponytail: the like-timing ref self-clears on the next like — a
+    // stale 400ms window can't survive a manual channel switch, so no reset needed.
+  }
+
+  const current = queue[cursor];
+  const next = queue[cursor + 1];
+  const atEnd = cursor >= queue.length;
+
+  const advanceWith = (message: string) => {
+    const nextCursor = cursor + 1;
+    setCursor(nextCursor);
+    announce(nextCursor >= queue.length ? "You're all caught up. That's the end of the stream." : message);
+  };
+
+  const likeCurrent = () => {
+    if (current && !current.liked) toggleLike(current.id);
+  };
+
+  // Swipe-right / → : like the memo; a second like within the window is the
+  // "twice fast" double-activation → like AND advance (spec rule 2).
+  const onLikeIntent = () => {
+    if (!current) return;
+    const t = now();
+    likeCurrent();
+    if (isDoubleActivation(lastLikeTs.current, t)) {
+      lastLikeTs.current = null;
+      advanceWith("Liked. Next memo.");
+    } else {
+      lastLikeTs.current = t;
+      announce("Liked.");
+    }
+  };
+
+  const likeAndNext = () => {
+    if (!current) return;
+    likeCurrent();
+    lastLikeTs.current = null;
+    advanceWith("Liked. Next memo.");
+  };
+
+  const skip = () => {
+    if (!current) return;
+    lastLikeTs.current = null;
+    advanceWith("Skipped.");
+  };
+
+  // Toggle is the precise route (unlike is possible); swipe/→ only ever like.
+  const toggleLikeButton = () => {
+    if (!current) return;
+    toggleLike(current.id);
+    announce(current.liked ? "Unliked." : "Liked.");
+  };
+
+  const restart = () => {
+    setCursor(0);
+    lastLikeTs.current = null;
+    announce("Back to the top of your stream.");
+  };
+
+  // ---- Pointer drag (additive sugar; buttons/keys above are the real routes) ----
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (!current) return;
+    pointerStart.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    setDrag({ dx: 0, dy: 0 });
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    const start = pointerStart.current;
+    if (!start || start.id !== e.pointerId) return;
+    setDrag({ dx: e.clientX - start.x, dy: e.clientY - start.y });
+  };
+  const endDrag = (e: React.PointerEvent) => {
+    const start = pointerStart.current;
+    pointerStart.current = null;
+    if (!start || start.id !== e.pointerId || !drag) {
+      setDrag(null);
+      return;
+    }
+    const action = classifySwipe(drag.dx, drag.dy);
+    setDrag(null); // snap back; the CSS transition + content swap does the rest
+    if (action === "skip") skip();
+    else if (action === "like") onLikeIntent();
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (!current) return;
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      skip();
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      if (e.shiftKey) likeAndNext();
+      else onLikeIntent();
+    }
+  };
+
+  if (queue.length === 0) {
+    return (
+      <div className="rounded-3xl border border-dashed border-border p-10 text-center">
+        <Heart aria-hidden="true" className="mx-auto mb-3 size-8 text-muted-foreground" />
+        <p className="font-medium">Your deck is empty</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Press and hold the record button below to add the first memo.
+        </p>
+      </div>
+    );
+  }
+
+  if (atEnd) {
+    return (
+      <div className="rounded-3xl border border-dashed border-border p-10 text-center">
+        <p className="font-medium">You&apos;re all caught up</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          That&apos;s the end of the stream — no endless scroll here.
+        </p>
+        <Button type="button" className="mt-4 h-11 px-5" onClick={restart}>
+          <RotateCcw className="me-2 size-4" aria-hidden="true" />
+          Start over
+        </Button>
+      </div>
+    );
+  }
+
+  const dragging = drag !== null;
+  const dx = drag?.dx ?? 0;
+  const reduce = prefersReducedMotion();
+  const topStyle: React.CSSProperties = {
+    transform: reduce ? undefined : `translateX(${dx}px) rotate(${dx * 0.04}deg)`,
+    transition: dragging || reduce ? "none" : "transform 200ms ease-out",
+    touchAction: "pan-y", // let the browser own vertical scroll; we take horizontal
+  };
+  const hint = dx > SWIPE_THRESHOLD_PX ? "like" : dx < -SWIPE_THRESHOLD_PX ? "skip" : null;
+
+  return (
+    <section aria-label="Your memo deck" className="flex flex-col gap-5">
+      <div
+        role="group"
+        aria-roledescription="Memo card deck"
+        aria-label={`Memo ${cursor + 1} of ${queue.length}. Use the buttons below, or arrow keys: left to skip, right to like, Shift plus right to like and go to next.`}
+        tabIndex={0}
+        onKeyDown={onKeyDown}
+        className="relative outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-3xl"
+      >
+        {/* the next card peeking behind, for depth (decorative) */}
+        {next && (
+          <div aria-hidden="true" className="absolute inset-0 scale-95 opacity-50">
+            <MemoCard memo={next} index={cursor + 1} showTranscript={false} onPlay={() => {}} />
+          </div>
+        )}
+
+        <div
+          className="relative min-h-[18rem] select-none"
+          style={topStyle}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+        >
+          <MemoCard
+            memo={current}
+            index={cursor}
+            showTranscript={showTranscripts}
+            onPlay={() => playFrom(cursor)}
+          />
+          {hint && !reduce && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute right-4 top-4 rounded-full border-2 border-primary px-3 py-1 text-sm font-bold uppercase text-primary"
+            >
+              {hint}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* The accessibility floor: every gesture also a labelled button. */}
+      <div className="flex items-center justify-center gap-3">
+        <Button
+          type="button"
+          size="icon"
+          variant="outline"
+          className="size-14 rounded-full"
+          aria-label="Skip this memo"
+          onClick={skip}
+        >
+          <ThumbsDown className="size-6" aria-hidden="true" />
+        </Button>
+        <Button
+          type="button"
+          size="icon"
+          variant={current.liked ? "default" : "outline"}
+          className="size-16 rounded-full"
+          aria-pressed={current.liked}
+          aria-label={current.liked ? "Unlike this memo" : "Like this memo"}
+          onClick={toggleLikeButton}
+        >
+          <Heart
+            className={current.liked ? "size-7 fill-current" : "size-7"}
+            aria-hidden="true"
+          />
+        </Button>
+        <Button
+          type="button"
+          size="icon"
+          variant="outline"
+          className="size-14 rounded-full"
+          aria-label="Like and go to the next memo"
+          onClick={likeAndNext}
+        >
+          <SkipForward className="size-6" aria-hidden="true" />
+        </Button>
+      </div>
+    </section>
+  );
+}

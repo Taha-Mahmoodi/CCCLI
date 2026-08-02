@@ -1,0 +1,82 @@
+import * as THREE from "three";
+import { mulberry32, uniquePairs } from "./data";
+import type { GalaxyNode } from "./galaxy";
+
+// Constellation chains: faint dashed arcs linking related projects at sky
+// scale — the "chained together wherever cross-project relationships
+// exist" line from the spec. Quiet C2 cartography, not wires: chains read
+// at a glance and recede next to the physics (in-fall streams stay the
+// loud ones). Ends are trimmed to each galaxy's rim so lines never pierce
+// a core.
+
+const SEG = 22;
+
+export interface ChainLayer {
+  line: THREE.LineSegments;
+  mat: THREE.LineDashedMaterial;
+}
+
+export function buildChains(nodes: GalaxyNode[], seed = 41): ChainLayer {
+  const rnd = mulberry32(seed);
+  // each project may relate to one of its 6 nearest peers (mock relatedness
+  // until Chapters feeds real cross-project links)
+  const raw: [string, string][] = [];
+  for (const n of nodes) {
+    if (rnd() >= 0.3) continue;
+    const near = [...nodes]
+      .filter((m) => m !== n)
+      .sort(
+        (a, b) =>
+          a.group.position.distanceToSquared(n.group.position) -
+          b.group.position.distanceToSquared(n.group.position),
+      )
+      .slice(0, 6);
+    const pick = near[Math.floor(rnd() * near.length)];
+    if (pick) raw.push([n.project.id, pick.project.id]);
+  }
+  const pairs = uniquePairs(raw);
+  const byId = new Map(nodes.map((n) => [n.project.id, n]));
+
+  const pts: number[] = [];
+  const p = new THREE.Vector3();
+  let prev = new THREE.Vector3();
+  for (const [a, b] of pairs) {
+    const na = byId.get(a)!;
+    const nb = byId.get(b)!;
+    const pa = na.group.position;
+    const pb = nb.group.position;
+    const dist = pa.distanceTo(pb);
+    const ctrl = pa
+      .clone()
+      .lerp(pb, 0.5)
+      .add(new THREE.Vector3(0, dist * 0.07, 0));
+    // trim to the rims so the chain touches the halo, not the core
+    const t0 = Math.min(0.35, (na.radius * 0.9) / dist);
+    const t1 = 1 - Math.min(0.35, (nb.radius * 0.9) / dist);
+    for (let i = 0; i <= SEG; i++) {
+      const t = t0 + (t1 - t0) * (i / SEG);
+      const u = 1 - t;
+      p.set(
+        u * u * pa.x + 2 * u * t * ctrl.x + t * t * pb.x,
+        u * u * pa.y + 2 * u * t * ctrl.y + t * t * pb.y,
+        u * u * pa.z + 2 * u * t * ctrl.z + t * t * pb.z,
+      );
+      if (i > 0) pts.push(prev.x, prev.y, prev.z, p.x, p.y, p.z);
+      prev.copy(p);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+  const mat = new THREE.LineDashedMaterial({
+    color: 0x9db4de,
+    transparent: true,
+    opacity: 0,
+    dashSize: 1.6,
+    gapSize: 2.6,
+    depthWrite: false,
+  });
+  const line = new THREE.LineSegments(geo, mat);
+  line.computeLineDistances();
+  return { line, mat };
+}

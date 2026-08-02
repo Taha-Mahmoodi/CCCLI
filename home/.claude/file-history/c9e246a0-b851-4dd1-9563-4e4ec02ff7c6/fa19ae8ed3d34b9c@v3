@@ -1,0 +1,31 @@
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { normalizeA11yPrefs } from "@/lib/a11y";
+import { A11yProvider } from "@/components/a11y/a11y-provider";
+import { AppNav } from "@/components/app/app-nav";
+
+// Server-side auth boundary + app shell for everything under /app/(authed).
+export default async function AuthedLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const session = await auth();
+  if (!session?.user) redirect("/app/login");
+
+  const profile = await prisma.profile.findUnique({
+    where: { userId: session.user.id },
+    select: { a11yPrefs: true },
+  });
+  const prefs = normalizeA11yPrefs(profile?.a11yPrefs);
+
+  return (
+    <A11yProvider initial={prefs}>
+      <AppNav />
+      <main id="main" tabIndex={-1} className="flex-1 outline-none">
+        {children}
+      </main>
+    </A11yProvider>
+  );
+}

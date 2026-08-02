@@ -1,0 +1,115 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { ArrowLeft } from "@phosphor-icons/react/dist/ssr";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { PostLikeButton } from "@/components/app/post-like-button";
+import { CommentComposer } from "@/components/app/comment-composer";
+import { relativeTime } from "@/lib/time";
+
+export const metadata = { title: "Post" };
+
+export default async function PostDetail({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const user = await requireUser();
+
+  const post = await prisma.post.findUnique({
+    where: { id },
+    include: {
+      author: { select: { id: true, profile: { select: { displayName: true } } } },
+      comments: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          author: {
+            select: { id: true, profile: { select: { displayName: true } } },
+          },
+        },
+      },
+      _count: { select: { likes: true } },
+      likes: { where: { userId: user.id }, select: { id: true } },
+    },
+  });
+  if (!post) notFound();
+
+  const authorName = post.author.profile?.displayName ?? "Member";
+
+  return (
+    <div className="mx-auto max-w-2xl px-5 py-10">
+      <Link
+        href="/app"
+        className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-fg"
+      >
+        <ArrowLeft size={16} aria-hidden /> Back to the community
+      </Link>
+
+      <article className="mt-4 rounded-2xl border border-border bg-surface p-5">
+        <div className="flex items-center gap-2 text-sm">
+          <Link
+            href={`/app/u/${post.author.id}`}
+            className="font-semibold hover:underline"
+          >
+            {authorName}
+          </Link>
+          <span aria-hidden className="text-muted">
+            ·
+          </span>
+          <time dateTime={post.createdAt.toISOString()} className="text-muted">
+            {relativeTime(post.createdAt)}
+          </time>
+        </div>
+        <p className="mt-2 whitespace-pre-wrap leading-relaxed">{post.body}</p>
+        <div className="mt-4">
+          <PostLikeButton
+            postId={post.id}
+            initialCount={post._count.likes}
+            initialLiked={post.likes.length > 0}
+          />
+        </div>
+      </article>
+
+      <section aria-labelledby="replies-heading" className="mt-8">
+        <h2 id="replies-heading" className="text-lg font-semibold">
+          Replies
+        </h2>
+        <div className="mt-4">
+          <CommentComposer postId={post.id} />
+        </div>
+
+        {post.comments.length === 0 ? (
+          <p className="mt-6 text-muted">No replies yet. Start the conversation.</p>
+        ) : (
+          <ul className="mt-6 flex flex-col gap-4">
+            {post.comments.map((c) => (
+              <li
+                key={c.id}
+                className="rounded-xl border border-border bg-surface p-4"
+              >
+                <div className="flex items-center gap-2 text-sm">
+                  <Link
+                    href={`/app/u/${c.author.id}`}
+                    className="font-semibold hover:underline"
+                  >
+                    {c.author.profile?.displayName ?? "Member"}
+                  </Link>
+                  <span aria-hidden className="text-muted">
+                    ·
+                  </span>
+                  <time dateTime={c.createdAt.toISOString()} className="text-muted">
+                    {relativeTime(c.createdAt)}
+                  </time>
+                </div>
+                <p className="mt-1 whitespace-pre-wrap leading-relaxed">
+                  {c.body}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}

@@ -1,0 +1,81 @@
+<div align="center">
+
+<img src="https://raw.githubusercontent.com/CyborgTech-co/.github/main/profile/assets/header.svg" width="100%" alt="Cyborg Tech — creative technology agency"/>
+
+<br>
+
+<img src="https://raw.githubusercontent.com/CyborgTech-co/.github/main/profile/assets/badges/tech-php.svg" alt="PHP"/>
+<img src="https://raw.githubusercontent.com/CyborgTech-co/.github/main/profile/assets/badges/tech-codeigniter.svg" alt="CodeIgniter"/>
+<img src="https://raw.githubusercontent.com/CyborgTech-co/.github/main/profile/assets/badges/tech-wordpress.svg" alt="WordPress"/>
+<img src="https://raw.githubusercontent.com/CyborgTech-co/.github/main/profile/assets/badges/tech-mysql.svg" alt="MySQL"/>
+<img src="https://raw.githubusercontent.com/CyborgTech-co/.github/main/profile/assets/badges/tech-nextjs.svg" alt="Next.js"/>
+<img src="https://raw.githubusercontent.com/CyborgTech-co/.github/main/profile/assets/badges/tech-react.svg" alt="React"/>
+<img src="https://raw.githubusercontent.com/CyborgTech-co/.github/main/profile/assets/badges/tech-typescript.svg" alt="TypeScript"/>
+<img src="https://raw.githubusercontent.com/CyborgTech-co/.github/main/profile/assets/badges/tech-javascript.svg" alt="JavaScript"/>
+<img src="https://raw.githubusercontent.com/CyborgTech-co/.github/main/profile/assets/badges/tech-tailwind.svg" alt="Tailwind CSS"/>
+
+</div>
+
+---
+
+## What we do
+
+Cyborg Tech is a creative technology agency. We build software our clients
+ship, and we build products of our own. The work ranges from clinical
+systems to financial tooling to marketing sites, but the standard is the
+same: it has to run reliably where it's deployed, not just demo well.
+
+<br>
+
+## Products
+
+These are ours, built and maintained in-house.
+
+<details open>
+<summary>📁&nbsp;&nbsp;<b>products/</b> — software we own</summary>
+<br>
+
+<details>
+<summary>&nbsp;&nbsp;&nbsp;&nbsp;📁&nbsp;&nbsp;<b>Canin</b> — dental clinic management system <code>CodeIgniter</code></summary>
+<br>
+
+&nbsp;&nbsp;&nbsp;&nbsp;A full practice-management app: patient records,
+&nbsp;&nbsp;&nbsp;&nbsp;per-tooth charting, lab orders, prescriptions, and
+&nbsp;&nbsp;&nbsp;&nbsp;billing. Trilingual (Farsi, Pashto, English), installable
+&nbsp;&nbsp;&nbsp;&nbsp;as a PWA. In production. Source is private to protect
+&nbsp;&nbsp;&nbsp;&nbsp;patient data; the case study is public.
+&nbsp;&nbsp;&nbsp;&nbsp;[→ read the case study](https://github.com/CyborgTech-co/Canin-research)
+<br><br>
+</details>
+
+<details>
+<summary>&nbsp;&nbsp;&nbsp;&nbsp;🔒&nbsp;&nbsp;<b>ROI</b> — exchange-office bookkeeping <code>PHP</code></summary>
+<br>
+
+&nbsp;&nbsp;&nbsp;&nbsp;Books for a currency exchange desk: customer ledgers,
+&nbsp;&nbsp;&nbsp;&nbsp;multi-currency balances, receipts, loans, and reports.
+&nbsp;&nbsp;&nbsp;&nbsp;Private product repository.
+<br><br>
+</details>
+
+</details>
+
+<br>
+
+## Client work
+
+We also build custom software for clients across web, WordPress, and
+mobile front-ends on modern JavaScript. That work stays private to the
+clients who own it, but it's the larger half of what we do day to day.
+
+<br>
+
+## Work with us
+
+Have something that needs building? Reach the team through
+[github.com/CyborgTech-co](https://github.com/CyborgTech-co) or open an
+issue on one of our public repositories.
+
+<div align="center">
+<img src="https://raw.githubusercontent.com/CyborgTech-co/.github/main/profile/assets/footer.svg" width="100%" alt=""/>
+</div>

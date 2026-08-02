@@ -1,0 +1,133 @@
+package com.thirdeyeworld.android
+
+import android.content.Context
+import android.media.MediaRecorder
+import android.os.Build
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
+import androidx.media3.exoplayer.ExoPlayer
+import java.io.File
+
+/** A finished recording: where the audio landed, and how long it ran. */
+data class RecordedMemo(val path: String, val durationMs: Int)
+
+/**
+ * Audio capture + playback, behind an interface so the view model stays testable
+ * and so a JVM/unit context can use [StubAudioService] without a device. Mirrors
+ * the iOS `AudioService` protocol so the two platforms keep the same shape.
+ */
+interface AudioService {
+  fun startRecording()
+  fun stopRecording(): RecordedMemo?
+  fun play(path: String, rate: Double)
+  fun pause()
+  fun setRate(rate: Double)
+  fun release()
+}
+
+/** No-op implementation — the default when no device audio is available. */
+class StubAudioService : AudioService {
+  override fun startRecording() {}
+  override fun stopRecording(): RecordedMemo? = null
+  override fun play(path: String, rate: Double) {}
+  override fun pause() {}
+  override fun setRate(rate: Double) {}
+  override fun release() {}
+}
+
+/**
+ * Real device audio.
+ *
+ * Recording uses MediaRecorder (AAC in an MPEG-4 container — the format iOS also
+ * writes, so memos are interchangeable). Duration is measured on the clock
+ * rather than read back from the file, matching web and iOS.
+ *
+ * Playback tags the player CONTENT_TYPE_SPEECH and lets ExoPlayer manage audio
+ * focus, so TalkBack **pauses** the memo instead of talking over it (§6.4) —
+ * the same configuration as [PlaybackService], deliberately kept identical.
+ */
+class AndroidAudioService(private val context: Context) : AudioService {
+  private var recorder: MediaRecorder? = null
+  private var recordingFile: File? = null
+  private var startedAt = 0L
+  private var player: ExoPlayer? = null
+
+  private fun newRecorder(): MediaRecorder =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      MediaRecorder(context)
+    } else {
+      @Suppress("DEPRECATION")
+      MediaRecorder()
+    }
+
+  override fun startRecording() {
+    // A stray recorder from a failed take would hold the mic open.
+    runCatching { recorder?.release() }
+    val file = File(context.filesDir, "memo_${System.currentTimeMillis()}.m4a")
+    recordingFile = file
+    recorder = newRecorder().apply {
+      setAudioSource(MediaRecorder.AudioSource.MIC)
+      setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+      setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+      setAudioSamplingRate(44_100)
+      setAudioEncodingBitRate(64_000)
+      setOutputFile(file.absolutePath)
+      prepare()
+      start()
+    }
+    startedAt = System.currentTimeMillis()
+  }
+
+  override fun stopRecording(): RecordedMemo? {
+    val r = recorder ?: return null
+    recorder = null
+    // stop() throws if the take was too short to produce a valid file; either
+    // way the recorder must be released or the mic stays held.
+    val stopped = runCatching { r.stop() }.isSuccess
+    runCatching { r.release() }
+    val file = recordingFile
+    recordingFile = null
+    if (!stopped || file == null || !file.exists() || file.length() == 0L) {
+      file?.delete()
+      return null
+    }
+    val durationMs = (System.currentTimeMillis() - startedAt).toInt()
+    return RecordedMemo(file.absolutePath, durationMs)
+  }
+
+  override fun play(path: String, rate: Double) {
+    val p = player ?: ExoPlayer.Builder(context)
+      .setAudioAttributes(
+        AudioAttributes.Builder()
+          .setUsage(C.USAGE_MEDIA)
+          .setContentType(C.AUDIO_CONTENT_TYPE_SPEECH)
+          .build(),
+        /* handleAudioFocus= */ true,
+      )
+      .setHandleAudioBecomingNoisy(true)
+      .build()
+      .also { player = it }
+
+    p.setMediaItem(MediaItem.fromUri(File(path).toURI().toString()))
+    p.playbackParameters = PlaybackParameters(rate.toFloat())
+    p.prepare()
+    p.play()
+  }
+
+  override fun pause() {
+    player?.pause()
+  }
+
+  override fun setRate(rate: Double) {
+    player?.playbackParameters = PlaybackParameters(rate.toFloat())
+  }
+
+  override fun release() {
+    runCatching { recorder?.release() }
+    recorder = null
+    player?.release()
+    player = null
+  }
+}

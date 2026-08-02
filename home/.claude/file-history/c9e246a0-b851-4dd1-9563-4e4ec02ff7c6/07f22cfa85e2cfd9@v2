@@ -1,0 +1,52 @@
+"use client";
+
+import { useActionState, useEffect, useRef } from "react";
+import { createPost, type PostFormState } from "@/actions/posts";
+import { POST_MAX } from "@/lib/validation";
+
+const initial: PostFormState = {};
+
+export function PostComposer() {
+  const [state, formAction, pending] = useActionState(createPost, initial);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // Clear the box after each successful post (new state ref per submit).
+  useEffect(() => {
+    if (state.ok) formRef.current?.reset();
+  }, [state]);
+
+  return (
+    <form
+      ref={formRef}
+      action={formAction}
+      className="rounded-2xl border border-border bg-surface p-4"
+    >
+      <label htmlFor="post-body" className="text-sm font-medium">
+        Share something with the community
+      </label>
+      <textarea
+        id="post-body"
+        name="body"
+        rows={3}
+        required
+        maxLength={POST_MAX}
+        placeholder="A route that worked, a question, a small win."
+        className="mt-2 w-full resize-y rounded-xl border border-border bg-transparent px-3 py-2 text-fg placeholder:text-muted"
+      />
+      {state.error ? (
+        <p role="alert" aria-live="assertive" className="mt-2 text-sm text-red-600">
+          {state.error}
+        </p>
+      ) : null}
+      <div className="mt-3 flex justify-end">
+        <button
+          type="submit"
+          disabled={pending}
+          className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-transform active:translate-y-px disabled:opacity-60"
+        >
+          {pending ? "Posting…" : "Post"}
+        </button>
+      </div>
+    </form>
+  );
+}

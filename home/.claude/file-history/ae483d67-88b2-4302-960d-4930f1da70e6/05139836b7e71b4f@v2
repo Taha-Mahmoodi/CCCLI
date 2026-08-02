@@ -1,0 +1,18 @@
+# Keep the build context small and reproducible.
+**/node_modules
+**/.next
+**/.turbo
+.git
+.github
+# Native app sources aren't part of the web/api build (no package.json → pnpm
+# ignores them) and are large.
+apps/ios
+apps/android
+# The real-libsignal DM package is excluded from the pnpm workspace and its
+# 54MB native tarball isn't needed to build web or api.
+packages/dm/node_modules
+# Local seed generation scratch + test artifacts.
+scripts/seed/.tmp
+**/test-results
+**/playwright-report
+**/*.log

@@ -1,0 +1,215 @@
+import SwiftUI
+import ThirdEyeCore
+
+/// The main radio screen — a SwiftUI mirror of the web app. Every control is
+/// labelled and reachable by VoiceOver (on-screen + rotor custom actions); the
+/// hardware route is `MPRemoteCommandCenter` (see AudioService). Compiles on the
+/// plain toolchain (macOS) so it's CI-verified; runs on iOS via Xcode.
+public struct RadioScreen: View {
+  @StateObject private var vm = RadioViewModel()
+  @State private var newStation = ""
+
+  public init() {}
+
+  public var body: some View {
+    VStack(spacing: 0) {
+      header
+      ScrollView {
+        VStack(alignment: .leading, spacing: 24) {
+          Text("Your radio")
+            .font(.title).bold()
+            .accessibilityAddTraits(.isHeader)
+          RecorderCard(vm: vm)
+          StationBar(vm: vm, newStation: $newStation)
+          StreamList(vm: vm)
+        }
+        .padding()
+      }
+      PlayerBar(vm: vm)
+    }
+  }
+
+  private var header: some View {
+    HStack(spacing: 12) {
+      Image(systemName: "eye.fill")
+        .accessibilityHidden(true)
+        .frame(width: 40, height: 40)
+        .background(Color.primary.opacity(0.9))
+        .foregroundStyle(Color(white: 0.98))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+      VStack(alignment: .leading) {
+        Text("Third Eye World").font(.headline)
+        Text("Voice-first radio for blind and low-vision people")
+          .font(.subheadline).foregroundStyle(.secondary)
+      }
+      Spacer()
+    }
+    .padding()
+    .accessibilityElement(children: .combine)
+  }
+}
+
+struct RecorderCard: View {
+  @ObservedObject var vm: RadioViewModel
+
+  var body: some View {
+    VStack(spacing: 16) {
+      Button(action: { vm.isRecording ? vm.stopRecording() : vm.startRecording() }) {
+        Image(systemName: vm.isRecording ? "stop.fill" : "mic.fill")
+          .font(.system(size: 30))
+          .frame(width: 80, height: 80)
+          .background(vm.isRecording ? Color.red : Color.primary)
+          .foregroundStyle(Color(white: 0.98))
+          .clipShape(Circle())
+      }
+      .accessibilityLabel(vm.isRecording ? "Stop recording" : "Record a voice memo")
+      .accessibilityAddTraits(.isButton)
+
+      Text("New memos post to \(vm.stationName(vm.activeChannel == allChannels ? "main" : vm.activeChannel))")
+        .font(.footnote).foregroundStyle(.secondary)
+    }
+    .frame(maxWidth: .infinity)
+    .padding(24)
+    .overlay(RoundedRectangle(cornerRadius: 20).stroke(Color.secondary.opacity(0.3)))
+  }
+}
+
+struct StationBar: View {
+  @ObservedObject var vm: RadioViewModel
+  @Binding var newStation: String
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("Stations").font(.headline)
+      ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: 8) {
+          station(id: allChannels, name: "All")
+          ForEach(vm.channels) { c in station(id: c.id, name: c.name) }
+        }
+      }
+      HStack {
+        TextField("New station name", text: $newStation)
+          .textFieldStyle(.roundedBorder)
+          .accessibilityLabel("New station name")
+        Button("Create") {
+          vm.createChannel(newStation)
+          newStation = ""
+        }
+        .disabled(newStation.trimmingCharacters(in: .whitespaces).isEmpty)
+      }
+    }
+  }
+
+  private func station(id: String, name: String) -> some View {
+    let selected = vm.activeChannel == id
+    return Button(name) { vm.setActiveChannel(id) }
+      .padding(.horizontal, 16).frame(minHeight: 44)
+      .background(selected ? Color.primary : Color.secondary.opacity(0.15))
+      .foregroundStyle(selected ? Color(white: 0.98) : Color.primary)
+      .clipShape(Capsule())
+      .accessibilityLabel("Station \(name)")
+      .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+  }
+}
+
+struct StreamList: View {
+  @ObservedObject var vm: RadioViewModel
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 8) {
+      Text("Your stream").font(.headline)
+      if vm.queue.isEmpty {
+        Text(vm.activeChannel == allChannels
+          ? "Your radio is quiet. Record the first memo."
+          : "This station is quiet. Record a memo for it.")
+          .foregroundStyle(.secondary)
+          .padding()
+      } else {
+        ForEach(Array(vm.queue.enumerated()), id: \.element.id) { index, memo in
+          MemoRow(vm: vm, memo: memo, index: index)
+        }
+      }
+    }
+  }
+}
+
+struct MemoRow: View {
+  @ObservedObject var vm: RadioViewModel
+  let memo: Memo
+  let index: Int
+
+  var body: some View {
+    let isCurrent = index == vm.engine.currentIndex && vm.status != .ended
+    return VStack(alignment: .leading, spacing: 6) {
+      HStack {
+        Button(action: { vm.playFrom(index) }) {
+          Image(systemName: "play.fill").frame(width: 44, height: 44)
+        }
+        .accessibilityLabel("Play memo \(index + 1)")
+        VStack(alignment: .leading) {
+          Text("Memo \(index + 1)").font(.subheadline).bold()
+          Text(formatDuration(memo.durationMs)).font(.caption).foregroundStyle(.secondary)
+        }
+        Spacer()
+        Button(action: { vm.toggleLike(memo.id) }) {
+          Image(systemName: memo.liked ? "heart.fill" : "heart").frame(width: 44, height: 44)
+        }
+        .accessibilityLabel(memo.liked ? "Unlike memo \(index + 1)" : "Like memo \(index + 1)")
+      }
+      let transcript = memo.displayTranscript
+      if !transcript.isEmpty {
+        Text(transcript).font(.footnote)
+      }
+    }
+    .padding(12)
+    .overlay(RoundedRectangle(cornerRadius: 12)
+      .stroke(isCurrent ? Color.primary : Color.secondary.opacity(0.3)))
+    // Rotor custom actions — the screen-reader-native route (spec §4).
+    .accessibilityElement(children: .contain)
+    .accessibilityAction(named: memo.liked ? "Unlike" : "Like") { vm.toggleLike(memo.id) }
+    .accessibilityAction(named: "Play") { vm.playFrom(index) }
+  }
+}
+
+struct PlayerBar: View {
+  @ObservedObject var vm: RadioViewModel
+
+  var body: some View {
+    VStack(spacing: 8) {
+      Text(nowPlaying).font(.subheadline)
+        .frame(maxWidth: .infinity, alignment: .leading)
+      HStack(spacing: 16) {
+        control("backward.end.fill", "Previous memo") { vm.previous() }
+          .disabled(vm.queue.isEmpty || vm.engine.currentIndex == 0)
+        control(vm.isPlaying ? "pause.fill" : "play.fill", vm.isPlaying ? "Pause" : "Play") {
+          vm.togglePlay()
+        }
+        .disabled(vm.queue.isEmpty)
+        control("forward.end.fill", "Skip to next memo") { vm.next() }
+          .disabled(vm.queue.isEmpty || vm.status == .ended)
+        Button("\(rateLabel)×") { vm.cyclePlaybackRate() }
+          .frame(minWidth: 44, minHeight: 44)
+          .accessibilityLabel("Playback speed \(rateLabel) times. Tap to change.")
+          .disabled(vm.queue.isEmpty)
+      }
+    }
+    .padding()
+    .background(.thinMaterial)
+  }
+
+  private var rateLabel: String {
+    vm.playbackRate == vm.playbackRate.rounded() ? String(Int(vm.playbackRate)) : String(vm.playbackRate)
+  }
+  private var nowPlaying: String {
+    guard !vm.queue.isEmpty else { return "Nothing to play yet — record a memo." }
+    if vm.status == .ended { return "End of the stream." }
+    return "Memo \(vm.position) of \(vm.queue.count)"
+  }
+
+  private func control(_ symbol: String, _ label: String, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      Image(systemName: symbol).font(.title3).frame(width: 48, height: 48)
+    }
+    .accessibilityLabel(label)
+  }
+}

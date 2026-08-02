@@ -1,0 +1,101 @@
+# Loop 4 — Build
+
+**Goal:** code the site to the approved design images, with real copy, vendored
+dependencies, and all three states working.
+
+**Input:** design images, `DIRECTION.md`, `COPY.md`.
+
+**Output:** a working site in the subject's repository, not yet public.
+
+---
+
+## Stack
+
+The deploy target picked at Gate A decides it (`PIPELINE.md`). Not taste.
+
+**Default: hand-authored HTML and CSS** with committed assets. Runs on all nine
+targets, has no build step to break, and nothing to update. Reach past it only when
+the work demands it: Astro when case-study volume makes hand-editing HTML the
+bottleneck, an SSR framework only when the target runs node and something on the
+page genuinely needs a server.
+
+A framework has to earn its bytes against `§13`.
+
+## Fan out
+
+Dispatch `section-builder`, **one agent per section**, each in an isolated worktree
+so parallel edits don't collide. Each gets: its design image, its copy from
+`COPY.md`, its technique assignment and prototype from `DIRECTION.md`.
+
+The conductor owns the shell — the document skeleton, the design tokens, the type
+system, the shared CSS layer — and assembles the sections into it. Section agents
+write their section and nothing else.
+
+## Code to the image
+
+The design image is the specification. Match it: spacing, scale, weight,
+composition, color. Where the image is ambiguous, go back to `DIRECTION.md`; where
+both are silent, make the call the style would make and note it.
+
+Do not improve the design during the build. If something is genuinely wrong, say so
+and get a decision. A build that quietly redesigns is a build nobody approved.
+
+## The three states, per section
+
+Non-negotiable (`§12`). Each section ships:
+
+1. **Full** — the approved experience
+2. **Reduced motion** — a designed still. Composition, grade, and hierarchy intact.
+   Never `animation: none` on a layout that assumed movement.
+3. **No WebGL** — a real fallback for context loss, old GPUs, and blocked contexts.
+   Handle `webglcontextlost`. Feature-detect before you initialize.
+
+Test all three. A state that was written but never run does not exist.
+
+## Vendor everything
+
+Prototypes pulled from CDNs freely. Production does not (`§9`).
+
+```bash
+mkdir -p vendor/
+curl -sL <cdn-url> -o vendor/<lib>.min.js
+```
+
+Download it, commit it, reference it locally. Same for fonts — self-hosted, subset,
+`font-display: swap`, no Google Fonts link. A public endpoint going down should
+never take this site with it.
+
+## Quality passes
+
+Run these before the loop closes:
+
+| Pass | Check |
+|---|---|
+| **Responsive** | 360, 768, 1440. Real device shapes, not arbitrary breakpoints. Nothing overflows, nothing collapses, type stays readable |
+| **Semantic** | One `h1`, headings in order, landmarks, lists that are lists, buttons that are buttons |
+| **Keyboard** | Tab through everything. Visible focus. No traps. Skip link works |
+| **Budget** | Shell under 100KB and painting alone. Heavy layer deferred and gated. LCP under 1.5s |
+| **Cross-browser** | Chromium and WebKit at minimum. Safari breaks `backdrop-filter` and WebGL in ways Chrome does not |
+| **Copy** | Every string from `COPY.md`. No placeholder survived. Alt text on every image |
+| **Reduced motion** | Toggle the OS setting and look at it. It should still be a designed page |
+| **Console** | Zero errors, zero 404s |
+
+## Local screenshots
+
+Screenshot at all three widths, both color modes, and in reduced-motion. Put them in
+`runs/<slug>/shots/`. Look at them yourself before anyone else does (`§14`).
+
+## Attribution
+
+Add the footer credit and the marker comment (`§19`):
+
+```html
+<!-- forged-with: git-a-portfolio -->
+```
+
+Tell the human it's there and that deleting it is fine.
+
+## Skip cost
+
+Skipping the quality passes moves the discovery of every one of these problems from
+before deploy to after, in front of whoever the site was built for.

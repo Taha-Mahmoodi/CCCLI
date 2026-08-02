@@ -1,0 +1,211 @@
+# Contributing to Third Eye Kit
+
+Thank you for your interest in contributing to the Third Eye Kit project. This document outlines how to report issues, propose improvements, and submit code or documentation changes.
+
+---
+
+## Code of Conduct
+
+We are committed to providing a welcoming and inclusive environment for all contributors. Respect, professionalism, and a focus on the shared goal — improving accessibility for blind and low-vision users — guide all interactions in this project.
+
+---
+
+## How to Contribute
+
+### 1. Report an Issue
+
+If you discover a bug, have a question, or want to propose a feature:
+
+1. **Check existing issues** — your concern may already be documented
+2. **Open a new issue** with:
+   - **Clear title** — e.g., "HC-SR04 readings unstable on Node B left shoe"
+   - **Description** — what you observed, what you expected
+   - **Steps to reproduce** — exact sequence to trigger the issue
+   - **Environment** — microcontroller model, sensor batch, battery type, firmware version
+   - **Logs or data** — Serial Monitor output, pinout photo, etc.
+
+### 2. Propose an Improvement
+
+Have an idea for a new feature or optimization? Open an issue labeled `enhancement` with:
+
+- **Current state** — what the system does now
+- **Proposed change** — what should be different
+- **Why it matters** — impact on users, safety, ease of deployment
+- **Trade-offs** — any downsides or complexity added
+
+### 3. Submit Code
+
+#### Before You Start
+
+- Fork the repository
+- Create a feature branch: `git checkout -b feature/your-feature-name`
+- Read the [Technical Spec](docs/TECHNICAL_SPEC.md) and [Build Guide](docs/BUILD.md) to understand the architecture
+- If you're modifying ranging logic, see §2.2 on the real-time isolation boundary
+
+#### Code Standards
+
+**Firmware (Arduino / C):**
+- Use clear variable names: `ALERT_CM` not `AC`, `getDistance()` not `gd()`
+- One sensor measurement per function (see `ranging.h` as a reference)
+- Keep loops tight — no blocking calls inside the ranging domain
+- Include a comment if logic is not obvious: "Round-trip µs ÷ 58 = distance in cm (speed of sound)"
+- No printf debugging — use Serial.println() for field logging
+
+**Hardware:**
+- Document pinouts in comments and in `hardware/wiring/`
+- Clearly mark changes between node variants (A/B/C/D)
+- Test on actual hardware before submitting
+
+#### Validation Before Submission
+
+1. **Bench-test your change** — sensor sweep, feedback verification, power measurement
+2. **Check the Validation Ledger** — if you're touching a [PLANNED] feature, document its new status
+3. **Update relevant docs** — if you changed pinout, update [BUILD.md](docs/BUILD.md)
+4. **Create a test plan** — what did you verify, and how would someone reproduce your test?
+
+#### Pull Request Process
+
+1. Push to your fork
+2. Open a PR with:
+   - **Title** — what problem does this solve?
+   - **Description** — changes made, why, testing done
+   - **Checklist:**
+     - [ ] Code compiles without warnings
+     - [ ] Bench-tested on hardware (or tests manual)
+     - [ ] Documentation updated
+     - [ ] No breaking changes to existing nodes
+3. Address review feedback
+4. Maintainer will merge once approved
+
+### 4. Improve Documentation
+
+Documentation is as important as code. You can:
+
+- **Fix typos or clarify instructions** — send a PR directly
+- **Add pinout diagrams** — hardware documentation is sparse
+- **Share field-test observations** — real-world data helps validate the ledger
+- **Translate docs** — make the project more accessible globally
+
+---
+
+## Development Workflow
+
+### Setting Up Your Environment
+
+```bash
+# Clone the repository
+git clone git@github.com:sadeqisaidmohaddes-star/third-eye-kit.git
+cd third-eye-kit
+
+# Create a feature branch
+git checkout -b feature/fault-annunciation
+
+# Install Arduino IDE and AVR board support (one-time)
+# See docs/BUILD.md for details
+```
+
+### Testing Your Changes
+
+**For firmware changes:**
+```bash
+# Flash to a microcontroller
+arduino-cli compile --fqbn arduino:avr:mini firmware/node-a-glasses/
+arduino-cli upload -p /dev/tty.usbserial-123456 --fqbn arduino:avr:mini
+
+# Bench-test: obstacle sweep, feedback verification, Serial Monitor
+```
+
+**For documentation:**
+- Read locally to check formatting
+- Verify links are correct
+- Check that code snippets compile and run
+
+### Committing Your Work
+
+Write clear commit messages:
+
+```
+Implement Active Fault Annunciation for Node A [PLANNED → IN DEV]
+
+- Add watchdog timer interrupt handler
+- Define fault state machine (OK, SENSOR_FAULT, VOLTAGE_SAG, DEGRADED)
+- Haptic signature: triple-pulse for sensor loss, long-short for voltage sag
+- Tested on Arduino Mini with bench obstacle sweep
+- See docs/TECHNICAL_SPEC.md §3.2 for validation criteria
+
+Updates: docs/BUILD.md (pinout), firmware/node-a-glasses/node_a.ino
+```
+
+---
+
+## What We're Looking For
+
+### High-Impact Contributions
+
+1. **Validation of [PLANNED] features** — turn "planned" into "implemented" with real hardware evidence
+2. **Fault Annunciation Layer** — safety is the top priority (see [Technical Spec §3.2](docs/TECHNICAL_SPEC.md#32-active-fault-annunciation-layer-planned))
+3. **Consent Architecture** — privacy controls so users can fully revoke sharing (see [Technical Spec §3.3](docs/TECHNICAL_SPEC.md#33-user-centric-consent-architecture))
+4. **Waterproofing & enclosures** — move ingress protection from "not validated" to "validated" (see [Validation Ledger](docs/TECHNICAL_SPEC.md#4-the-validation-debt-ledger))
+5. **Long-term user retention study** — does the wearer keep using it after a month? A year?
+6. **Thermal characterization** — battery fade under sustained heat
+7. **Regional sourcing guides** — help reduce cost by finding local component suppliers
+
+### We're Less Likely to Merge
+
+- Features that break the [real-time isolation boundary](#2-system-architecture--decentralization-logic) (no combined microcontroller for ranging + telemetry)
+- Black-box sensor modules (we prefer inspectable components)
+- Changes that increase cost without proportional safety/usability gain
+- Speculative features with no field validation plan
+
+---
+
+## Validation Debt Ledger
+
+Every change that moves an item from **[PLANNED]** → **[IN DEV]** → **[IMPLEMENTED]** must include:
+
+1. **Hardware evidence** — tested on actual microcontroller with real sensors
+2. **Field data** — preferably from blind/low-vision user feedback
+3. **Documentation** — what was tested, how, under what conditions
+4. **Open debt** — what remains unvalidated or incomplete
+
+See [Validation Ledger in Technical Spec](docs/TECHNICAL_SPEC.md#4-the-validation-debt-ledger) for the full accounting.
+
+---
+
+## Getting Help
+
+- **Technical questions** — open an issue with the `question` label
+- **Design feedback** — start a discussion in the issue tracker
+- **Code review** — tag `@sadeqisaidmohaddes-star` in your PR
+
+---
+
+## Code Ownership & Attribution
+
+By submitting a contribution, you agree that:
+- Your work can be used under the project's license (MIT)
+- We may modify your contribution to fit project standards
+- Your name will be credited in commit history
+
+---
+
+## Recognition
+
+Contributors who significantly advance the project (major features, extensive testing, documentation) are invited to be listed as co-maintainers.
+
+---
+
+## Questions?
+
+If anything in this guide is unclear, open an issue or reach out to the maintainer.
+
+---
+
+**Thank you for making Third Eye Kit better.**
+
+_"The best code is the code that solves a real problem for real people. Validation from the field, not just the lab, is what matters."_
+
+---
+
+**Last Updated:** 2026  
+**Maintained by:** Said Mohaddes Sadeqi

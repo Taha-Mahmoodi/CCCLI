@@ -1,0 +1,22 @@
+---
+name: chapters-project
+description: "Chapters — open-source self-hostable second-brain platform, PIIIX-org/chapters, implementation phase started 2026-07-17 (backend first, TS stack)"
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: f783c85b-a663-45f5-86bd-9f6de4e0011b
+---
+
+Chapters is an open-source, self-hostable "second brain" / team knowledge platform: markdown+YAML notes (OKF format), live-preview editor, AI-navigable knowledge graph, real-time collaboration (Yjs), permission-scoped MCP access. Repo: github.com/PIIIX-org/chapters (org-owned). Local clone `~/Documents/chapters`.
+
+**Phase (as of 2026-07-17): implementation, backend only.** Design phase complete — all specs in `docs/superpowers/specs/` are final. UI deferred until backend done + page-by-page UI structure designed; UI phase must use shadcn MCP for components, GSAP (via magic MCP + docs) and anime.js as client dependency.
+
+**Stack (decided 2026-07-17, owner's criterion: best AI navigability — spec `2026-07-17-tech-stack-decision.md`):** TypeScript end to end. Node LTS, Fastify + Hocuspocus (one process), PostgreSQL + pgvector + FTS, notes as OKF files on disk, local ONNX embeddings (Transformers.js, bge-small), graphology (Louvain now, Leiden tracked), MCP TS SDK, React/Vite/CM6 later, pnpm workspaces, Vitest.
+
+**Operating docs (owner-mandated structure, PR #13):** `docs/agents/` — brief.md, implementation.md (agent prompt: stack, structure map, hard performance rules), handling-protocols.md (naming, context, outage-resume via STATE.md + push-often, multi-agent, sandbox/visual test, token rules), github-workflow.md, STATE.md (resume anchor — read this to find current position). Root CLAUDE.md points at them. Follow these docs; they are the contract.
+
+**Branch model:** `dev` (default, all PRs target it) → verified work promoted via PR `dev → prod`. Old `main` is vestigial — classifier blocked its deletion/rename; user can delete it in GitHub UI. Workflow: branch off dev → PR → actually review the diff on GitHub → problems become issues, fixed on the same PR (`closes #N`) → merge → promote when verified. Merging is authorized ([[chapters-pr-merge-authorization]]); branch surgery (rename/delete) is not — classifier blocks it.
+
+**Issue #9** (cli-visualizer, external contributor snavid-dev/Sayed Navid Azimi): deferred until a CLI exists, recorded as spec `2026-07-17-cli-visualizer-design.md`, issue assigned to Navid to implement when it's time.
+
+See [[chapters-readme-workflow]] — README updated in the same PR as every meaningful change.

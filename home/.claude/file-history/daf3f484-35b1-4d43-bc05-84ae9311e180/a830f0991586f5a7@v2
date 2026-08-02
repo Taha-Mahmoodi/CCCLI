@@ -1,0 +1,75 @@
+# Improvement Plan — researched 2026-07-19
+
+Research pass across four fronts: FUI/command-center credibility
+(Territory Studio's work on The Martian: purpose-led readouts, visual
+hierarchy that leads the eye, empowering the operator), large-scale
+particle techniques (GPGPU ping-pong simulation of millions of
+particles, instancing, persistent GPU buffers), game-feel research
+("juice" — and the repeated finding that **sound is half the
+experience**; we currently ship none), and navigation UX for large 3D
+information spaces (command palettes for jump-anywhere, worlds-in-
+miniature preferred for overview tasks).
+
+Measured against the current build (30 PRs: three tiers, physics
+grammar, C2 chrome, contacts, badges, 60fps at 371k notes), the gaps
+rank as follows. Each phase is one loop chunk, one PR, visually
+verified before merge.
+
+## Phase 1 — Sound (the missing half)
+Procedural WebAudio layer, zero binary assets (matches the repo rule):
+- A deep ambient space drone that subtly shifts with tier (sky = wide
+  and thin, inside a system = closer and warmer).
+- Interaction voices: hover tick, commit pulse whoosh, badge chime by
+  tier, supernova rumble + detonation, stardust sparkle.
+- `M` to mute, state persisted; muted by default only if the browser
+  blocks autoplay (resume on first gesture).
+
+## Phase 2 — Command palette
+`Cmd/Ctrl+K` (and `/`): fuzzy search across projects, vaults, and
+people; enter flies there through the correct tier path (sky → galaxy
+→ vault). The C2 answer to "I know its name, take me there." Pure,
+tested fuzzy matcher in data.ts.
+
+## Phase 3 — Differential rotation (galaxies that breathe)
+Replace rigid group spin with in-shader rotation where angular speed
+falls off with radius (flat rotation curve): arms shear and wind over
+time instead of rotating as a plate. uTime-driven, zero per-frame CPU;
+spin-freeze inside a system becomes a uniform toggle.
+
+## Phase 4 — Optical depth
+- Tier-3 depth of field (bokeh) focused on the star system — the
+  cinematic close-up the orrery earned.
+- Subtle god-ray shafts from the vault star (radial post pass, cheap).
+Both gated behind the existing quality bar: 60fps at company scale or
+it doesn't ship.
+
+## Phase 5 — Sector minimap (worlds-in-miniature)
+Toggleable corner map (`N`): top-down 2D projection of the whole sky
+with the camera frustum wedge, black holes marked, click to fly.
+Research says WIM wins for overview tasks; contacts already covers
+"what's near me," the minimap covers "where am I."
+
+## Phase 6 — Access + onboarding polish
+- `?` shortcuts overlay (C2-styled) listing every key.
+- One-line hint under the wordmark on first load ("scroll to dive ·
+  click to enter · esc to rise"), fades permanently after first enter.
+- `prefers-reduced-motion`: damp flights to direct cuts, stop ambient
+  spin.
+- Comet trails on the 3 most recently active projects — recency
+  readable at sky scale without opening anything.
+
+## Deferred (needs user input or backend)
+- Activity time-scrub / replay (wants real event history from
+  Chapters).
+- Touch/mobile controls (worth a dedicated pass with device testing).
+- Multiplayer presence (v2 by decision).
+
+## Sources
+- https://builtin.com/design-ux/sci-fi-ui (Territory Studio, The Martian mission control)
+- https://scifiinterfaces.com/2020/06/23/scifi-interfaces-qa-with-territory-studio/
+- https://discourse.threejs.org/t/gpgpu-galaxy-particles/88937
+- https://threejsroadmap.com/blog/galaxy-simulation-webgpu-compute-shaders
+- https://sfxengine.com/blog/best-practices-for-game-ui-sounds
+- https://www.bloodmooninteractive.com/articles/juice.html
+- https://mobbin.com/glossary/command-palette
+- https://ieeexplore.ieee.org/document/8533895/ (VR 3D-graph navigation: WIM for overview)

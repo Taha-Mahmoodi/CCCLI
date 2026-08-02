@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Builds / generated
+.next/
+dist/
+build/
+out/
+*.tsbuildinfo
+.turbo/
+coverage/
+playwright-report/
+test-results/
+
+# Env & secrets (never commit real values)
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Scratch / ephemeral (see handling-protocols §1)
+.scratch/
+*.log
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Native build artifacts
+apps/ios/build/
+apps/ios/DerivedData/
+apps/android/.gradle/
+apps/android/**/build/
+.gstack/
+
+# Backend runtime data
+.data/
+services/api/.data/

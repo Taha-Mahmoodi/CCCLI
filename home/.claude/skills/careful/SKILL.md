@@ -1,0 +1,1 @@
+/Users/taha/.claude/skills/gstack/careful/SKILL.md

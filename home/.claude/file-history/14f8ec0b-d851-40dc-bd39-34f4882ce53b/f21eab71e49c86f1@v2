@@ -1,0 +1,177 @@
+# Bill of Materials (BOM)
+
+**Third Eye Kit — v2 Prototype Component List**
+
+---
+
+## Sourcing Notes
+
+The majority of components are imported, which drives the current unit cost above the manufacturing target. Prices below are the prototype's **landed online costs**, not the projected at-scale cost with in-region sourcing and volume pricing.
+
+**Target manufacturing cost at scale:** $50–100 USD (contingent on in-region sourcing, injection-molded enclosures, and volume component pricing)
+
+---
+
+## Component Inventory
+
+| # | Component | Qty | Unit (USD) | Line (USD) | Notes |
+|---|-----------|-----|-----------|-----------|-------|
+| 1 | AVR microcontroller (Arduino mini class) | 4 | 10 | 40 | Nodes A, B, C, D — independent processors |
+| 2 | Ultrasonic sensor (HC-SR04 class) | 5 | 5 | 25 | Node A: 1, Node B: 2 (L+R), Node C: 1, spare: 1 |
+| 3 | GPS module (NEO-6M class) | 1 | 7 | 7 | Node D only |
+| 4 | GSM module (SIM800-class) | 1 | 10 | 10 | Node D only; 2G/GSM chipset |
+| 5 | 2G SIM card | 1 | 2 | 2 | Pre-activated 2G SIM (regional provider) |
+| 6 | LED lights (3mm, assorted) | 1 pack | 1 | 1 | Node B passive visibility marker |
+| 7 | LDR module (light-dependent resistor) | 2 | 1 | 2 | Node B ambient-light trigger |
+| 8 | Vibration motor (haptic, ERM / coin) | 4 | 0.5 | 2 | Nodes A, B (×2), C feedback actuators |
+| 9 | Lithium or alkaline cells (AA, 1.5V) | 4 | 2 | 8 | Per-node power budget; design target 4–6 hours |
+| 10 | Footwear chassis (shoes) | 1 pair | 5 | 5 | Node B mounting enclosure |
+| 11 | Eyewear chassis (glasses) | 1 | — | — | Node A mounting enclosure (cost TBD) |
+| 12 | Jumper wires (M–F, M–M, F–F) | 3 packs | 2 | 6 | Breadboard and node interconnect |
+| 13 | Breadboard (830-hole solderless) | 2 | 2 | 4 | Development / prototyping |
+| 14 | USB power adapter / micro USB | 1 | 3 | 3 | Bench testing and flashing |
+| 15 | Headphone jack (3.5 mm) + cable | 1 | 2 | 2 | Node A audio output |
+| | **Prototype total (landed)** | | | **≈ 117** | Online sourcing, international shipping |
+
+---
+
+## Cost Breakdown by Node
+
+### Node A (Upper Ranging — Glasses)
+| Component | Unit Cost | Qty | Subtotal |
+|-----------|-----------|-----|----------|
+| AVR microcontroller | $10 | 1 | $10 |
+| Ultrasonic sensor | $5 | 1 | $5 |
+| Vibration motor (optional) | $0.5 | 1 | $0.5 |
+| Headphone jack + cable | $2 | 1 | $2 |
+| Lithium cells | $2 | 1 | $2 |
+| Wiring | — | — | $1 |
+| **Node A Subtotal** | | | **≈ $20.50** |
+
+### Node B (Lower Ranging — Shoes)
+| Component | Unit Cost | Qty | Subtotal |
+|-----------|-----------|-----|----------|
+| AVR microcontroller | $10 | 1 | $10 |
+| Ultrasonic sensor | $5 | 2 | $10 |
+| Vibration motor | $0.5 | 2 | $1 |
+| LDR + LED module | $1 | 2 | $2 |
+| Lithium cells | $2 | 1 | $2 |
+| Shoes (chassis) | $5 | 1 | $5 |
+| Wiring | — | — | $2 |
+| **Node B Subtotal** | | | **≈ $32** |
+
+### Node C (Manual/Tactile — Gloves)
+| Component | Unit Cost | Qty | Subtotal |
+|-----------|-----------|-----|----------|
+| AVR microcontroller | $10 | 1 | $10 |
+| Ultrasonic sensor | $5 | 1 | $5 |
+| Vibration motor | $0.5 | 1 | $0.5 |
+| Lithium cells | $2 | 1 | $2 |
+| Glove enclosure (fabric) | $3 | 1 | $3 |
+| Wiring | — | — | $1.50 |
+| **Node C Subtotal** | | | **≈ $22** |
+
+### Node D (Location Telemetry — Belt/Pack)
+| Component | Unit Cost | Qty | Subtotal |
+|-----------|-----------|-----|----------|
+| AVR microcontroller | $10 | 1 | $10 |
+| GPS module (NEO-6M) | $7 | 1 | $7 |
+| GSM module (SIM800) | $10 | 1 | $10 |
+| 2G SIM card | $2 | 1 | $2 |
+| Lithium cells | $2 | 1 | $2 |
+| Belt/pack chassis | $3 | 1 | $3 |
+| Wiring | — | — | $2 |
+| **Node D Subtotal** | | | **≈ $36** |
+
+---
+
+## Assembly Total
+- Node A: ≈ $20.50
+- Node B: ≈ $32
+- Node C: ≈ $22
+- Node D: ≈ $36
+- **Grand Total:** ≈ $110.50 (prototype, landed cost)
+
+---
+
+## Projected Cost at Scale ($50–100)
+
+### Sourcing Assumptions
+1. **In-region component sourcing** — local / regional suppliers instead of international shipping
+2. **Injection-molded enclosures** — replacing hand-built shoe/glass/glove mounts
+3. **Volume discounts** — 100+ unit orders with direct manufacturers
+4. **Consolidated power architecture** — possible per-node lithium replacements with rechargeable cells (if power management validated)
+
+### Cost Reduction Strategy
+- **Enclosure:** $15 → $3 (injection molding at scale)
+- **Components:** $102 → $75 (volume discounts, regional sourcing)
+- **Assembly:** $0 → $5 (manual labor)
+- **Regulatory/certification:** $0 (skipped; field prototype)
+
+**Result:** $75–100 at 100+ unit volumes with regional sourcing.
+
+---
+
+## Component Selection Rationale
+
+### Why These Sensors?
+
+**HC-SR04 Ultrasonic** — $5 each
+- Commodity part, globally available
+- Cone-shaped, known detection limits
+- Inspectable, repairable, replaceable
+- Not a black-box module
+
+**NEO-6M GPS** — $7
+- Standalone, no assisted-GPS dependencies
+- Proven in resource-constrained environments
+- Does not require internet connectivity
+
+**SIM800 GSM** — $10
+- 2G/GSM chosen deliberately for coverage (not speed)
+- Widest rural footprint, lowest signal floor
+- Regional 2G SIM cards are cheap and available
+
+### Why Not?
+
+- **LTE / NB-IoT modules** — would increase cost $15–30 and depend on broadband coverage not available in target region
+- **Reflex-based Braille displays** — $3,500+ per unit; economically excludes the intended population
+- **Wi-Fi + smartphone tether** — requires broadband infrastructure and entangles the wearer with device ownership
+- **Integrated sensor fusion modules** — black-box failure modes, regional unavailability, high cost
+
+---
+
+## Testing & Procurement Checklist
+
+Before ordering, verify:
+
+- [ ] Component availability in your region (allow 4–6 weeks for shipping)
+- [ ] SIM card provider supports 2G in your deployment area
+- [ ] Arduino IDE and AVR toolchain compatibility
+- [ ] Power requirements (check microcontroller datasheets for 3.3V vs 5V nodes)
+- [ ] Mounting materials (shoes, glasses, fabric for gloves)
+
+---
+
+## Spare Parts
+
+Recommended spares for field testing:
+
+- 1 × AVR microcontroller (node replacement)
+- 2 × HC-SR04 ultrasonic sensor (common failure point under dust/moisture)
+- 1 × Lithium cell set (power verification)
+- 1 × Jumper wire assortment (reliability troubleshooting)
+
+---
+
+## Regional Sourcing Contacts
+
+*To be populated by maintainer and community:*
+- Afghanistan electronics suppliers
+- Central Asia regional components distributors
+- Turkey-based import channels (proximity advantage)
+
+---
+
+**Last Updated:** 2026  
+**Maintained by:** Said Mohaddes Sadeqi

@@ -1,0 +1,14 @@
+// Core domain types for Slice 0.
+// ponytail: lives in the web app until a second surface needs it; hoist to
+// packages/shared when services/api lands.
+
+export type Memo = {
+  id: string;
+  createdAt: number; // epoch ms
+  durationMs: number;
+  mime: string;
+  liked: boolean;
+};
+
+/** A memo plus its audio, as persisted in IndexedDB. */
+export type StoredMemo = Memo & { blob: Blob };

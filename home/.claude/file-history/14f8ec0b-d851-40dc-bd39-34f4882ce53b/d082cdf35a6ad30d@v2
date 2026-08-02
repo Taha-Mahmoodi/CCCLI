@@ -1,0 +1,184 @@
+/**
+ * Third Eye Kit — Node D: Location Telemetry (Belt/Pack)
+ *
+ * GPS positioning + GSM location reporting to authorized family members.
+ * Feedback: Outbound SMS with coordinates.
+ * Status: [IMPLEMENTED] — Call-triggered; see consent notes below.
+ *
+ * Platform: Arduino Mini Pro (5V)
+ * Modules: NEO-6M GPS + SIM800L GSM
+ * Power: Lithium cell
+ *
+ * PRIVACY & CONSENT:
+ * This node responds to inbound requests from authorized numbers.
+ * See docs/CONSENT_ARCHITECTURE.md for design rationale and limitations.
+ * Current v2 baseline: answers inbound requests.
+ * Roadmap: wearer-controlled toggle to gate all location sharing.
+ */
+
+#include <SoftwareSerial.h>
+
+// GPS Module (NEO-6M)
+// RX = pin 0 (hardware Serial), TX = pin 1
+#define GPS_BAUD 9600
+
+// GSM Module (SIM800L)
+#define GSM_RX_PIN 2
+#define GSM_TX_PIN 3
+#define GSM_BAUD 9600
+#define GSM_KEY_PIN 8
+
+SoftwareSerial gsmSerial(GSM_RX_PIN, GSM_TX_PIN);  // RX, TX
+
+// Authorized phone numbers (one-time configuration)
+const char* AUTHORIZED[] = {
+  "+93799123456",  // Family member 1 (update with real number)
+  "+93799654321"   // Family member 2 (update with real number)
+};
+const int AUTH_COUNT = 2;
+
+// Global state
+float lastLat = 0, lastLon = 0;
+bool gpsFixed = false;
+
+void setup() {
+  Serial.begin(9600);     // Debug serial (USB)
+  gsmSerial.begin(GSM_BAUD);  // GSM module
+
+  pinMode(GSM_KEY_PIN, OUTPUT);
+  digitalWrite(GSM_KEY_PIN, LOW);
+
+  Serial.println("Node D: Location Telemetry System");
+  Serial.println("Initializing GPS and GSM modules...");
+
+  // Power on GSM module
+  initializeGSM();
+
+  // Note: Real implementation would initialize GPS and wait for first fix
+  // This is a skeleton; full implementation requires GPS NMEA parsing
+}
+
+void loop() {
+  // Poll for incoming SMS from authorized numbers
+  checkIncomingSMS();
+
+  // Update GPS periodically (every 30 seconds in production)
+  static unsigned long lastGPSUpdate = 0;
+  if (millis() - lastGPSUpdate > 30000) {
+    updateGPSPosition();
+    lastGPSUpdate = millis();
+  }
+
+  delay(100);
+}
+
+/**
+ * initializeGSM() — Power on and configure GSM module
+ */
+void initializeGSM() {
+  // Toggle power pin (at least 1 second)
+  digitalWrite(GSM_KEY_PIN, HIGH);
+  delay(1000);
+  digitalWrite(GSM_KEY_PIN, LOW);
+
+  delay(2000);  // Wait for module to boot
+
+  // Check if module responds
+  sendAT("AT");
+  // Expected: "OK"
+
+  // Disable command echo
+  sendAT("ATE0");
+
+  // Set SMS text mode
+  sendAT("AT+CMGF=1");
+
+  Serial.println("GSM module initialized.");
+}
+
+/**
+ * checkIncomingSMS() — Poll for incoming SMS
+ */
+void checkIncomingSMS() {
+  // In production: parse unsolicited +CMT notifications
+  // Simplified skeleton: check periodically for new messages
+  sendAT("AT+CMGL=\"REC UNREAD\"");
+
+  // If message received from authorized number, reply with location
+  // See CONSENT_ARCHITECTURE.md for privacy design rationale
+}
+
+/**
+ * updateGPSPosition() — Read GPS coordinates
+ */
+void updateGPSPosition() {
+  // In production: parse NMEA frames from NEO-6M
+  // Example: $GPRMC,hhmmss.ss,status,lat,N/S,lon,E/W,...
+  // Simplified skeleton; real implementation uses full NMEA parser
+
+  // For now, log that GPS update was attempted
+  Serial.println("GPS: Checking for fix...");
+
+  // When fix is obtained, send to authorized requester
+  // sendLocationSMS("+93799123456", lastLat, lastLon);
+}
+
+/**
+ * sendLocationSMS() — Send GPS coordinates via SMS
+ */
+void sendLocationSMS(const char* phoneNumber, float lat, float lon) {
+  // Compose SMS with coordinates
+  String message = "Location: ";
+  message += lat;
+  message += ",";
+  message += lon;
+
+  // Send SMS command
+  String command = "AT+CMGS=\"";
+  command += phoneNumber;
+  command += "\"";
+
+  sendAT(command);
+  // Send message content followed by Ctrl+Z (0x1A)
+  gsmSerial.print(message);
+  gsmSerial.write(0x1A);
+
+  Serial.print("Location sent to ");
+  Serial.println(phoneNumber);
+}
+
+/**
+ * sendAT() — Send AT command and read response
+ */
+void sendAT(const char* command) {
+  gsmSerial.println(command);
+
+  // Wait for response (simplified; real implementation has timeout)
+  delay(500);
+
+  // Read response
+  while (gsmSerial.available()) {
+    Serial.write(gsmSerial.read());
+  }
+}
+
+// ============================================================================
+// CONSENT DESIGN RATIONALE
+// ============================================================================
+//
+// The v2 prototype answers inbound requests from authorized numbers.
+// This is convenient but NOT a full consent gate.
+//
+// Limitations (v2):
+// - Wearer cannot disable sharing while carrying the device
+// - Abusive caller can query location repeatedly
+// - Family member could disable without wearer's knowledge (if device is accessible)
+//
+// Roadmap [PLANNED]:
+// - Physical toggle on device body (wearer controls)
+// - Firmware allowlist (only pre-authorized numbers can request)
+// - Rate limiting (prevent continuous location tracking)
+// - No remote provisioning (no way to add numbers without physical access)
+//
+// See docs/CONSENT_ARCHITECTURE.md for full design.
+

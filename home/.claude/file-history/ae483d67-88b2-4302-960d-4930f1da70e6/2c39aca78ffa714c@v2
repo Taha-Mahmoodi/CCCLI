@@ -1,0 +1,12 @@
+{
+  "name": "@tew/dm",
+  "private": true,
+  "type": "module",
+  "description": "Real E2EE direct messages via libsignal (standalone — outside the pnpm workspace)",
+  "scripts": {
+    "verify": "node verify.mjs"
+  },
+  "dependencies": {
+    "@signalapp/libsignal-client": "^0.97.4"
+  }
+}

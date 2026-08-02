@@ -1,0 +1,9 @@
+{
+  "id": "45",
+  "subject": "SDD 2b2 Task 1: readOnly option in useCodeMirrorEditor",
+  "description": "Add readOnly?: boolean option applying EditorState.readOnly + EditorView.editable facets.",
+  "activeForm": "Implementing SDD 2b2 Task 1",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

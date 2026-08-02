@@ -1,0 +1,31 @@
+import * as React from "react";
+
+export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+  /** Render as a different element (e.g. "section", "article", "li"). */
+  as?: React.ElementType;
+}
+
+/**
+ * White card on warm paper: 1px warm border + soft low shadow, 16px radius.
+ * Structural separation comes from the border; the shadow is gentle lift.
+ */
+export function Card({
+  as: Tag = "div",
+  className = "",
+  children,
+  ...rest
+}: CardProps) {
+  return (
+    <Tag
+      className={[
+        "rounded-card border border-border bg-surface p-5 shadow-sm",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      {...rest}
+    >
+      {children}
+    </Tag>
+  );
+}

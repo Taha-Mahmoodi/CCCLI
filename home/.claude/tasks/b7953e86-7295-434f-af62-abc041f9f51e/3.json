@@ -1,0 +1,8 @@
+{
+  "id": "3",
+  "subject": "Status communication cluster",
+  "description": "Available-for-work badge + announcement/status bar, as one cluster — both persistent status communication distinct from toast (transient) and modal (blocking).",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

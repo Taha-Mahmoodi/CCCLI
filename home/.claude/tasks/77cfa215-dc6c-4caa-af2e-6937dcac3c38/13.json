@@ -1,0 +1,9 @@
+{
+  "id": "13",
+  "subject": "Write Editor structural spec doc",
+  "description": "Save structure-only design doc to docs/superpowers/specs, no code, commit.",
+  "activeForm": "Writing Editor spec doc",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

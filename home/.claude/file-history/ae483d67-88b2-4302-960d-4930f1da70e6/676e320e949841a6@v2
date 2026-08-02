@@ -1,0 +1,39 @@
+import Foundation
+
+/// Audio capture + playback + the platform "hardware route" (lock screen /
+/// headphones). Abstracted so the SwiftUI layer and view model compile and are
+/// testable on any platform; the real AVFoundation + MPRemoteCommandCenter
+/// implementation is iOS-only (`#if os(iOS)` in AudioService+iOS.swift).
+public protocol AudioService: AnyObject {
+  /// Configure `AVAudioSession` category `.playback`/`.playAndRecord`,
+  /// mode `.spokenAudio`, background audio (spec §6.2/§6.4).
+  func configureSession()
+  func startRecording() throws
+  /// Returns the recorded file and its duration in ms.
+  func stopRecording() throws -> (url: URL, durationMs: Int)
+  func play(url: URL, rate: Double)
+  func pause()
+  func setRate(_ rate: Double)
+  /// Wire lock-screen / headphone transport controls to these handlers.
+  func bindRemoteCommands(play: @escaping () -> Void, pause: @escaping () -> Void,
+                          next: @escaping () -> Void, previous: @escaping () -> Void)
+  /// Update Now Playing (title shown on the lock screen).
+  func setNowPlaying(title: String)
+}
+
+/// No-op implementation so views/view-model compile and run off-device
+/// (macOS build, SwiftUI previews, logic checks). Never used on a real phone.
+public final class StubAudioService: AudioService {
+  public init() {}
+  public func configureSession() {}
+  public func startRecording() throws {}
+  public func stopRecording() throws -> (url: URL, durationMs: Int) {
+    (URL(fileURLWithPath: "/dev/null"), 0)
+  }
+  public func play(url: URL, rate: Double) {}
+  public func pause() {}
+  public func setRate(_ rate: Double) {}
+  public func bindRemoteCommands(play: @escaping () -> Void, pause: @escaping () -> Void,
+                                 next: @escaping () -> Void, previous: @escaping () -> Void) {}
+  public func setNowPlaying(title: String) {}
+}

@@ -1,0 +1,17 @@
+---
+name: third-eye-world-mono
+description: third-eye-world-mono build repo created 2026-07-19 on Taha-Mahmoodi (private); mobile-first voice social app for BLV
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: acc7a69f-0fc4-492f-a1d9-f177e3a52dde
+  modified: 2026-07-19T06:31:40.710Z
+---
+
+Monorepo for building Third Eye World — a voice-first, blind-first social network for blind/low-vision people (nonprofit, OSS, no ads; targets loneliness not engagement). Created 2026-07-19 at github.com/Taha-Mahmoodi/third-eye-world-mono (**private**, Taha's main account). So far only README + spec pointer pushed; nothing built yet.
+
+Spec (source of truth) is the v2.0 paper on sadqi's account: [[third-eye-world-paper-v2-update]]. Delivery order per spec: web (Next.js) first, then native iOS + Android (E2EE DMs ship with the phone apps). Ten non-negotiable design principles gate every feature.
+
+sadeqisaidmohaddes-star (Said) added as collaborator with **write** (push) access 2026-07-19, invite accepted. See [[said-account-collaborator-contributions-2026-07]].
+
+This is a fresh, deliberate start — NOT the earlier [[third-eye-world-build]] attempt that was scrapped for using the wrong source file. Repo owner is Taha-Mahmoodi, distinct from the sadqi paper repo; keep accounts separate per [[github-accounts]].

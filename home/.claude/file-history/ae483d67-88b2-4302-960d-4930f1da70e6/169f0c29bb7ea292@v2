@@ -1,0 +1,19 @@
+---
+name: third-eye-world-mono
+description: third-eye-world-mono build repo created 2026-07-19 on Taha-Mahmoodi (private); mobile-first voice social app for BLV
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: acc7a69f-0fc4-492f-a1d9-f177e3a52dde
+  modified: 2026-07-19T12:45:10.623Z
+---
+
+Monorepo for building Third Eye World — a voice-first, blind-first social network for blind/low-vision people (nonprofit, OSS, no ads; targets loneliness not engagement). Created 2026-07-19 at github.com/Taha-Mahmoodi/third-eye-world-mono (**private**, Taha's main account).
+
+**Build progress (2026-07-19, one very long session — 22 PRs):** governance docs + root `STATE.md` shipped. `dev`/`prod` two-branch model; every unit = feature-branch → PR → CI → merge dev → promote prod (all automated, CI green; regression #8 caught by CI → issue → fix → merge). Stack: Next 16 + React 19 + Tailwind 4 + shadcn/ui (radix, RTL) + zustand; gsap + anime.js (lazy). **Shipped to prod & verified (62 tests, 0 axe light+dark via /browse, green CI):** Slice 0 (record → gapless radio → 3-route controls, IndexedDB, PWA); Slice 1 (1a transcripts/1b channels/1c shuffle + search); Slice 3 backend `services/api` (Hono + **node:sqlite** + fs; memos/timeline/search/likes/comments/reports; stub ASR w/ one-file-swap interface; CI Node pinned 26 for node:sqlite); Slice 2 (2a moderation backend: queue/decisions/appeals-to-different-reviewer/transparency; 2b accessible moderator console = first web↔API integration). Slice **6a** = DM franking construction shipped but **⚠️ UNAUDITED reference, functional tests only, must be replaced by libsignal** — NOT in the verified set. **Blocked (need infra, marked designed/stub-unverified, never faked):** real auth (email/SMS provider), real Whisper/Piper (GPU), native iOS/Android (Xcode/Android SDK), E2EE DM transport (libsignal+native keystore), IVR (telephony). Read `STATE.md` first on resume.
+
+Spec (source of truth) is the v2.0 paper on sadqi's account: [[third-eye-world-paper-v2-update]]. Delivery order per spec: web (Next.js) first, then native iOS + Android (E2EE DMs ship with the phone apps). Ten non-negotiable design principles gate every feature.
+
+sadeqisaidmohaddes-star (Said) added as collaborator with **write** (push) access 2026-07-19, invite accepted. See [[said-account-collaborator-contributions-2026-07]].
+
+This is a fresh, deliberate start — NOT the earlier [[third-eye-world-build]] attempt that was scrapped for using the wrong source file. Repo owner is Taha-Mahmoodi, distinct from the sadqi paper repo; keep accounts separate per [[github-accounts]].

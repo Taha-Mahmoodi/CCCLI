@@ -1,0 +1,9 @@
+{
+  "id": "9",
+  "subject": "Write and commit design doc",
+  "description": "Save to docs/superpowers/specs/YYYY-MM-DD-second-brain-app-design.md, commit.",
+  "activeForm": "Writing design doc",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

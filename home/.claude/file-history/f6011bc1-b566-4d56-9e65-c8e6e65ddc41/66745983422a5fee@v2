@@ -1,0 +1,192 @@
+# Heard — UI/UX Redesign Spec ("The Listening Room")
+
+The 2026 redesign. Every surface is rebuilt to this spec. **The brand palette and
+the logo are untouchable** — all color tokens in `app/globals.css` keep their
+exact values, and `components/shared/Logo.tsx` is not modified. Everything else
+(layout, type scale, components, section design, motion) is rebuilt.
+
+Quality bar: teww.org — editorial, confident, warm. Not a template.
+
+## 1. Concept
+
+**Sound made visible.** The logo's concentric listening arcs are the one
+recurring graphic motif across the app:
+
+- `ArcField` — a decorative SVG of thin concentric arcs (teal at low opacity,
+  one amber stroke) used as hero/section backdrop, bleeding off an edge.
+- Avatar availability ring — an arc segment around the avatar when a listener
+  is available now.
+- The voice player's waveform — amber bars, the signature interactive moment.
+- Empty states — small arc mark + one serif sentence.
+
+Never more than one arc treatment per viewport. It's a whisper, not wallpaper.
+
+## 2. Tokens (globals.css)
+
+Colors: **unchanged, byte for byte.** The redesign uses the existing palette
+plus two existing colors in new roles: `--color-ink` as a full-bleed band
+background (footer, call stage) with cream/white text, and `--color-primary`
+as a full-bleed band background (stats, availability). No new hues.
+
+Type scale grows a display end (all clamp-based, body floor stays 18px):
+
+```
+--text-display: clamp(2.875rem, 2rem + 3vw, 4.25rem);   /* 46 → 68px */
+--text-h1:      clamp(2.125rem, 1.75rem + 1.6vw, 2.875rem);
+--text-kicker:  0.8125rem;  /* 13px small caps, +0.14em tracking, weight 800 */
+```
+
+New knobs: `--radius-tile: 20px`, `--shadow-lift` (hover), `--ease-warm`
+(kept). Numerals in data contexts always `font-variant-numeric: tabular-nums`.
+
+Fonts stay Lora (display) + Nunito Sans (body) — the wordmark is set in Lora;
+changing display type would orphan the logo.
+
+## 3. Voice & type rules
+
+- Kicker (small caps sans, tracked, teal or `--color-accent-strong`) above
+  section headings. Sentence case everywhere; no Title Case.
+- Display/h1/h2 in Lora with `-0.015em` tracking and `text-wrap: balance`.
+- Oversized serif numerals (01/02/03, stats) are a display element: Lora,
+  tabular, sometimes 96px+, always paired with a small sans caption.
+- Body ≤ 65ch. `text-wrap: pretty` on paragraphs.
+
+## 4. Surfaces & depth
+
+- Default surface is **flat on cream** — no border, no shadow. Separation via
+  spacing and hairlines (`--color-border`).
+- White cards keep **only** where elevation means something: listener cards,
+  dialogs, form panels, incoming-request rows. Radius 20px, `--shadow-sm`,
+  **no border**. Hover (interactive only): lift to `--shadow-lift` +
+  `-translate-y-0.5`.
+- Tonal bands for rhythm: teal band (stats, availability strip), ink band
+  (footer, call stage), `--color-surface-sunk` wells (recessed lists).
+- Tables: no card box. Hairline rows, kicker-style column headers, 16px+ row
+  padding. Status = dot + tinted chip, never color alone.
+
+## 5. Components (components/ui)
+
+| Component | Redesign |
+|---|---|
+| Button | Pill (`--radius-pill`), weight 800, ≥48px. Press: `scale(0.98)`. Primary teal; amber only for the one warm CTA per page; ghost = transparent + hairline; quiet = underline link. Focus ring rule unchanged. |
+| VoicePlayer | Signature component, bigger: 56px round teal play button, 24-bar amber waveform (animates only while playing), serif tabular duration. On cream, no box. |
+| Avatar | Rounded-square (radius 28%), warm tint fills per-person, serif initial. Availability = arc ring segment + dot chip, with text label nearby. |
+| StatTile | No box: big serif tabular numeral + kicker caption, optional thin amber underline spark. Bands/rows only, hairline-separated. |
+| Chip/Tag | Tint fill (`primary-tint`/`accent-tint`), no border, sentence case, AA text (`accent-strong` on amber tint). |
+| StatusBadge | Dot + label on tint. Approved=success, pending=amber (text `accent-strong`), suspended/rejected=alert. |
+| Field/Select | 52px min height, white fill, `border-strong` 1.5px, focus = `--color-focus` ring; label weight 700 + required text; error = alert text + icon under field. |
+| Dialog | Radius 24, warm ink backdrop at 45% opacity, no border, close button ≥48px. |
+| Toast | Ink bg, cream text, bottom-center, radius pill. |
+| DataTable | As §4. Sortable headers keep buttons + aria-sort. |
+| Section/Container | Container unchanged (85% / 1500px). Section gains tones: `page`, `surface`, `band` (teal), `ink`. py-24 desktop / py-14 mobile. |
+| Reveal | Keep, tune: 16px rise, 500ms, `--ease-warm`, fires once, honors reduced motion (global rule already kills animation). Stagger via delay on grids. |
+
+Shared chrome:
+
+- **AppHeader**: cream bg, hairline bottom, 72px tall. Active nav item = teal
+  text + 2px teal underline offset under the link (aria-current="page").
+  Signed-in: role nav + avatar + quiet sign-out.
+- **MarketingFooter** (new, marketing layout only): ink band, `Logo
+  tone="onPrimary"`, three short link groups (Product / For listeners /
+  Safety), safety line, small print. No link farm.
+- **SafetyBanner**: keep exact copy + report affordance; restyle to a compact
+  strip on `surface-sunk` with success-strong shield icon.
+
+## 6. Pages
+
+**Home** — sections in order, alternating tones (cream → teal → cream → white
+→ cream → split → ink footer):
+1. Hero (cream): kicker "Companionship by voice", display headline, one-line
+   sub, primary CTA + quiet sign-in link, trust line. ArcField bleeding from
+   the right edge behind, low opacity. No screenshot, no card.
+2. Stats band (teal): three oversized cream serif numerals + captions,
+   hairline-separated, staggered baselines. (Existing en.json stat values.)
+3. How it works (cream): three numbered editorial rows (01 listen to a voice /
+   02 pick your minutes / 03 just talk) — oversized pale-teal numerals left,
+   serif title + one sans sentence, hairlines between. Not cards.
+4. Voices (white): 3 listener-style preview cards with VoicePlayer strips
+   (static marketing copy, no DB) — the "hear a voice first" product truth.
+5. Quote (cream): one big serif italic pull-quote, giant pale-amber quotation
+   mark, off-grid left, arc whisper right. Static testimonial from en.json.
+6. Become-a-listener (split): left teal block, serif headline "Your voice is
+   your work." + amber CTA; right: gallery image `provider-dashboard.png` in
+   BrowserFrame, or warm tint block on mobile.
+7. Footer (ink).
+
+**Auth** — split panel kept but elevated: teal panel with `Logo
+tone="onPrimary"`, one giant serif statement, three checklist lines, ArcField
+whisper bottom; form panel white, fields per §5, single primary button.
+
+**Browse** — serif page title + count + one-line help; filter chips row
+(language/price/availability as tinted toggle chips ≥48px). Grid `repeat(3,
+minmax(0,1fr))` on xl / 2 / 1. Listener card: avatar + availability arc,
+serif name + rating (star icon + tabular number), VoicePlayer strip, topic
+chips (max 3), hairline, price left (serif tabular) + "View profile" primary
+button right, pinned bottom.
+
+**Listener profile** — editorial header (large avatar, display serif name,
+rating + availability + favorite on one row), VoicePlayer centerpiece with
+transcript block underneath, then flat hairline sections: topics, languages,
+pricing (three flat duration options as tiles: serif price + minutes), "What
+people say" review rows (stars, quote, tip chip). Booking CTA sticky on
+desktop right column; stacked on mobile.
+
+**Booking** — single column, max-w-2xl: listener recap row, duration as three
+big radio tiles (price serif, minutes caption, selected = teal fill), notes
+field, total row (hairline, serif tabular), primary confirm. Keep all
+form/action wiring.
+
+**Account** — flat hairline groups: upcoming bookings (list rows + join
+buttons), past sessions table, favorites row of mini cards, settings link
+rows. No card boxes.
+
+**Session/call stage** — immersive ink band full-height: breathing concentric
+arcs behind a big serif timer (tabular), listener name + avatar, oversized
+controls (end = alert, mute = ghost-on-ink), all ≥48px with labels. Rate/tip
+after-screen: warm cream, star buttons ≥48px, tip chips, one textarea.
+
+**Provider dashboard** — display serif greeting; availability as a full-width
+band (teal fill when available, sunk well when offline) with the toggle and
+next-session line; "At a glance" as flat StatTile row with hairlines;
+incoming requests as elevated white rows with Accept (primary) / Decline
+(ghost); recent sessions + payout history as §4 tables; feedback as quote
+rows; profile health as compact two-column checklist rows with success dots.
+
+**Provider onboarding** — numbered serif stepper (01–04) left/top, one panel
+per step, VoiceIntroRecorder gets the big-play treatment.
+
+**Admin** — overview: three labeled groups (kicker headings "Strategic",
+"Operational", "Needs attention") of flat StatTiles in hairline grid — no 14
+white boxes. Non-zero "needs attention" numerals get alert color + link.
+Approvals: white rows with avatar, VoicePlayer inline, Approve
+(primary)/Reject (ghost) + reason dialog. Users/reports/activity: §4 tables.
+Payouts: StatTile row + run button + result toast.
+
+**404 / error** — arc mark, serif statement, one primary path home. Keep
+copy keys.
+
+## 7. Motion
+
+200–300ms, `--ease-warm`, transform/opacity only. Reveal on section entries
+(once, staggered ≤ 80ms steps). Button press scale. Waveform animates only
+while playing. Call-stage arcs breathe at 4s. Everything obeys the existing
+global reduced-motion kill switch.
+
+## 8. Hard constraints (unchanged from CLAUDE.md)
+
+WCAG 2.2 AA min / AAA body contrast; keyboard operability; visible focus
+(global rule); semantic HTML; labeled controls; no state by color alone;
+≥48px targets; axe tests must pass. All copy via `messages/en.json` (new keys
+namespaced under the surface that owns them; never reformat the whole file).
+Server components by default. No new dependencies. `lucide-react` stays the
+icon set (stroke 2, size 20/24) — consistency over novelty.
+
+## 9. Contrast cheat-sheet (pre-verified)
+
+- ink on bg/surface: AAA ✓ (12.4:1)
+- primary on surface (buttons: white text on #136F63): 5.9:1 AA ✓
+- cream #FBF7F2 text on teal #136F63 band: 5.6:1 AA ✓ (use ≥18px or bold)
+- white on ink #2A2622: 13.6:1 AAA ✓
+- amber #E08A3C: **decorative only** — never text on light; text on
+  accent-tint uses `--color-accent-strong` ✓
+- ink-soft on bg: 4.9:1 AA ✓; ink-faint: placeholders/disabled only

@@ -1,0 +1,60 @@
+MIT License
+
+Copyright (c) 2023-2026 Said Mohaddes Sadeqi & Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+## Hardware Schematics & Designs
+
+Hardware designs (wiring diagrams, circuit schematics, enclosure models) are licensed under:
+- **CERN Open Hardware License v1.2** (recommended for derivative designs and manufacturing)
+- OR **MIT License** (permissive, with no warranty)
+
+---
+
+## Documentation
+
+Documentation (technical specifications, guides, media) is licensed under:
+- **Creative Commons Attribution 4.0 International (CC-BY-4.0)**
+
+You are free to share and adapt the documentation with proper attribution.
+
+---
+
+## IMPORTANT: Disclaimer for Safety-Critical Use
+
+Third Eye Kit is a **field prototype**, not a certified medical or safety device. The authors and contributors make no warranty, express or implied, regarding its fitness for any particular purpose.
+
+**Users assume full responsibility for:**
+- Field-testing the system in their environment
+- Validating that the system meets their needs
+- Following all pre-deployment safety checks (see docs/BUILD.md)
+- Understanding the Validation Debt Ledger (what IS and ISN'T validated)
+- Disabling or replacing the system if it fails unexpectedly
+
+The Validation Debt Ledger (see docs/TECHNICAL_SPEC.md §4) is the definitive statement of what has and has not been validated. No claims are made beyond those listed.
+
+---
+
+## Contact
+
+For questions about licensing or use of Third Eye Kit:
+Contact Said Mohaddes Sadeqi through the project repository.

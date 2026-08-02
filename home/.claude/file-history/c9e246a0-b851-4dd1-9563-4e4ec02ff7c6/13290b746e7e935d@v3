@@ -1,0 +1,56 @@
+import { PrismaClient } from "@prisma/client";
+import { hash } from "@node-rs/argon2";
+
+const prisma = new PrismaClient();
+
+// Grounded dev updates, drawn from the real Third Eye Kit v2 dossier. No filler,
+// and no em-dashes (the marketing voice bans them).
+const UPDATES: { title: string; body: string }[] = [
+  {
+    title: "v1 works. v2 is the blueprint.",
+    body: "Straight answer first: v1 is a tested prototype. v2, the powered exoskeleton, hot-surface warning, and health features, is a design and reference specification, not a finished or certified product. It must pass staged safety validation before anyone relies on it. The white cane and the user's own hearing stay primary. We augment them; we do not replace them.",
+  },
+  {
+    title: "The one idea: the human input channel",
+    body: "Almost everyone builds the robot eyes: a camera and an AI. Almost no one builds how the information actually gets into the person fast enough to act on. That input channel, a full-body vibration buzz-language plus a gently-steering exoskeleton, is what Third Eye is inventing. Feel, don't wait.",
+  },
+  {
+    title: "Founding rule: life-critical sensing is physics, not AI",
+    body: "The system senses with direct physical measurement: lasers and time-of-flight, radar, ultrasonic, hand and foot sensors. Never guesswork. The AI reads signs, names things, and helps with routes, but it never becomes the eyes and it never steers. On any fault the motors freewheel: fail transparent, never trap a limb.",
+  },
+];
+
+async function main() {
+  const team = await prisma.user.upsert({
+    where: { email: "team@thirdeye.world" },
+    update: {},
+    create: {
+      email: "team@thirdeye.world",
+      passwordHash: await hash("change-me-in-production"),
+      role: "ENGINEER",
+      profile: { create: { displayName: "Third Eye Team" } },
+    },
+  });
+
+  for (const u of UPDATES) {
+    const existing = await prisma.update.findFirst({ where: { title: u.title } });
+    if (existing) {
+      await prisma.update.update({
+        where: { id: existing.id },
+        data: { body: u.body },
+      });
+    } else {
+      await prisma.update.create({ data: { ...u, authorId: team.id } });
+    }
+  }
+
+  const count = await prisma.update.count();
+  console.log(`Seed complete. Team user ready, ${count} update(s) present.`);
+}
+
+main()
+  .catch((e) => {
+    console.error(e);
+    process.exitCode = 1;
+  })
+  .finally(() => prisma.$disconnect());

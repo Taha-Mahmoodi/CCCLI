@@ -1,0 +1,112 @@
+/* check-aaa.mjs — fails loudly if any rendered text falls under WCAG AAA.
+ *
+ * The subject chose literal AAA, so this is a gate rather than a report. It walks
+ * every element that has its own text, reads the COMPUTED colour and the effective
+ * background (climbing ancestors until something is not transparent), and computes
+ * the ratio. It catches the failure mode that actually happens: a link or control
+ * nobody styled falling through to a UA default.
+ *
+ * Limits, stated honestly: it does not see text over images, gradients, or a
+ * backdrop-filter, and it trusts the computed background rather than the painted
+ * pixel. Prototype 03 does the pixel-accurate version on rendered glyphs. This one
+ * runs in two seconds over every page, so it is the one that runs every time.
+ *
+ * usage: node check-aaa.mjs <file-url> [<file-url>...]
+ */
+import { spawn } from 'node:child_process';
+
+const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const urls = process.argv.slice(2);
+if (!urls.length) { console.error('usage: node check-aaa.mjs <url>...'); process.exit(1); }
+
+const AAA_NORMAL = 7.0, AAA_LARGE = 4.5;   // large = >=18.66px bold or >=24px
+
+const port = 9500 + (process.pid % 400);
+const chrome = spawn(CHROME, ['--headless', '--disable-gpu', '--no-first-run',
+  `--remote-debugging-port=${port}`, '--user-data-dir=/tmp/aaa-' + process.pid, 'about:blank'],
+  { stdio: 'ignore' });
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function wsUrl() {
+  for (let i = 0; i < 60; i++) {
+    try {
+      const r = await fetch(`http://127.0.0.1:${port}/json/list`);
+      const t = (await r.json()).find(t => t.type === 'page');
+      if (t?.webSocketDebuggerUrl) return t.webSocketDebuggerUrl;
+    } catch {}
+    await sleep(120);
+  }
+  throw new Error('chrome did not start');
+}
+
+const ws = new WebSocket(await wsUrl());
+await new Promise(r => ws.addEventListener('open', r, { once: true }));
+let id = 0; const waiting = new Map();
+ws.addEventListener('message', e => {
+  const m = JSON.parse(e.data);
+  if (m.id && waiting.has(m.id)) { waiting.get(m.id)(m.result); waiting.delete(m.id); }
+});
+const send = (method, params = {}) =>
+  new Promise(res => { const i = ++id; waiting.set(i, res); ws.send(JSON.stringify({ id: i, method, params })); });
+
+const PROBE = `(() => {
+  const lum = c => { const f = v => { v/=255; return v<=0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055,2.4) };
+    return 0.2126*f(c[0]) + 0.7152*f(c[1]) + 0.0722*f(c[2]) };
+  const parse = s => { const m = s.match(/[\\d.]+/g); return m ? m.slice(0,4).map(Number) : null };
+  const bgOf = el => {
+    let n = el;
+    while (n && n !== document.documentElement.parentNode) {
+      const c = parse(getComputedStyle(n).backgroundColor);
+      if (c && (c[3] === undefined || c[3] > 0.95)) return c;
+      n = n.parentElement;
+    }
+    return [0,0,0];
+  };
+  const out = [];
+  for (const el of document.querySelectorAll('body *')) {
+    const own = [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim().length > 1);
+    if (!own) continue;
+    const cs = getComputedStyle(el);
+    if (cs.visibility === 'hidden' || cs.display === 'none' || +cs.opacity === 0) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) continue;
+    const fg = parse(cs.color), bg = bgOf(el);
+    if (!fg) continue;
+    const L1 = lum(fg), L2 = lum(bg);
+    const ratio = (Math.max(L1,L2) + 0.05) / (Math.min(L1,L2) + 0.05);
+    const px = parseFloat(cs.fontSize);
+    const bold = (parseInt(cs.fontWeight,10) || 400) >= 700;
+    const large = px >= 24 || (bold && px >= 18.66);
+    out.push({ tag: el.tagName.toLowerCase(), cls: el.className && String(el.className).slice(0,28),
+      text: el.textContent.trim().slice(0,42), color: cs.color, bg: 'rgb('+bg.slice(0,3).join(',')+')',
+      px: Math.round(px), large, ratio: Math.round(ratio*100)/100 });
+  }
+  return out;
+})()`;
+
+let failures = 0, checked = 0;
+for (const url of urls) {
+  for (const scheme of ['dark', 'light']) {
+    await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: scheme }] });
+    await send('Page.navigate', { url });
+    await sleep(1400);
+    const { result } = await send('Runtime.evaluate', { returnByValue: true, expression: PROBE });
+    const rows = result.value || [];
+    const bad = rows.filter(r => r.ratio < (r.large ? AAA_LARGE : AAA_NORMAL));
+    checked += rows.length;
+    const short = url.split('/').slice(-1)[0];
+    if (bad.length) {
+      failures += bad.length;
+      console.log(`\nFAIL  ${short} [${scheme}]  ${bad.length}/${rows.length}`);
+      for (const b of bad) {
+        console.log(`   ${b.ratio.toFixed(2)}:1  need ${b.large ? AAA_LARGE : AAA_NORMAL}  <${b.tag}${b.cls ? '.' + b.cls : ''}> ${b.px}px`);
+        console.log(`        ${b.color} on ${b.bg}   "${b.text}"`);
+      }
+    } else {
+      console.log(`ok    ${short} [${scheme}]  ${rows.length} text elements, all >= AAA`);
+    }
+  }
+}
+ws.close(); chrome.kill();
+console.log(`\n${checked} text elements checked, ${failures} below AAA`);
+process.exit(failures ? 1 : 0);

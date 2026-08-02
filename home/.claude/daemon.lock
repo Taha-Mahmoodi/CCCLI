@@ -1,0 +1,16 @@
+{
+  "pid": 7172,
+  "version": "2.1.220",
+  "jsonPath": "/Users/taha/.claude/daemon.json",
+  "logPath": "/Users/taha/.claude/daemon.log",
+  "startedAt": 1785565974873,
+  "origin": "transient",
+  "spawnedBy": {
+    "label": "claude",
+    "cwd": "/Users/taha/Documents/inter.face",
+    "pid": 1550
+  },
+  "procStart": "Sat Aug  1 06:32:54 2026",
+  "launchTarget": "/Users/taha/.local/share/claude/versions/2.1.220",
+  "processWrapper": ""
+}

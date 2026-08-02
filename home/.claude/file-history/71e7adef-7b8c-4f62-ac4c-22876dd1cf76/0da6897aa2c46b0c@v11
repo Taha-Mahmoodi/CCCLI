@@ -1,0 +1,45 @@
+"""One-off tenant seed for manual frontend QA of the sales deliveries slice (PLAN 15.7, slice
+3). Not part of the app -- PLAN 16.1 ships the real seed.py; deleted after QA."""
+
+import asyncio
+
+import app.core.bootstrap  # noqa: F401 — importing all routers registers every permission key
+from app.core.bootstrap import register_event_handlers
+from app.core.db import get_session_factory
+from app.core.events import run_in_uow
+from app.core.rbac import catalog_keys, sync_permission_catalog
+from app.core.tenancy import tenant_context
+from app.modules.admin.service import assign_role, create_role
+from app.modules.industry.onboarding import onboard_tenant
+
+
+async def main() -> None:
+    register_event_handlers()
+    factory = get_session_factory()
+    async with factory() as session:
+        await sync_permission_catalog(session)
+        await session.commit()
+
+        async def work() -> None:
+            result = await onboard_tenant(
+                session,
+                company_name="Acme Manufacturing",
+                slug="acme",
+                template_name="manufacturing",
+                admin_email="admin@acme.test",
+                admin_password="ManualQA-Pass1",
+            )
+            print("tenant_id:", result.tenant_id)
+            with tenant_context(result.tenant_id):
+                superuser_role = await create_role(
+                    session, result.tenant_id, "QA Superuser", catalog_keys()
+                )
+                await assign_role(
+                    session, result.tenant_id, result.admin_user_id, superuser_role.id, 0
+                )
+
+        await run_in_uow(session, work)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

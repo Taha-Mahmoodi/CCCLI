@@ -1,0 +1,117 @@
+"use client";
+
+// Fully spoken first-run onboarding (spec §3.1) — teaches the core loop, the
+// three ways to control everything, and the community norms. Voice-first, not
+// voice-only: the same words are on screen. Shows once (localStorage).
+
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Button } from "@/components/ui/button";
+
+const KEY = "tew:onboarded";
+
+const SCRIPT = `Welcome to Third Eye World, a voice-first radio for blind and low-vision people.
+Here is how it works. Every post is a short voice memo, and your stream plays them one after another, like radio, until it reaches an end.
+You can record a memo, like one, skip to the next, or leave a voice comment.
+You can control everything three ways: the buttons on screen, your headphone and lock-screen controls, or voice commands.
+Be kind here. This is a place to feel less alone, not to chase attention. There are no follower counts and no endless scroll.
+Choose Start listening when you are ready.`;
+
+function speak(text: string) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  try {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1;
+    window.speechSynthesis.speak(u);
+  } catch {
+    /* speech is an enhancement — the text is always on screen */
+  }
+}
+function stopSpeaking() {
+  if (typeof window !== "undefined" && "speechSynthesis" in window) {
+    try {
+      window.speechSynthesis.cancel();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+const noopSubscribe = () => () => {};
+
+export function Onboarding() {
+  // SSR-safe: server says "onboarded" (renders nothing → no flash); client reads localStorage.
+  const initiallyOnboarded = useSyncExternalStore(
+    noopSubscribe,
+    () => {
+      try {
+        return localStorage.getItem(KEY) === "true";
+      } catch {
+        return true;
+      }
+    },
+    () => true,
+  );
+  const [dismissed, setDismissed] = useState(false);
+  const show = !initiallyOnboarded && !dismissed;
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    if (!show) return;
+    headingRef.current?.focus();
+    speak(SCRIPT);
+    return () => stopSpeaking();
+  }, [show]);
+
+  const dismiss = () => {
+    stopSpeaking();
+    try {
+      localStorage.setItem(KEY, "true");
+    } catch {
+      /* private mode — it'll just show again next time */
+    }
+    setDismissed(true);
+  };
+
+  if (!show) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-5 backdrop-blur"
+      onKeyDown={(e) => {
+        if (e.key === "Escape") dismiss();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="onboarding-title"
+        className="flex max-h-full w-full max-w-md flex-col gap-4 overflow-auto rounded-2xl border border-border bg-card p-6"
+      >
+        <h2 id="onboarding-title" ref={headingRef} tabIndex={-1} className="text-xl font-semibold">
+          Welcome to Third Eye World
+        </h2>
+        <div className="flex flex-col gap-3 text-sm leading-relaxed text-foreground/90">
+          {SCRIPT.trim()
+            .split("\n")
+            .map((line, i) => (
+              <p key={i}>{line.trim()}</p>
+            ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" className="h-11 px-5" onClick={dismiss}>
+            Start listening
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 px-5"
+            onClick={() => speak(SCRIPT)}
+          >
+            Replay the intro
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

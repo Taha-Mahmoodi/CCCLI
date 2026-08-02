@@ -1,0 +1,85 @@
+import * as THREE from "three";
+import { mulberry32 } from "./data";
+
+// Background stars: custom shader for per-star twinkle. Warm/cool white mix —
+// part of the deliberate warm-filmic art direction, not uniform blue-white.
+
+const VERT = /* glsl */ `
+  attribute float aSize;
+  attribute float aPhase;
+  attribute vec3 aColor;
+  varying vec3 vColor;
+  varying float vTwinkle;
+  uniform float uTime;
+  void main() {
+    vColor = aColor;
+    vTwinkle = 0.72 + 0.28 * sin(uTime * (0.6 + aPhase * 1.7) + aPhase * 40.0);
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = aSize * vTwinkle * (320.0 / -mv.z);
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+
+const FRAG = /* glsl */ `
+  varying vec3 vColor;
+  varying float vTwinkle;
+  void main() {
+    float d = length(gl_PointCoord - 0.5);
+    float alpha = smoothstep(0.5, 0.0, d);
+    gl_FragColor = vec4(vColor * vTwinkle, alpha * alpha);
+  }
+`;
+
+const WARM = new THREE.Color(0xffe8c8);
+const COOL = new THREE.Color(0xcfe0ff);
+const FAINT = new THREE.Color(0x8f9bb8);
+
+export function createStarfield(count = 9000, radius = 2800, seed = 41): THREE.Points {
+  const rnd = mulberry32(seed);
+  const pos = new Float32Array(count * 3);
+  const size = new Float32Array(count);
+  const phase = new Float32Array(count);
+  const color = new Float32Array(count * 3);
+  const c = new THREE.Color();
+
+  for (let i = 0; i < count; i++) {
+    // uniform shell distribution, slightly flattened for a "milky band" feel
+    const u = rnd() * 2 - 1;
+    const theta = rnd() * Math.PI * 2;
+    const r = radius * (0.35 + 0.65 * Math.cbrt(rnd()));
+    const flat = 0.55 + 0.45 * Math.abs(u);
+    pos[i * 3] = r * Math.sqrt(1 - u * u) * Math.cos(theta);
+    pos[i * 3 + 1] = r * u * flat;
+    pos[i * 3 + 2] = r * Math.sqrt(1 - u * u) * Math.sin(theta);
+
+    const t = rnd();
+    c.copy(t < 0.5 ? FAINT : t < 0.82 ? WARM : COOL);
+    color[i * 3] = c.r;
+    color[i * 3 + 1] = c.g;
+    color[i * 3 + 2] = c.b;
+
+    size[i] = 0.6 + Math.pow(rnd(), 3) * 2.6;
+    phase[i] = rnd();
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute("aSize", new THREE.BufferAttribute(size, 1));
+  geo.setAttribute("aPhase", new THREE.BufferAttribute(phase, 1));
+  geo.setAttribute("aColor", new THREE.BufferAttribute(color, 3));
+
+  const mat = new THREE.ShaderMaterial({
+    vertexShader: VERT,
+    fragmentShader: FRAG,
+    uniforms: { uTime: { value: 0 } },
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+
+  return new THREE.Points(geo, mat);
+}
+
+export function tickStarfield(stars: THREE.Points, time: number): void {
+  (stars.material as THREE.ShaderMaterial).uniforms.uTime.value = time;
+}

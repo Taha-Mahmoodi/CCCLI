@@ -1,0 +1,173 @@
+// Data model + evolution/decay logic. Mirrors the README spec:
+// nebula -> red dwarf -> main sequence -> blue giant -> (supernova moment) -> black hole.
+// Stages 1-4 derive from sustained cadence + distinct contributors; black hole
+// only via an explicit milestone. Decay reverses stages with a visible countdown;
+// black holes never revert, they dim to a remnant.
+
+export type Stage =
+  | "nebula"
+  | "red-dwarf"
+  | "main-sequence"
+  | "blue-giant"
+  | "black-hole";
+
+export interface Project {
+  id: string;
+  name: string;
+  noteCount: number;
+  contributors: number;
+  /** average activity events per week, sustained */
+  cadence: number;
+  /** ms epoch of last activity */
+  lastActivity: number;
+  /** ms epoch of creation */
+  createdAt: number;
+  /** user explicitly marked the supernova milestone */
+  milestoneMarked: boolean;
+}
+
+const DAY = 86_400_000;
+
+/** Days of inactivity before each stage cools one step. Visible, never a surprise. */
+export const DECAY_DAYS: Record<Exclude<Stage, "nebula" | "black-hole">, number> = {
+  "red-dwarf": 21,
+  "main-sequence": 14,
+  "blue-giant": 12,
+};
+
+/** Earned stage from sustained activity, before decay is applied. */
+export function earnedStage(p: Project): Stage {
+  if (p.milestoneMarked) return "black-hole";
+  const ageWeeks = Math.max(1, (p.lastActivity - p.createdAt) / (7 * DAY));
+  // cadence-over-time and breadth of contributors, not raw volume
+  const score = Math.min(p.cadence, 40) * Math.min(ageWeeks, 26) + p.contributors * 18;
+  if (score >= 260) return "blue-giant";
+  if (score >= 90) return "main-sequence";
+  if (score >= 18) return "red-dwarf";
+  return "nebula";
+}
+
+const ORDER: Stage[] = ["nebula", "red-dwarf", "main-sequence", "blue-giant"];
+
+/** Stage after decay. Black holes never revert (they dim via remnantFactor). */
+export function effectiveStage(p: Project, now: number): Stage {
+  const earned = earnedStage(p);
+  if (earned === "black-hole") return "black-hole";
+  let idx = ORDER.indexOf(earned);
+  let idle = (now - p.lastActivity) / DAY;
+  while (idx > 0) {
+    const window = DECAY_DAYS[ORDER[idx] as keyof typeof DECAY_DAYS];
+    if (idle < window) break;
+    idle -= window;
+    idx--;
+  }
+  return ORDER[idx];
+}
+
+/** Days until the next cooling step, or null if not decaying (nebula / black hole). */
+export function decayCountdown(p: Project, now: number): number | null {
+  const stage = effectiveStage(p, now);
+  if (stage === "nebula" || stage === "black-hole") return null;
+  const earnedIdx = ORDER.indexOf(earnedStage(p));
+  const stageIdx = ORDER.indexOf(stage);
+  let idle = (now - p.lastActivity) / DAY;
+  for (let i = earnedIdx; i > stageIdx; i--) {
+    idle -= DECAY_DAYS[ORDER[i] as keyof typeof DECAY_DAYS];
+  }
+  const window = DECAY_DAYS[stage as keyof typeof DECAY_DAYS];
+  return Math.max(0, window - idle);
+}
+
+/** 1 = fully lit black hole; approaches 0.25 as a neglected remnant. Non-black-holes: 1. */
+export function remnantFactor(p: Project, now: number): number {
+  if (earnedStage(p) !== "black-hole") return 1;
+  const idleDays = (now - p.lastActivity) / DAY;
+  return Math.max(0.25, 1 - idleDays / 60);
+}
+
+// --- deterministic mock universe (until Chapters feeds real data) ---
+
+export function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// --- vaults (tier-2: stars inside a project galaxy) ---
+
+export interface Vault {
+  id: string;
+  name: string;
+  noteCount: number;
+  lastActivity: number;
+}
+
+const VAULT_NAMES = [
+  "Design", "Research", "Specs", "Meetings", "Roadmap", "Archive", "Ideas",
+  "Ops", "Field Notes", "Experiments", "Reviews", "Playbook", "Interviews",
+  "Backlog", "Releases", "Drafts", "Decisions", "Postmortems",
+];
+
+/** Deterministic vaults for a project; note counts sum exactly to p.noteCount. */
+export function mockVaults(p: Project): Vault[] {
+  const rnd = mulberry32(p.id.length * 2711 + p.noteCount * 13);
+  const count = Math.max(2, Math.min(16, Math.round(2 + Math.sqrt(p.noteCount) / 2.2)));
+  const weights = Array.from({ length: count }, () => 0.15 + rnd());
+  const total = weights.reduce((a, b) => a + b, 0);
+  let assigned = 0;
+  return weights.map((w, i) => {
+    const last = i === count - 1;
+    const notes = last
+      ? p.noteCount - assigned
+      : Math.max(1, Math.round((w / total) * p.noteCount));
+    assigned += notes;
+    return {
+      id: `${p.id}v${i}`,
+      name: VAULT_NAMES[i % VAULT_NAMES.length],
+      noteCount: Math.max(1, notes),
+      lastActivity: p.lastActivity - rnd() * 20 * DAY,
+    };
+  });
+}
+
+/** 1 near the camera -> 0 far away; smoothstep between. Pure, testable. */
+export function labelOpacity(dist: number, near: number, far: number): number {
+  if (dist <= near) return 1;
+  if (dist >= far) return 0;
+  const t = (dist - near) / (far - near);
+  return 1 - t * t * (3 - 2 * t);
+}
+
+const NAMES = [
+  "Atlas", "Chapters", "Heard", "Commons", "Orchid", "Beacon", "Ledger",
+  "Compass", "Relay", "Anchor", "Prism", "Meridian", "Harbor", "Signal",
+  "Quarry", "Lattice", "Ember", "Drift", "Vantage", "Cinder", "Halcyon",
+  "Bellwether", "Foundry", "Aperture", "Tessera", "Vireo", "Cobalt",
+  "Damson", "Elm", "Fathom", "Garnet", "Hollis", "Iris", "Juniper",
+  "Kestrel", "Loess", "Mica", "Nadir", "Onyx", "Pumice", "Quill", "Rune",
+  "Sable", "Tarn", "Umber", "Verge", "Wren", "Xylem", "Yarrow", "Zenith",
+];
+
+export function mockProjects(now: number, seed = 7): Project[] {
+  const rnd = mulberry32(seed);
+  return NAMES.map((name, i) => {
+    const ageDays = 30 + rnd() * 700;
+    const idleDays = rnd() < 0.22 ? rnd() * 45 : rnd() * 6;
+    const cadence = rnd() * 38;
+    return {
+      id: `p${i}`,
+      name,
+      noteCount: Math.floor(8 + rnd() * 900),
+      contributors: 1 + Math.floor(rnd() * 9),
+      cadence,
+      createdAt: now - ageDays * DAY,
+      lastActivity: now - idleDays * DAY,
+      milestoneMarked: rnd() < 0.08 && cadence > 20,
+    };
+  });
+}

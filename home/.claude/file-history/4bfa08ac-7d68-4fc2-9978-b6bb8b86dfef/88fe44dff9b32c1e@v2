@@ -1,0 +1,139 @@
+/* Taha Mahmoodi — portfolio interactions
+   No window scroll listeners. IntersectionObserver + rAF only. Reduced-motion aware. */
+(function () {
+  "use strict";
+  var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var finePointer = window.matchMedia("(pointer: fine)").matches;
+
+  /* ---------- Theme ---------- */
+  var root = document.documentElement;
+  var stored = null;
+  try { stored = localStorage.getItem("theme"); } catch (e) {}
+  if (stored) {
+    root.setAttribute("data-theme", stored);
+  } else if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+    root.setAttribute("data-theme", "dark");
+  }
+  var toggle = document.getElementById("themeToggle");
+  if (toggle) {
+    toggle.addEventListener("click", function () {
+      var next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      try { localStorage.setItem("theme", next); } catch (e) {}
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute("content", next === "dark" ? "#0d201e" : "#f2ede3");
+    });
+  }
+
+  /* ---------- Mobile menu ---------- */
+  var menuBtn = document.getElementById("menuBtn");
+  var mobileMenu = document.getElementById("mobileMenu");
+  if (menuBtn && mobileMenu) {
+    menuBtn.addEventListener("click", function () {
+      var open = mobileMenu.classList.toggle("is-open");
+      mobileMenu.hidden = !open;
+      menuBtn.setAttribute("aria-expanded", String(open));
+    });
+    mobileMenu.querySelectorAll("a").forEach(function (a) {
+      a.addEventListener("click", function () {
+        mobileMenu.classList.remove("is-open");
+        mobileMenu.hidden = true;
+        menuBtn.setAttribute("aria-expanded", "false");
+      });
+    });
+  }
+
+  /* ---------- Nav stuck state (IO sentinel, no scroll listener) ---------- */
+  var nav = document.querySelector(".nav");
+  var sentinel = document.createElement("div");
+  sentinel.style.cssText = "position:absolute;top:0;left:0;height:60px;width:1px;pointer-events:none;";
+  document.body.prepend(sentinel);
+  if ("IntersectionObserver" in window) {
+    new IntersectionObserver(function (entries) {
+      nav.classList.toggle("is-stuck", !entries[0].isIntersecting);
+    }).observe(sentinel);
+  }
+
+  /* ---------- Scroll reveals ---------- */
+  var revealEls = document.querySelectorAll(".reveal, .reveal-art");
+  if (reduce || !("IntersectionObserver" in window)) {
+    revealEls.forEach(function (el) { el.classList.add("is-in"); });
+  } else {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { en.target.classList.add("is-in"); io.unobserve(en.target); }
+      });
+    }, { threshold: 0.15, rootMargin: "0px 0px -8% 0px" });
+    revealEls.forEach(function (el) { io.observe(el); });
+  }
+
+  /* ---------- Hero line + copy reveal on load ---------- */
+  var hero = document.querySelector(".hero");
+  if (hero) {
+    var lines = hero.querySelectorAll(".hero__title .line__inner");
+    lines.forEach(function (l, i) { l.style.transitionDelay = (reduce ? 0 : 0.09 * i + 0.15) + "s"; });
+    var heroCopy = hero.querySelectorAll(".reveal");
+    heroCopy.forEach(function (el, i) { el.style.transitionDelay = (reduce ? 0 : 0.35 + 0.08 * i) + "s"; });
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        hero.classList.add("is-ready");
+        heroCopy.forEach(function (el) { el.classList.add("is-in"); });
+      });
+    });
+  }
+
+  /* ---------- Magnetic buttons ---------- */
+  if (finePointer && !reduce) {
+    document.querySelectorAll("[data-magnetic]").forEach(function (el) {
+      var raf = null, tx = 0, ty = 0;
+      el.addEventListener("pointermove", function (e) {
+        var r = el.getBoundingClientRect();
+        tx = (e.clientX - (r.left + r.width / 2)) * 0.28;
+        ty = (e.clientY - (r.top + r.height / 2)) * 0.4;
+        if (!raf) raf = requestAnimationFrame(apply);
+      });
+      el.addEventListener("pointerleave", function () { tx = 0; ty = 0; if (!raf) raf = requestAnimationFrame(apply); });
+      function apply() { raf = null; el.style.transform = "translate(" + tx + "px," + ty + "px)"; }
+    });
+  }
+
+  /* ---------- Hero art parallax (GSAP if present) ---------- */
+  if (!reduce && window.gsap && window.ScrollTrigger) {
+    gsap.registerPlugin(ScrollTrigger);
+    var art = document.querySelector(".hero__art img");
+    if (art) {
+      gsap.to(art, {
+        yPercent: 12, ease: "none",
+        scrollTrigger: { trigger: ".hero", start: "top top", end: "bottom top", scrub: true }
+      });
+    }
+  }
+
+  /* ---------- Stat count-up ---------- */
+  var stats = document.querySelectorAll(".stat__num");
+  function runCount(el) {
+    var target = parseFloat(el.getAttribute("data-count")) || 0;
+    var prefix = el.getAttribute("data-prefix") || "";
+    var suffix = el.getAttribute("data-suffix") || "";
+    if (reduce) { el.textContent = prefix + target + suffix; return; }
+    var start = null, dur = 1300;
+    function step(ts) {
+      if (!start) start = ts;
+      var p = Math.min((ts - start) / dur, 1);
+      var eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = prefix + Math.round(target * eased) + suffix;
+      if (p < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+  if ("IntersectionObserver" in window) {
+    var sio = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { runCount(en.target); sio.unobserve(en.target); }
+      });
+    }, { threshold: 0.5 });
+    stats.forEach(function (el) { sio.observe(el); });
+  } else {
+    stats.forEach(runCount);
+  }
+})();

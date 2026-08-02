@@ -1,0 +1,6 @@
+- [Atlas ERP working clone](atlas-erp-working-clone.md) — ~/Documents/atlas-erp; scratchpad wipes between sessions; push early
+- [Atlas ERP frontend progress, July 2026](atlas-erp-frontend-progress-2026-07.md) — paused 2026-07-04, resume 2026-07-09; PLAN 15.8 manufacturing slice 1 in progress
+- [GitHub accounts](github-accounts.md) — Taha-Mahmoodi is main; wafa-khairi-1020 (learning) must never appear in main repos; git config was the leak
+- [Heard redesign](heard-redesign.md) — heard-backup UI rebuild; spec DESIGN_SPEC_V2.md; issue→PR→merge auto workflow; colima flaky
+- [TEWW redesign](teww-redesign.md) — built then fully rolled back at owner request; PR #23 reverts it cleanly
+- [Atlas ERP PR merge authorization](atlas-erp-pr-merge-authorization.md) — user authorized auto-merging PRs in this project (2026-07-04); merge after green CI, keep building

@@ -1,0 +1,118 @@
+import json, math
+
+d = json.load(open('/private/tmp/claude-501/-Users-taha/51b90afe-944f-4f8c-a234-21ade39239a8/scratchpad/contributions.json'))
+weeks = d['data']['user']['contributionsCollection']['contributionCalendar']['weeks']
+days = [day for w in weeks for day in w['contributionDays']]
+total = d['data']['user']['contributionsCollection']['contributionCalendar']['totalContributions']
+n = len(days)
+max_count = max(day['contributionCount'] for day in days)
+active = sum(1 for day in days if day['contributionCount'] > 0)
+
+W, H = 900, 260
+PAD_L, PAD_R = 40, 40
+plot_w = W - PAD_L - PAD_R
+baseline = 200      # stars rise from here
+top_ceiling = 60    # tallest a star can reach
+MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+
+def x_at(i):
+    return PAD_L + (i / (n - 1)) * plot_w
+
+def height_for(count):
+    # log-scaled peak height above baseline
+    return (baseline - top_ceiling) * (math.log(count + 1) / math.log(max_count + 1))
+
+def size_for(count):
+    return 1.4 + 4.6 * (math.log(count + 1) / math.log(max_count + 1))
+
+def op_for(count):
+    return 0.45 + 0.55 * (math.log(count + 1) / math.log(max_count + 1))
+
+p = []
+p.append(f'<svg width="{W}" height="{H}" viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg">')
+p.append('''<defs>
+  <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#0c1022"/>
+    <stop offset="55%" stop-color="#080a14"/>
+    <stop offset="100%" stop-color="#05060d"/>
+  </linearGradient>
+  <linearGradient id="haze" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#6C63FF" stop-opacity="0.16"/>
+    <stop offset="100%" stop-color="#6C63FF" stop-opacity="0"/>
+  </linearGradient>
+  <radialGradient id="head" cx="50%" cy="50%" r="50%">
+    <stop offset="0%" stop-color="#ffffff"/>
+    <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+  </radialGradient>
+  <filter id="g" x="-200%" y="-200%" width="500%" height="500%">
+    <feGaussianBlur stdDeviation="2.4" result="b"/>
+    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</defs>''')
+p.append(f'<rect width="{W}" height="{H}" fill="url(#sky)"/>')
+
+# faint decorative background stars, twinkling
+import random
+rnd = random.Random(7)
+for k in range(90):
+    x = rnd.uniform(0, W); y = rnd.uniform(8, baseline - 6)
+    r = rnd.uniform(0.3, 0.9); o = rnd.uniform(0.06, 0.22)
+    dur = rnd.uniform(3.0, 6.5); beg = rnd.uniform(0, 5)
+    p.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.2f}" fill="#93a3c9" opacity="{o:.2f}">'
+             f'<animate attributeName="opacity" values="{o:.2f};{o*0.3:.2f};{o:.2f}" dur="{dur:.1f}s" begin="{beg:.1f}s" repeatCount="indefinite"/></circle>')
+
+# ground haze band under the baseline
+p.append(f'<rect x="0" y="{baseline}" width="{W}" height="{H-baseline}" fill="url(#haze)"/>')
+p.append(f'<line x1="{PAD_L}" y1="{baseline}" x2="{W-PAD_R}" y2="{baseline}" stroke="#262c38" stroke-width="1"/>')
+
+# month ticks + labels along the baseline
+seen = set()
+for i, day in enumerate(days):
+    mo = day['date'][5:7]
+    yr = day['date'][:4]
+    key = (yr, mo)
+    if key not in seen and day['date'][8:10] <= '07':
+        seen.add(key)
+        x = x_at(i)
+        p.append(f'<line x1="{x:.1f}" y1="{baseline}" x2="{x:.1f}" y2="{baseline+5}" stroke="#3a4152" stroke-width="1"/>')
+        p.append(f'<text x="{x:.1f}" y="{baseline+18}" text-anchor="middle" font-family="Fira Code, monospace" font-size="9" fill="#5b6472">{MONTHS[int(mo)-1]}</text>')
+
+# real contribution days: a thin stem + a twinkling star at the top
+for i, day in enumerate(days):
+    c = day['contributionCount']
+    if c == 0:
+        continue
+    x = x_at(i)
+    h = height_for(c)
+    sy = baseline - h
+    size = size_for(c)
+    op = op_for(c)
+    color = "#ffffff" if c >= max_count*0.6 else "#c3bdff" if c >= max_count*0.18 else "#6C63FF"
+    # faint stem for taller peaks only, keeps it airy
+    if h > 26:
+        p.append(f'<line x1="{x:.1f}" y1="{baseline:.1f}" x2="{x:.1f}" y2="{sy:.1f}" stroke="{color}" stroke-width="0.7" opacity="{op*0.35:.2f}"/>')
+    dur = 2.4 + (i % 5) * 0.6
+    beg = (i % 11) * 0.35
+    p.append(f'<circle cx="{x:.1f}" cy="{sy:.1f}" r="{size:.2f}" fill="{color}" opacity="{op:.2f}" filter="url(#g)">'
+             f'<animate attributeName="opacity" values="{op:.2f};{op*0.4:.2f};{op:.2f}" dur="{dur:.1f}s" begin="{beg:.2f}s" repeatCount="indefinite"/></circle>')
+
+# shooting star: streaks across the upper sky, periodically
+sx0, sy0 = -60, 46
+p.append(f'''<g opacity="0">
+  <line x1="0" y1="0" x2="34" y2="9" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round"/>
+  <circle cx="0" cy="0" r="2.4" fill="url(#head)"/>
+  <animateTransform attributeName="transform" type="translate"
+    values="{sx0},{sy0}; {W+60},{sy0+120}" dur="1.4s" begin="3s;11s;19s" repeatCount="1" fill="freeze"/>
+  <animate attributeName="opacity" values="0;0;1;1;0" keyTimes="0;0.02;0.1;0.75;1"
+    dur="1.4s" begin="3s;11s;19s" repeatCount="1"/>
+</g>''')
+
+# titles, centered anchoring renders reliably everywhere
+p.append(f'<text x="{W/2}" y="28" text-anchor="middle" font-family="Fira Code, monospace" font-size="14" fill="#c9d1d9">A year of commits, mapped to the night sky</text>')
+p.append(f'<text x="{W/2}" y="45" text-anchor="middle" font-family="Fira Code, monospace" font-size="10" fill="#5b6472">{total} commits &#183; {active} active days &#183; peak {max_count} in a day</text>')
+
+p.append('</svg>')
+
+with open('/private/tmp/claude-501/-Users-taha/51b90afe-944f-4f8c-a234-21ade39239a8/scratchpad/startimeline.svg', 'w') as f:
+    f.write('\n'.join(p))
+print('done', 'active', active, 'peak', max_count)

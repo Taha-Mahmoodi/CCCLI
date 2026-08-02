@@ -1,0 +1,86 @@
+# GitHub Workflow
+
+> Every line of code travels the same road: branch → commit → push → PR → review → fix-if-needed → merge to `dev` → promote to `prod`. No direct commits to `dev` or `prod`.
+
+## Branch model (exactly two long-lived branches)
+
+| Branch | Role | Rule |
+|---|---|---|
+| **`prod`** | Production. What ships / deploys. | Only ever updated by a **promotion PR from `dev`**. Never commit to it directly. |
+| **`dev`** | Integration. Default branch. | Only ever updated by **merging a feature PR**. Never commit to it directly. |
+
+Feature/fix work happens on **short-lived branches off `dev`**.
+
+**Branch names:** `<type>/<slice-or-topic>-<short-desc>`
+- `feat/slice0-radio-timeline`, `fix/slice0-safari-mime`, `docs/governance-foundation`, `chore/turbo-setup`, `test/upload-queue`, `perf/route-split-timeline`.
+
+## The unit-of-work loop (this is the whole workflow)
+
+1. **Branch** off latest `dev`:
+   `git checkout dev && git pull && git checkout -b feat/<...>`
+2. **Build** the smallest change that satisfies the acceptance criteria + ten non-negotiables.
+3. **Commit** in small, green steps (Conventional Commits — see below). WIP commits are fine mid-flight (outage safety); squash-clean happens at merge.
+4. **Push** the branch: `git push -u origin feat/<...>`.
+5. **Open a PR into `dev`** (`gh pr create --base dev`). PR body uses the template below and **checks off all ten non-negotiables** + the perf/a11y gates.
+6. **Review it on GitHub.** Sandbox test (handling-protocols §5) + visual test (§6) must be green — surfaced as CI checks on the PR. Self-review the diff on the PR page.
+7. **If there's a problem:**
+   a. **Open an issue** describing it (`gh issue create`), label it (`bug`, `a11y`, `perf`, …), and link it to the PR (`Fixes #N`).
+   b. **Commit the fix on the same PR branch**, push — the PR updates in place.
+   c. When the fix is verified, the linked issue **closes automatically** on merge (via `Fixes #N`); if fixed without merge, close it manually with a note.
+8. **Merge to `dev`** once all checks are green and the diff is clean: `gh pr merge --squash --delete-branch`.
+9. **Verify on `dev`** — checks green on the integration branch, app runs.
+10. **Promote to `prod`:** open a promotion PR `dev → prod` (`gh pr create --base prod --head dev --title "release: <slice/scope>"`). Merge it **only if `dev` is green and the slice actually works** (visual test passed). This is the gate between "integrated" and "shipped."
+11. **Update [`../STATE.md`](../STATE.md)** — record the merged PR, the promoted release, and the next action.
+
+## Commit messages (Conventional Commits)
+
+`<type>(<scope>): <imperative summary>`
+- Types: `feat`, `fix`, `perf`, `a11y`, `docs`, `test`, `chore`, `refactor`, `revert`.
+- Scope: the slice or package — `feat(web): gapless radio timeline`, `a11y(web): announce route changes`, `fix(api): opus transcode mime`.
+- Body (when useful): *why*, not just *what*. Reference issues: `Refs #12`, `Fixes #12`.
+- Footer on every commit:
+  ```
+  Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+  ```
+
+## PR body template
+
+```md
+## What & why
+<one paragraph>
+
+## Slice / issue
+Slice N — <name>.  Fixes #<n> (if any)
+
+## Ten non-negotiables
+- [ ] 1 Audio is the medium, not a fallback
+- [ ] 2 Voice-first, never voice-only
+- [ ] 3 The stream ends
+- [ ] 4 No engagement machinery
+- [ ] 5 Every action has three routes (media / voice / screen-reader)
+- [ ] 6 No timed or precise gestures
+- [ ] 7 Voice is biometric data
+- [ ] 8 Moderation is visible & appealable  (N/A pre-moderation slices)
+- [ ] 9 Reachable without a smartphone       (N/A pre-IVR slices)
+- [ ] 10 Blind people govern it              (N/A for code slices)
+
+## Gates
+- [ ] typecheck / lint / unit / build green
+- [ ] Lighthouse perf ≥95, a11y =100; axe = 0 violations
+- [ ] Perf budgets (LCP/TBT/CLS/bundle) within limits
+- [ ] Visual test passed (browser + ≥1 screen reader)
+- [ ] STATE.md updated
+```
+
+## Merge policy & automation
+
+- **Squash-merge** feature PRs into `dev` (clean history). **Merge-commit** or squash the `dev → prod` promotion (either is fine; keep it labeled `release:`).
+- Under the autonomous goal, the agent has authority to **open, review, fix, merge, and promote its own PRs** once checks are green and the visual test passes — no human gate. This authority is scoped to this repo. When checks are red, it fixes forward (issue → fix → re-check), never merges red.
+- Always `--delete-branch` on merge; keep only `dev` and `prod` plus in-flight feature branches.
+- **Never force-push** a shared branch. Reconcile with `git fetch` first (see handling-protocols §3).
+
+## CI
+
+CI (GitHub Actions) runs the sandbox test (§5) + automated visual/a11y layer (§6A) on every PR to `dev` and every promotion to `prod`. Green CI is a precondition for every merge. The workflow file lives at `.github/workflows/ci.yml` and is added with Slice 0 (the first code that can be tested).
+
+**Until CI exists** (docs/config-only PRs before Slice 0), there is nothing to build or test — those PRs are reviewed on diff only and merged once the diff is clean. From Slice 0 onward, no code PR merges without green CI. The genuinely-manual screen-reader/audio pass (handling-protocols §6B) is **not** a CI check — it's tracked honestly in `STATE.md`, never faked green.

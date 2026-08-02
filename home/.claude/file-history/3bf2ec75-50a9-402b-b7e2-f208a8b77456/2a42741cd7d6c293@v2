@@ -1,0 +1,41 @@
+"""One-off: grant the demo tenant's Administrator role every catalog permission."""
+
+import asyncio
+
+import app.main  # noqa: F401
+from sqlalchemy import select
+from app.core.db import session_factory
+from app.core.models import Permission, Role, RolePermission
+from app.core.tenancy import system_context
+
+
+async def main() -> None:
+    async with session_factory() as session:
+        with system_context():
+            role = (
+                await session.execute(select(Role).where(Role.name == "Administrator"))
+            ).scalar_one()
+            perms = (await session.execute(select(Permission))).scalars().all()
+            have = set(
+                (
+                    await session.execute(
+                        select(RolePermission.permission_id).where(
+                            RolePermission.role_id == role.id
+                        )
+                    )
+                ).scalars()
+            )
+            added = 0
+            for p in perms:
+                if p.id not in have:
+                    session.add(
+                        RolePermission(
+                            tenant_id=role.tenant_id, role_id=role.id, permission_id=p.id
+                        )
+                    )
+                    added += 1
+            await session.commit()
+            print(f"granted {added} permissions to Administrator")
+
+
+asyncio.run(main())

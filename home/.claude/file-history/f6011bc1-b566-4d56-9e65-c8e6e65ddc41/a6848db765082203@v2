@@ -1,0 +1,88 @@
+import Link from 'next/link';
+import { isSafeImageUrl } from '@/lib/utils';
+import RichText from '@/components/RichText';
+
+/** Plain-text version of a CMS rich string, for aria-label duty. */
+const stripTags = (s = '') => s.replace(/<[^>]+>/g, '');
+
+/*
+ * Shared story/blog card. Used on the home page "Latest Stories"
+ * grid and on /documents.
+ *
+ * `story` shape (CMS): { title, desc, heroType, tagClass, tagLabel,
+ *   img, initials, author, meta, readTime }.
+ * `featured` adds the .featured modifier class.
+ */
+export interface StoryCardData {
+  heroType?: string;
+  tagClass?: string;
+  tagLabel?: string;
+  img?: string;
+  title?: string;
+  desc?: string;
+  initials?: string;
+  author?: string;
+  meta?: string;
+  readTime?: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
+}
+
+interface StoryCardProps {
+  story?: StoryCardData;
+  featured?: boolean;
+}
+
+export default function StoryCard({ story, featured = false }: StoryCardProps) {
+  const {
+    heroType = 'type-story',
+    tagClass = 'story',
+    tagLabel = 'Story',
+    img,
+    title,
+    desc,
+    initials = 'TE',
+    author = '',
+    meta,
+    readTime,
+  } = story || {};
+
+  const href = heroType === 'type-blog' ? '/documents#blogs' : '/documents#stories';
+  const safeImg = isSafeImageUrl(img) ? img : '';
+  const bgStyle = safeImg
+    ? {
+        backgroundImage: `linear-gradient(180deg, rgba(0,0,0,.05) 30%, rgba(13,4,7,.75) 100%), url('${safeImg}')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }
+    : undefined;
+
+  return (
+    <Link
+      className={`doc-card${featured ? ' featured' : ''}`}
+      href={href}
+      aria-label={stripTags(title)}
+    >
+      <div className={`doc-hero ${heroType}`} style={bgStyle}>
+        <div>
+          <span className={`cat-tag ${tagClass}`}>{tagLabel}</span>
+          {/* CMS titles/descriptions may carry inline <em> etc. — render via
+              RichText (sanitized) so the italic-gold house style applies
+              instead of leaking literal tags. */}
+          <RichText as="h3" html={title || ''} />
+        </div>
+      </div>
+      <div className="doc-body">
+        <RichText as="p" html={desc || ''} />
+        <div className="doc-meta">
+          <div className="doc-author">
+            <div className="avatar">{initials}</div>
+            <span>{author}</span>
+          </div>
+          <span className="sep">·</span>
+          <span>{meta || readTime || ''}</span>
+        </div>
+      </div>
+    </Link>
+  );
+}

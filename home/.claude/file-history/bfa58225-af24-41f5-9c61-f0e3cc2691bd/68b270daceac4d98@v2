@@ -1,0 +1,1160 @@
+# Tasks Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Manager-assigned tasks with due dates, priority, and a completion/cancellation lifecycle — PLAN.md 4.2.
+
+**Architecture:** New `app/tasks/` package mirrors `app/visits/`'s anatomy exactly. Reuses `app.zones.service.RepNotFoundError` for "assignee isn't a rep in this tenant" validation (the same cross-package exception-reuse pattern `visits` established for `ZoneNotFoundError`). Pagination and ordering are built into `list_tasks` from the start — the prior sub-phase's final review had to add this to `list_visits` after the fact; this plan starts with it.
+
+**Tech Stack:** Same as prior phases — Python 3.12, FastAPI, SQLAlchemy 2.0 async, Alembic, Pydantic v2, pytest.
+
+## Global Constraints
+
+- `tenant_id` on every table via `TenantScopedMixin` — per `docs/design.md` Core data model.
+- **Status is a three-state string, not a bare boolean**: `OPEN` → `COMPLETED` | `CANCELLED`. `CANCELLED` isn't explicitly named in `docs/design.md`'s task description, but it's the idiomatic "delete" for PLAN 4.2's "CRUD" requirement — this codebase's whole design lineage (documented in the original Atlas ERP research this product is modeled after) favors status-transition soft-deletes over hard DB deletes for auditability. No literal `DELETE /api/v1/tasks/{id}` endpoint exists; `POST /api/v1/tasks/{id}/cancel` is the delete equivalent.
+- **No DB-level enum/CHECK constraint on `status`/`priority`** — plain `String` columns, matching `User.role`'s existing precedent in this codebase (validated at the Pydantic schema layer via `Literal`, not enforced in the database). If a reviewer flags this as a gap, this is a deliberate, already-established codebase convention, not an oversight — but verify the reasoning still holds rather than just citing it.
+- **Reassignment is out of scope for `update_task`.** PLAN 4.2 lists "assignment" (covered by `create_task`'s initial `assigned_to`) separately from "CRUD" — updating title/due_date/priority is in scope; changing which rep a task is assigned to is not. Add it later if the customer actually asks for it.
+- **Pagination is present from the first commit of `list_tasks`**, not bolted on afterward — `limit`/`offset` params, default 50, max 200, ordered by `created_at DESC` with `id DESC` as a deterministic tiebreaker (identical shape to `list_visits` post-fix). Per `docs/design.md`'s explicit "list endpoints must be paginated" requirement.
+- Service layer owns business rules; routers thin; models logic-free — per `docs/design.md` Stack section.
+- Cross-tenant and cross-rep access reported as "not found," never a distinct error — matches every prior phase's convention.
+- `completed_at`/`created_at` use `DateTime(timezone=True)` — the mistake three prior phases have each had to catch and fix.
+
+---
+
+## File Structure
+
+```
+backend/
+  app/
+    tasks/
+      __init__.py                 # NEW
+      models.py                    # NEW: Task
+      schemas.py                    # NEW: TaskCreate, TaskUpdate, TaskOut
+      service.py                     # NEW: create_task, get_task, list_tasks, complete_task, cancel_task, update_task
+      router.py                       # NEW: POST, GET, GET/{id}, PATCH/{id}, POST/{id}/complete, POST/{id}/cancel
+    main.py                     # MODIFY: mount tasks_router
+  alembic/versions/
+    <new migration>              # NEW: create tasks table
+  tests/
+    tasks/
+      __init__.py                  # NEW
+      test_models.py                # NEW
+      test_service.py                # NEW
+      test_router.py                  # NEW
+```
+
+**Interfaces summary (for cross-task consistency):**
+- `app.tasks.models.Task` — `id: Mapped[uuid.UUID]` (PK), `tenant_id` (via mixin), `assigned_to: Mapped[uuid.UUID]` (FK → `users.id`, indexed), `title: Mapped[str]`, `due_date: Mapped[date | None]` (plain `Date`, not datetime — a calendar date, no time-of-day), `status: Mapped[str]` (default `"OPEN"`), `priority: Mapped[str]` (default `"MEDIUM"`), `external_reference: Mapped[str | None]`, `created_at: Mapped[datetime]` (`DateTime(timezone=True)`, server default), `completed_at: Mapped[datetime | None]` (`DateTime(timezone=True)`, nullable). Composite index `(tenant_id, assigned_to, status)` for the "my open tasks" query shape.
+- `app.tasks.service.create_task(db, tenant_id, assigned_to, title, due_date=None, priority="MEDIUM", external_reference=None) -> Task`
+- `app.tasks.service.get_task(db, current_user, task_id) -> Task | None`
+- `app.tasks.service.list_tasks(db, current_user, limit=50, offset=0) -> list[Task]`
+- `app.tasks.service.complete_task(db, tenant_id, rep_id, task_id) -> Task`
+- `app.tasks.service.cancel_task(db, tenant_id, task_id) -> Task`
+- `app.tasks.service.update_task(db, tenant_id, task_id, title=None, due_date=None, priority=None) -> Task`
+- Exceptions (new, in `app.tasks.service`): `TaskNotFoundError`, `TaskNotOpenError`. Reused (from `app.zones.service`): `RepNotFoundError`.
+- `app.tasks.schemas.TaskCreate` (`assigned_to: uuid.UUID`, `title: str`, `due_date: date | None = None`, `priority: Literal["LOW","MEDIUM","HIGH"] = "MEDIUM"`, `external_reference: str | None = None`), `TaskUpdate` (`title: str | None = None`, `due_date: date | None = None`, `priority: Literal["LOW","MEDIUM","HIGH"] | None = None`), `TaskOut` (`id`, `assigned_to`, `title`, `due_date`, `status`, `priority`, `external_reference`, `created_at`, `completed_at`).
+
+---
+
+### Task 1: Task model + migration
+
+**Files:**
+- Create: `backend/app/tasks/__init__.py`
+- Create: `backend/app/tasks/models.py`
+- Create: `backend/tests/tasks/__init__.py` (empty)
+- Create: `backend/tests/tasks/test_models.py`
+
+**Interfaces:**
+- Consumes: `app.db.Base`, `app.core.tenancy.TenantScopedMixin`, `app.auth.models.User` (Phase 1).
+- Produces: `Task` (columns per the plan header's Interfaces summary).
+
+- [ ] **Step 1: Write `backend/app/tasks/__init__.py`** (empty)
+
+```python
+# backend/app/tasks/__init__.py
+```
+
+- [ ] **Step 2: Write `backend/tests/tasks/__init__.py`** (empty)
+
+```python
+# backend/tests/tasks/__init__.py
+```
+
+- [ ] **Step 3: Write the failing test**
+
+```python
+# backend/tests/tasks/test_models.py
+import uuid
+from datetime import date, datetime, timezone
+
+import pytest
+from sqlalchemy import select
+
+from app.auth.models import User
+from app.tasks.models import Task
+
+pytestmark = pytest.mark.asyncio
+
+
+async def _make_rep(db_session, tenant_id):
+    rep = User(
+        id=uuid.uuid4(), tenant_id=tenant_id, email=f"{uuid.uuid4()}@example.com",
+        hashed_password="irrelevant", role="rep",
+    )
+    db_session.add(rep)
+    await db_session.flush()
+    return rep
+
+
+async def test_create_and_fetch_task(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+
+    task = Task(
+        id=uuid.uuid4(), tenant_id=tenant_id, assigned_to=rep.id, title="Visit downtown store",
+        due_date=date(2026, 8, 1), status="OPEN", priority="HIGH", external_reference="lead-789",
+    )
+    db_session.add(task)
+    await db_session.commit()
+
+    result = await db_session.execute(select(Task).where(Task.assigned_to == rep.id))
+    fetched = result.scalar_one()
+
+    assert fetched.title == "Visit downtown store"
+    assert fetched.due_date == date(2026, 8, 1)
+    assert fetched.status == "OPEN"
+    assert fetched.priority == "HIGH"
+    assert fetched.completed_at is None
+    assert isinstance(fetched.created_at, datetime)
+    assert fetched.created_at.tzinfo is not None
+
+
+async def test_task_defaults_status_open_and_priority_medium(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+
+    task = Task(id=uuid.uuid4(), tenant_id=tenant_id, assigned_to=rep.id, title="Follow up")
+    db_session.add(task)
+    await db_session.commit()
+
+    result = await db_session.execute(select(Task).where(Task.assigned_to == rep.id))
+    fetched = result.scalar_one()
+
+    assert fetched.status == "OPEN"
+    assert fetched.priority == "MEDIUM"
+    assert fetched.due_date is None
+
+
+async def test_task_completed_at_settable(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+
+    task = Task(id=uuid.uuid4(), tenant_id=tenant_id, assigned_to=rep.id, title="Follow up")
+    db_session.add(task)
+    await db_session.commit()
+
+    task.status = "COMPLETED"
+    task.completed_at = datetime.now(timezone.utc)
+    await db_session.commit()
+
+    result = await db_session.execute(select(Task).where(Task.assigned_to == rep.id))
+    fetched = result.scalar_one()
+
+    assert fetched.status == "COMPLETED"
+    assert fetched.completed_at is not None
+    assert fetched.completed_at.tzinfo is not None
+```
+
+- [ ] **Step 4: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/tasks/test_models.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'app.tasks.models'`
+
+- [ ] **Step 5: Write `app/tasks/models.py`**
+
+```python
+# backend/app/tasks/models.py
+import uuid
+from datetime import date, datetime, timezone
+
+from sqlalchemy import Date, DateTime, ForeignKey, Index, String
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.core.tenancy import TenantScopedMixin
+from app.db import Base
+
+
+class Task(Base, TenantScopedMixin):
+    __tablename__ = "tasks"
+    __table_args__ = (
+        Index("ix_tasks_tenant_assigned_to_status", "tenant_id", "assigned_to", "status"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    assigned_to: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    status: Mapped[str] = mapped_column(String, nullable=False, default="OPEN")
+    priority: Mapped[str] = mapped_column(String, nullable=False, default="MEDIUM")
+    external_reference: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+```
+
+- [ ] **Step 6: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/tasks/test_models.py -v`
+Expected: all 3 tests `PASSED`.
+
+- [ ] **Step 7: Register the model with Alembic**
+
+Edit `backend/alembic/env.py` — add a new import line directly below the existing `from app.visits.models import Visit  # noqa: E402, F401` line:
+
+```python
+from app.tasks.models import Task  # noqa: E402, F401
+```
+
+- [ ] **Step 8: Generate the migration**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/backend
+uv run alembic revision --autogenerate -m "create tasks table"
+```
+
+Expected: a new file under `alembic/versions/` with `op.create_table("tasks", ...)` using `sa.Uuid()` for `id`/`tenant_id`/`assigned_to`, `sa.Date()` for `due_date`, `sa.String()` for `title`/`status`/`priority`/`external_reference`, `sa.DateTime(timezone=True)` for BOTH `created_at` and `completed_at`, a FK to `users.id`, and the `ix_tasks_tenant_assigned_to_status` composite index plus the standalone `assigned_to` index. If autogenerate omits `timezone=True` on either datetime column, fix it manually — the same class of mistake three prior phases have each had to catch.
+
+- [ ] **Step 9: Verify the migration applies cleanly**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/backend
+DATABASE_URL="sqlite+aiosqlite:///./alembic_check.db" uv run alembic upgrade head
+rm -f alembic_check.db
+```
+
+Expected: no errors.
+
+- [ ] **Step 10: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/
+git commit -m "feat(backend): Task model, Alembic migration
+
+Refs PLAN 4.2"
+```
+
+---
+
+### Task 2: `create_task`, `get_task`, `list_tasks` services
+
+**Files:**
+- Create: `backend/app/tasks/schemas.py`
+- Create: `backend/app/tasks/service.py`
+- Test: `backend/tests/tasks/test_service.py`
+
+**Interfaces:**
+- Consumes: `app.tasks.models.Task` (Task 1), `app.auth.models.User` (Phase 1), `app.zones.service.RepNotFoundError` (Phase 2, reused).
+- Produces: `create_task(...)`, `get_task(...)`, `list_tasks(...)` (signatures per the plan header's Interfaces summary). `app.tasks.schemas.TaskCreate`, `TaskUpdate`, `TaskOut`.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# backend/tests/tasks/test_service.py
+import uuid
+from datetime import date
+
+import pytest
+
+from app.auth.models import User
+from app.zones.service import RepNotFoundError
+from app.tasks.service import create_task, get_task, list_tasks
+
+pytestmark = pytest.mark.asyncio
+
+
+async def _make_user(db_session, tenant_id, role):
+    user = User(
+        id=uuid.uuid4(), tenant_id=tenant_id, email=f"{uuid.uuid4()}@example.com",
+        hashed_password="irrelevant", role=role,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    return user
+
+
+async def test_create_task_assigns_to_rep(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+
+    task = await create_task(
+        db_session, tenant_id=tenant_id, assigned_to=rep.id, title="Visit store",
+        due_date=date(2026, 8, 1), priority="HIGH", external_reference="lead-1",
+    )
+
+    assert task.assigned_to == rep.id
+    assert task.title == "Visit store"
+    assert task.status == "OPEN"
+    assert task.priority == "HIGH"
+
+
+async def test_create_task_defaults_priority_to_medium(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+
+    task = await create_task(db_session, tenant_id=tenant_id, assigned_to=rep.id, title="Follow up")
+
+    assert task.priority == "MEDIUM"
+    assert task.due_date is None
+
+
+async def test_create_task_for_unknown_assignee_raises(db_session):
+    tenant_id = uuid.uuid4()
+
+    with pytest.raises(RepNotFoundError):
+        await create_task(db_session, tenant_id=tenant_id, assigned_to=uuid.uuid4(), title="Follow up")
+
+
+async def test_create_task_for_manager_assignee_raises(db_session):
+    tenant_id = uuid.uuid4()
+    manager = await _make_user(db_session, tenant_id, "manager")
+
+    with pytest.raises(RepNotFoundError):
+        await create_task(db_session, tenant_id=tenant_id, assigned_to=manager.id, title="Follow up")
+
+
+async def test_create_task_for_rep_in_different_tenant_raises(db_session):
+    tenant_a = uuid.uuid4()
+    tenant_b = uuid.uuid4()
+    rep_b = await _make_user(db_session, tenant_b, "rep")
+
+    with pytest.raises(RepNotFoundError):
+        await create_task(db_session, tenant_id=tenant_a, assigned_to=rep_b.id, title="Follow up")
+
+
+async def test_get_task_for_assigned_rep_returns_it(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+    task = await create_task(db_session, tenant_id=tenant_id, assigned_to=rep.id, title="Follow up")
+
+    fetched = await get_task(db_session, current_user=rep, task_id=task.id)
+
+    assert fetched is not None
+    assert fetched.id == task.id
+
+
+async def test_get_task_for_other_rep_returns_none(db_session):
+    tenant_id = uuid.uuid4()
+    rep_a = await _make_user(db_session, tenant_id, "rep")
+    rep_b = await _make_user(db_session, tenant_id, "rep")
+    task = await create_task(db_session, tenant_id=tenant_id, assigned_to=rep_a.id, title="Follow up")
+
+    fetched = await get_task(db_session, current_user=rep_b, task_id=task.id)
+
+    assert fetched is None
+
+
+async def test_get_task_for_manager_returns_any_tenant_task(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+    manager = await _make_user(db_session, tenant_id, "manager")
+    task = await create_task(db_session, tenant_id=tenant_id, assigned_to=rep.id, title="Follow up")
+
+    fetched = await get_task(db_session, current_user=manager, task_id=task.id)
+
+    assert fetched is not None
+    assert fetched.id == task.id
+
+
+async def test_list_tasks_for_rep_returns_only_own_tasks(db_session):
+    tenant_id = uuid.uuid4()
+    rep_a = await _make_user(db_session, tenant_id, "rep")
+    rep_b = await _make_user(db_session, tenant_id, "rep")
+    await create_task(db_session, tenant_id=tenant_id, assigned_to=rep_a.id, title="A")
+    await create_task(db_session, tenant_id=tenant_id, assigned_to=rep_b.id, title="B")
+
+    tasks = await list_tasks(db_session, current_user=rep_a)
+
+    assert len(tasks) == 1
+    assert tasks[0].assigned_to == rep_a.id
+
+
+async def test_list_tasks_for_manager_returns_all_tenant_tasks(db_session):
+    tenant_id = uuid.uuid4()
+    rep_a = await _make_user(db_session, tenant_id, "rep")
+    rep_b = await _make_user(db_session, tenant_id, "rep")
+    manager = await _make_user(db_session, tenant_id, "manager")
+    await create_task(db_session, tenant_id=tenant_id, assigned_to=rep_a.id, title="A")
+    await create_task(db_session, tenant_id=tenant_id, assigned_to=rep_b.id, title="B")
+
+    tasks = await list_tasks(db_session, current_user=manager)
+
+    assert len(tasks) == 2
+
+
+async def test_list_tasks_paginates_with_limit_and_offset(db_session):
+    tenant_id = uuid.uuid4()
+    manager = await _make_user(db_session, tenant_id, "manager")
+    rep = await _make_user(db_session, tenant_id, "rep")
+    t1 = await create_task(db_session, tenant_id=tenant_id, assigned_to=rep.id, title="first")
+    t2 = await create_task(db_session, tenant_id=tenant_id, assigned_to=rep.id, title="second")
+    t3 = await create_task(db_session, tenant_id=tenant_id, assigned_to=rep.id, title="third")
+
+    page1 = await list_tasks(db_session, current_user=manager, limit=2, offset=0)
+    page2 = await list_tasks(db_session, current_user=manager, limit=2, offset=2)
+
+    assert [t.id for t in page1] == [t3.id, t2.id]
+    assert [t.id for t in page2] == [t1.id]
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/tasks/test_service.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'app.tasks.service'`
+
+- [ ] **Step 3: Write `app/tasks/schemas.py`**
+
+```python
+# backend/app/tasks/schemas.py
+import uuid
+from datetime import date, datetime
+from typing import Literal
+
+from pydantic import BaseModel
+
+Priority = Literal["LOW", "MEDIUM", "HIGH"]
+
+
+class TaskCreate(BaseModel):
+    assigned_to: uuid.UUID
+    title: str
+    due_date: date | None = None
+    priority: Priority = "MEDIUM"
+    external_reference: str | None = None
+
+
+class TaskUpdate(BaseModel):
+    title: str | None = None
+    due_date: date | None = None
+    priority: Priority | None = None
+
+
+class TaskOut(BaseModel):
+    id: uuid.UUID
+    assigned_to: uuid.UUID
+    title: str
+    due_date: date | None
+    status: str
+    priority: str
+    external_reference: str | None
+    created_at: datetime
+    completed_at: datetime | None
+
+    model_config = {"from_attributes": True}
+```
+
+- [ ] **Step 4: Write `app/tasks/service.py`**
+
+```python
+# backend/app/tasks/service.py
+import uuid
+from datetime import date
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth.models import User
+from app.tasks.models import Task
+from app.zones.service import RepNotFoundError
+
+
+async def create_task(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    assigned_to: uuid.UUID,
+    title: str,
+    due_date: date | None = None,
+    priority: str = "MEDIUM",
+    external_reference: str | None = None,
+) -> Task:
+    rep_result = await db.execute(
+        select(User).where(User.id == assigned_to, User.role == "rep", User.tenant_id == tenant_id)
+    )
+    if rep_result.scalar_one_or_none() is None:
+        raise RepNotFoundError(assigned_to)
+
+    task = Task(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        assigned_to=assigned_to,
+        title=title,
+        due_date=due_date,
+        priority=priority,
+        external_reference=external_reference,
+    )
+    db.add(task)
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+
+async def get_task(db: AsyncSession, current_user: User, task_id: uuid.UUID) -> Task | None:
+    query = select(Task).where(Task.id == task_id)
+    if current_user.role != "manager":
+        query = query.where(Task.assigned_to == current_user.id)
+    result = await db.execute(query)
+    return result.scalar_one_or_none()
+
+
+async def list_tasks(
+    db: AsyncSession, current_user: User, limit: int = 50, offset: int = 0
+) -> list[Task]:
+    query = (
+        select(Task)
+        .order_by(Task.created_at.desc(), Task.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    if current_user.role != "manager":
+        query = query.where(Task.assigned_to == current_user.id)
+    result = await db.execute(query)
+    return list(result.scalars().all())
+```
+
+Note: `create_task`'s rep-lookup query includes an explicit `User.tenant_id == tenant_id` clause (unlike some prior lookups in this codebase that rely purely on the global filter) — this is deliberate: `create_task` is called by a manager whose own `tenant_id` is known and trusted, and the assignee must be proven to belong to that same tenant before a task can reference them, mirroring `zones.service.assign_rep_to_zone`'s explicit rep-tenant check.
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/tasks/test_service.py -v`
+Expected: all 11 tests `PASSED`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/tasks/schemas.py backend/app/tasks/service.py backend/tests/tasks/test_service.py
+git commit -m "feat(backend): task create/get/list services with pagination and rep/manager visibility split
+
+Refs PLAN 4.2"
+```
+
+---
+
+### Task 3: `complete_task`, `cancel_task`, `update_task` services
+
+**Files:**
+- Modify: `backend/app/tasks/service.py` (append)
+- Modify: `backend/tests/tasks/test_service.py` (append — do not replace)
+
+**Interfaces:**
+- Consumes: `app.tasks.models.Task`, `create_task` (Task 2).
+- Produces: `complete_task(db, tenant_id, rep_id, task_id) -> Task`, `cancel_task(db, tenant_id, task_id) -> Task`, `update_task(db, tenant_id, task_id, title=None, due_date=None, priority=None) -> Task`, `TaskNotFoundError`, `TaskNotOpenError`.
+
+- [ ] **Step 1: Append the failing tests to `backend/tests/tasks/test_service.py`**
+
+Add to the existing imports at the top (merge, don't duplicate):
+
+```python
+from app.tasks.service import TaskNotFoundError, TaskNotOpenError, cancel_task, complete_task, update_task
+```
+
+Append these test functions:
+
+```python
+async def test_complete_task_sets_status_and_completed_at(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+    task = await create_task(db_session, tenant_id=tenant_id, assigned_to=rep.id, title="Follow up")
+
+    completed = await complete_task(db_session, tenant_id=tenant_id, rep_id=rep.id, task_id=task.id)
+
+    assert completed.status == "COMPLETED"
+    assert completed.completed_at is not None
+
+
+async def test_complete_unknown_task_raises(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+
+    with pytest.raises(TaskNotFoundError):
+        await complete_task(db_session, tenant_id=tenant_id, rep_id=rep.id, task_id=uuid.uuid4())
+
+
+async def test_complete_someone_elses_task_raises_not_found(db_session):
+    tenant_id = uuid.uuid4()
+    rep_a = await _make_user(db_session, tenant_id, "rep")
+    rep_b = await _make_user(db_session, tenant_id, "rep")
+    task = await create_task(db_session, tenant_id=tenant_id, assigned_to=rep_a.id, title="Follow up")
+
+    with pytest.raises(TaskNotFoundError):
+        await complete_task(db_session, tenant_id=tenant_id, rep_id=rep_b.id, task_id=task.id)
+
+
+async def test_complete_already_completed_task_raises(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+    task = await create_task(db_session, tenant_id=tenant_id, assigned_to=rep.id, title="Follow up")
+    await complete_task(db_session, tenant_id=tenant_id, rep_id=rep.id, task_id=task.id)
+
+    with pytest.raises(TaskNotOpenError):
+        await complete_task(db_session, tenant_id=tenant_id, rep_id=rep.id, task_id=task.id)
+
+
+async def test_complete_task_in_different_tenant_raises_not_found(db_session):
+    tenant_a = uuid.uuid4()
+    tenant_b = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_a, "rep")
+    task = await create_task(db_session, tenant_id=tenant_a, assigned_to=rep.id, title="Follow up")
+
+    with pytest.raises(TaskNotFoundError):
+        await complete_task(db_session, tenant_id=tenant_b, rep_id=rep.id, task_id=task.id)
+
+
+async def test_cancel_task_sets_status_cancelled(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+    task = await create_task(db_session, tenant_id=tenant_id, assigned_to=rep.id, title="Follow up")
+
+    cancelled = await cancel_task(db_session, tenant_id=tenant_id, task_id=task.id)
+
+    assert cancelled.status == "CANCELLED"
+
+
+async def test_cancel_unknown_task_raises(db_session):
+    tenant_id = uuid.uuid4()
+
+    with pytest.raises(TaskNotFoundError):
+        await cancel_task(db_session, tenant_id=tenant_id, task_id=uuid.uuid4())
+
+
+async def test_cancel_completed_task_raises(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+    task = await create_task(db_session, tenant_id=tenant_id, assigned_to=rep.id, title="Follow up")
+    await complete_task(db_session, tenant_id=tenant_id, rep_id=rep.id, task_id=task.id)
+
+    with pytest.raises(TaskNotOpenError):
+        await cancel_task(db_session, tenant_id=tenant_id, task_id=task.id)
+
+
+async def test_update_task_changes_title_and_priority(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+    task = await create_task(db_session, tenant_id=tenant_id, assigned_to=rep.id, title="Old title")
+
+    updated = await update_task(db_session, tenant_id=tenant_id, task_id=task.id, title="New title", priority="LOW")
+
+    assert updated.title == "New title"
+    assert updated.priority == "LOW"
+
+
+async def test_update_task_only_changes_provided_fields(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+    task = await create_task(
+        db_session, tenant_id=tenant_id, assigned_to=rep.id, title="Original", priority="HIGH"
+    )
+
+    updated = await update_task(db_session, tenant_id=tenant_id, task_id=task.id, title="Updated")
+
+    assert updated.title == "Updated"
+    assert updated.priority == "HIGH"
+
+
+async def test_update_completed_task_raises(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+    task = await create_task(db_session, tenant_id=tenant_id, assigned_to=rep.id, title="Follow up")
+    await complete_task(db_session, tenant_id=tenant_id, rep_id=rep.id, task_id=task.id)
+
+    with pytest.raises(TaskNotOpenError):
+        await update_task(db_session, tenant_id=tenant_id, task_id=task.id, title="New title")
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/tasks/test_service.py -v`
+Expected: FAIL — `ImportError: cannot import name 'complete_task'`
+
+- [ ] **Step 3: Append to `app/tasks/service.py`**
+
+Add this import to the top of the file (merge with existing imports):
+
+```python
+from datetime import datetime, timezone
+```
+
+Append to the end of the file:
+
+```python
+class TaskNotFoundError(Exception):
+    pass
+
+
+class TaskNotOpenError(Exception):
+    pass
+
+
+async def complete_task(db: AsyncSession, tenant_id: uuid.UUID, rep_id: uuid.UUID, task_id: uuid.UUID) -> Task:
+    result = await db.execute(select(Task).where(Task.id == task_id, Task.assigned_to == rep_id))
+    task = result.scalar_one_or_none()
+    if task is None or task.tenant_id != tenant_id:
+        raise TaskNotFoundError(task_id)
+
+    if task.status != "OPEN":
+        raise TaskNotOpenError(task_id)
+
+    task.status = "COMPLETED"
+    task.completed_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+
+async def cancel_task(db: AsyncSession, tenant_id: uuid.UUID, task_id: uuid.UUID) -> Task:
+    result = await db.execute(select(Task).where(Task.id == task_id))
+    task = result.scalar_one_or_none()
+    if task is None or task.tenant_id != tenant_id:
+        raise TaskNotFoundError(task_id)
+
+    if task.status != "OPEN":
+        raise TaskNotOpenError(task_id)
+
+    task.status = "CANCELLED"
+    await db.commit()
+    await db.refresh(task)
+    return task
+
+
+async def update_task(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    task_id: uuid.UUID,
+    title: str | None = None,
+    due_date: date | None = None,
+    priority: str | None = None,
+) -> Task:
+    result = await db.execute(select(Task).where(Task.id == task_id))
+    task = result.scalar_one_or_none()
+    if task is None or task.tenant_id != tenant_id:
+        raise TaskNotFoundError(task_id)
+
+    if task.status != "OPEN":
+        raise TaskNotOpenError(task_id)
+
+    if title is not None:
+        task.title = title
+    if due_date is not None:
+        task.due_date = due_date
+    if priority is not None:
+        task.priority = priority
+
+    await db.commit()
+    await db.refresh(task)
+    return task
+```
+
+Note on `cancel_task`/`update_task`'s tenant check: same explicit-check reasoning as `visits.service.check_out` — the query filters by `id` only (no `tenant_id` in the WHERE clause), then explicitly compares `task.tenant_id != tenant_id` after fetching. This is deliberate defense-in-depth, not reliance on the global filter alone, matching Phase 2/3/4a's established pattern for manager-facing mutations on a fetched-by-id resource.
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/tasks/test_service.py -v`
+Expected: all 22 tests (11 from Task 2 + 11 new) `PASSED`.
+
+- [ ] **Step 5: Run the full suite**
+
+Run: `cd backend && uv run pytest -v`
+Expected: no regressions.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/tasks/service.py backend/tests/tasks/test_service.py
+git commit -m "feat(backend): task complete/cancel/update services
+
+Refs PLAN 4.2"
+```
+
+---
+
+### Task 4: Task router
+
+**Files:**
+- Create: `backend/app/tasks/router.py`
+- Modify: `backend/app/main.py` (mount the router)
+- Test: `backend/tests/tasks/test_router.py`
+
+**Interfaces:**
+- Consumes: `app.tasks.service.*`, `app.tasks.schemas.*` (Tasks 2-3), `app.auth.deps.require_manager`, `require_rep`, `get_current_user` (Phases 1-2).
+- Produces: `POST /api/v1/tasks` → 201 `TaskOut` (manager only), `GET /api/v1/tasks` → 200 `list[TaskOut]` (rep or manager, filtered+paginated), `GET /api/v1/tasks/{task_id}` → 200 `TaskOut` | 404 (rep or manager, filtered), `PATCH /api/v1/tasks/{task_id}` → 200 `TaskOut` | 404 | 409 (manager only), `POST /api/v1/tasks/{task_id}/complete` → 200 `TaskOut` | 404 | 409 (rep only), `POST /api/v1/tasks/{task_id}/cancel` → 200 `TaskOut` | 404 | 409 (manager only).
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# backend/tests/tasks/test_router.py
+import uuid
+
+import pytest
+
+pytestmark = pytest.mark.asyncio
+
+TENANT_HEADER = "X-Tenant-Id"
+
+
+async def _register(client, tenant_id, email, role):
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": "hunter2pass", "role": role},
+        headers={TENANT_HEADER: tenant_id},
+    )
+    return response.json()["access_token"]
+
+
+async def _me(client, token):
+    response = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    return response.json()
+
+
+async def test_manager_can_create_task(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    rep_token = await _register(client, tenant_id, "rep@example.com", "rep")
+    rep_id = (await _me(client, rep_token))["id"]
+
+    response = await client.post(
+        "/api/v1/tasks",
+        json={"assigned_to": rep_id, "title": "Visit store", "priority": "HIGH"},
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["title"] == "Visit store"
+    assert response.json()["status"] == "OPEN"
+
+
+async def test_rep_cannot_create_task(client):
+    tenant_id = str(uuid.uuid4())
+    token = await _register(client, tenant_id, "rep@example.com", "rep")
+
+    response = await client.post(
+        "/api/v1/tasks",
+        json={"assigned_to": str(uuid.uuid4()), "title": "Visit store"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 403
+
+
+async def test_create_task_for_unknown_rep_returns_404(client):
+    tenant_id = str(uuid.uuid4())
+    token = await _register(client, tenant_id, "mgr@example.com", "manager")
+
+    response = await client.post(
+        "/api/v1/tasks",
+        json={"assigned_to": str(uuid.uuid4()), "title": "Visit store"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+
+
+async def test_rep_can_complete_own_task(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    rep_token = await _register(client, tenant_id, "rep@example.com", "rep")
+    rep_id = (await _me(client, rep_token))["id"]
+    create_response = await client.post(
+        "/api/v1/tasks", json={"assigned_to": rep_id, "title": "Visit store"},
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+    task_id = create_response.json()["id"]
+
+    response = await client.post(
+        f"/api/v1/tasks/{task_id}/complete", headers={"Authorization": f"Bearer {rep_token}"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "COMPLETED"
+
+
+async def test_manager_can_cancel_task(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    rep_token = await _register(client, tenant_id, "rep@example.com", "rep")
+    rep_id = (await _me(client, rep_token))["id"]
+    create_response = await client.post(
+        "/api/v1/tasks", json={"assigned_to": rep_id, "title": "Visit store"},
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+    task_id = create_response.json()["id"]
+
+    response = await client.post(
+        f"/api/v1/tasks/{task_id}/cancel", headers={"Authorization": f"Bearer {mgr_token}"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "CANCELLED"
+
+
+async def test_rep_cannot_cancel_task(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    rep_token = await _register(client, tenant_id, "rep@example.com", "rep")
+    rep_id = (await _me(client, rep_token))["id"]
+    create_response = await client.post(
+        "/api/v1/tasks", json={"assigned_to": rep_id, "title": "Visit store"},
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+    task_id = create_response.json()["id"]
+
+    response = await client.post(
+        f"/api/v1/tasks/{task_id}/cancel", headers={"Authorization": f"Bearer {rep_token}"}
+    )
+
+    assert response.status_code == 403
+
+
+async def test_manager_can_update_task(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    rep_token = await _register(client, tenant_id, "rep@example.com", "rep")
+    rep_id = (await _me(client, rep_token))["id"]
+    create_response = await client.post(
+        "/api/v1/tasks", json={"assigned_to": rep_id, "title": "Old title"},
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+    task_id = create_response.json()["id"]
+
+    response = await client.patch(
+        f"/api/v1/tasks/{task_id}", json={"title": "New title"},
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "New title"
+
+
+async def test_complete_already_completed_task_returns_409(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    rep_token = await _register(client, tenant_id, "rep@example.com", "rep")
+    rep_id = (await _me(client, rep_token))["id"]
+    create_response = await client.post(
+        "/api/v1/tasks", json={"assigned_to": rep_id, "title": "Visit store"},
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+    task_id = create_response.json()["id"]
+    await client.post(f"/api/v1/tasks/{task_id}/complete", headers={"Authorization": f"Bearer {rep_token}"})
+
+    response = await client.post(
+        f"/api/v1/tasks/{task_id}/complete", headers={"Authorization": f"Bearer {rep_token}"}
+    )
+
+    assert response.status_code == 409
+
+
+async def test_rep_lists_only_own_tasks(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    rep_a_token = await _register(client, tenant_id, "rep-a@example.com", "rep")
+    rep_b_token = await _register(client, tenant_id, "rep-b@example.com", "rep")
+    rep_a_id = (await _me(client, rep_a_token))["id"]
+    rep_b_id = (await _me(client, rep_b_token))["id"]
+    await client.post(
+        "/api/v1/tasks", json={"assigned_to": rep_a_id, "title": "A"},
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+    await client.post(
+        "/api/v1/tasks", json={"assigned_to": rep_b_id, "title": "B"},
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+
+    response = await client.get("/api/v1/tasks", headers={"Authorization": f"Bearer {rep_a_token}"})
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+
+async def test_get_task_belonging_to_other_rep_returns_404(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    rep_a_token = await _register(client, tenant_id, "rep-a@example.com", "rep")
+    rep_b_token = await _register(client, tenant_id, "rep-b@example.com", "rep")
+    rep_a_id = (await _me(client, rep_a_token))["id"]
+    create_response = await client.post(
+        "/api/v1/tasks", json={"assigned_to": rep_a_id, "title": "A"},
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+    task_id = create_response.json()["id"]
+
+    response = await client.get(f"/api/v1/tasks/{task_id}", headers={"Authorization": f"Bearer {rep_b_token}"})
+
+    assert response.status_code == 404
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/tasks/test_router.py -v`
+Expected: FAIL — `404` on `/api/v1/tasks` (router not mounted) or `ModuleNotFoundError` for `app.tasks.router`.
+
+- [ ] **Step 3: Write `app/tasks/router.py`**
+
+```python
+# backend/app/tasks/router.py
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth.deps import get_current_user, require_manager, require_rep
+from app.auth.models import User
+from app.db import get_db
+from app.tasks.schemas import TaskCreate, TaskOut, TaskUpdate
+from app.tasks.service import (
+    TaskNotFoundError,
+    TaskNotOpenError,
+    cancel_task,
+    complete_task,
+    create_task,
+    get_task,
+    list_tasks,
+    update_task,
+)
+from app.zones.service import RepNotFoundError
+
+router = APIRouter(prefix="/api/v1/tasks", tags=["tasks"])
+
+
+@router.post("", response_model=TaskOut, status_code=status.HTTP_201_CREATED)
+async def create_task_endpoint(
+    body: TaskCreate,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+) -> TaskOut:
+    try:
+        return await create_task(
+            db,
+            tenant_id=current_user.tenant_id,
+            assigned_to=body.assigned_to,
+            title=body.title,
+            due_date=body.due_date,
+            priority=body.priority,
+            external_reference=body.external_reference,
+        )
+    except RepNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="rep not found") from exc
+
+
+@router.get("", response_model=list[TaskOut])
+async def list_tasks_endpoint(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[TaskOut]:
+    return await list_tasks(db, current_user, limit=limit, offset=offset)
+
+
+@router.get("/{task_id}", response_model=TaskOut)
+async def get_task_endpoint(
+    task_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> TaskOut:
+    task = await get_task(db, current_user, task_id)
+    if task is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="task not found")
+    return task
+
+
+@router.patch("/{task_id}", response_model=TaskOut)
+async def update_task_endpoint(
+    task_id: uuid.UUID,
+    body: TaskUpdate,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+) -> TaskOut:
+    try:
+        return await update_task(
+            db,
+            tenant_id=current_user.tenant_id,
+            task_id=task_id,
+            title=body.title,
+            due_date=body.due_date,
+            priority=body.priority,
+        )
+    except TaskNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="task not found") from exc
+    except TaskNotOpenError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="task is not open") from exc
+
+
+@router.post("/{task_id}/complete", response_model=TaskOut)
+async def complete_task_endpoint(
+    task_id: uuid.UUID,
+    current_user: User = Depends(require_rep),
+    db: AsyncSession = Depends(get_db),
+) -> TaskOut:
+    try:
+        return await complete_task(
+            db, tenant_id=current_user.tenant_id, rep_id=current_user.id, task_id=task_id
+        )
+    except TaskNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="task not found") from exc
+    except TaskNotOpenError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="task is not open") from exc
+
+
+@router.post("/{task_id}/cancel", response_model=TaskOut)
+async def cancel_task_endpoint(
+    task_id: uuid.UUID,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+) -> TaskOut:
+    try:
+        return await cancel_task(db, tenant_id=current_user.tenant_id, task_id=task_id)
+    except TaskNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="task not found") from exc
+    except TaskNotOpenError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="task is not open") from exc
+```
+
+- [ ] **Step 4: Mount the router in `app/main.py`**
+
+Read the current `backend/app/main.py` in full first (it mounts `auth_router`, `zones_router`, `pings_router`, `visits_router`, calls `install_tenancy_filter()`, and has the `lifespan` handler — all of that must stay). Add, following the exact existing pattern:
+
+```python
+from app.tasks.router import router as tasks_router
+```
+
+```python
+app.include_router(tasks_router)
+```
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/tasks/test_router.py -v`
+Expected: all 11 tests `PASSED`.
+
+- [ ] **Step 6: Run the full suite and ruff**
+
+Run: `cd backend && uv run pytest -v && uv run ruff check .`
+Expected: all tests pass, ruff clean.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/tasks/router.py backend/app/main.py backend/tests/tasks/test_router.py
+git commit -m "feat(backend): task router (create/list/get/update/complete/cancel)
+
+Refs PLAN 4.2"
+```
+
+---
+
+## After this plan
+
+Update `PROGRESS.md` with a new entry (append, don't replace) summarizing tasks: manager-assigned tasks with due dates/priority, a three-state OPEN/COMPLETED/CANCELLED lifecycle (cancellation as the soft-delete equivalent of PLAN 4.2's "CRUD"), rep/manager visibility split with pagination built in from the start. Tick PLAN.md 4.2 (this completes Phase 4 entirely). Then a final whole-branch review before merge (same as every prior phase), then plan Phase 5 (goals) fresh against the actual code.

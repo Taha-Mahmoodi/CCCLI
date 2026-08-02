@@ -1,0 +1,67 @@
+// tablet/src/offline/flushQueue.ts
+import { ApiError } from '../api/client'
+import { submitPing } from '../api/pings'
+import { checkIn, checkOut } from '../api/visits'
+import { completeTask } from '../api/tasks'
+import { getQueue, removeFromQueue } from './queueStore'
+import type { QueuedAction } from './types'
+
+// 404 (resource genuinely gone) and 409 (a prior attempt already succeeded
+// server-side, e.g. the response was lost after the server committed) are
+// the only failures that mean "stop retrying, this is done or dead."
+// Everything else -- 401/403 (not authenticated *yet*, not "delete this"),
+// 5xx, raw network errors -- is transient and must be retried later. Getting
+// this wrong toward "drop on 401" silently deletes a rep's real check-in the
+// first time the app is relaunched before they log back in.
+function isPermanentFailure(err: unknown): boolean {
+  return err instanceof ApiError && (err.status === 404 || err.status === 409)
+}
+
+async function sendAction(action: QueuedAction): Promise<void> {
+  switch (action.type) {
+    case 'ping':
+      await submitPing(action.payload)
+      return
+    case 'check_in':
+      await checkIn(action.payload)
+      return
+    case 'check_out':
+      await checkOut(action.payload.visitId)
+      return
+    case 'complete_task':
+      await completeTask(action.payload.taskId)
+      return
+    default: {
+      // Exhaustiveness guard: a future QueuedAction variant with no case
+      // here would otherwise fall through, return void without sending
+      // anything, and get removed from the queue as if it had succeeded --
+      // silent data loss with no type error to catch it.
+      const _exhaustive: never = action
+      throw new Error(`flushQueue: unhandled action type ${JSON.stringify(_exhaustive)}`)
+    }
+  }
+}
+
+let isFlushing = false
+
+export async function flushQueue(): Promise<void> {
+  if (isFlushing) return
+  isFlushing = true
+  try {
+    const queue = await getQueue()
+    for (const action of queue) {
+      try {
+        await sendAction(action)
+        await removeFromQueue(action.id)
+      } catch (err) {
+        if (isPermanentFailure(err)) {
+          await removeFromQueue(action.id)
+          continue
+        }
+        return // stop here -- preserve order, retry this and later items next time
+      }
+    }
+  } finally {
+    isFlushing = false
+  }
+}

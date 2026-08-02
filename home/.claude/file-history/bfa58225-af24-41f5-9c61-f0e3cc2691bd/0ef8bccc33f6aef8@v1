@@ -1,0 +1,9 @@
+# SDD Progress — feat/tablet-8b
+
+Plan: docs/superpowers/plans/2026-07-21-tablet-8b-offline-queue-checkin-tasks-goals.md
+
+Task 1: not started — Backend: auto-detect zone at check-in
+Task 2: not started — Offline queue core (types, queueStore, locationStore)
+Task 3: not started — flushQueue, useSyncQueue, wire ping posting through queue
+Task 4: not started — Check-in/out screen
+Task 5: not started — Task list, goal progress, nav shell, App.tsx wiring

@@ -1,0 +1,1082 @@
+# Zones & Geofencing Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Add zones (GeoJSON-polygon territories), zone assignments (rep ↔ zone), and a pure-Python point-in-polygon geofencing utility to Atlas Field Force — PLAN.md Phase 2.
+
+**Architecture:** New `app/zones/` package mirrors the existing `app/auth/` package's anatomy (models/schemas/service/router). Geofencing math lives in `app/core/geo.py` as a dependency-free utility (no PostGIS, no GIS library) so it's reusable by Phase 3's visit check-in logic. Manager-only write access via a new `require_manager` dependency added to the existing `app/auth/deps.py`.
+
+**Tech Stack:** Same as Phase 1 — Python 3.12, FastAPI, SQLAlchemy 2.0 async, Alembic, Pydantic v2, pytest.
+
+## Global Constraints
+
+- `tenant_id` on every table from day one, via the existing `TenantScopedMixin` — per `docs/design.md` Core data model.
+- The global SQLAlchemy tenant filter (`install_tenancy_filter()`) is now correctly wired into `create_app()` (Phase 1 final-review fix) and covers SELECT/UPDATE/DELETE. **Architectural decision for this phase:** all read queries (SELECT) in `app/zones/service.py` rely on this global filter rather than adding redundant explicit `.where(tenant_id == ...)` clauses — the filter is proven live (Phase 1's `test_tenancy_filter_is_live_via_create_app` regression test), and every zone endpoint requires an authenticated user, so `current_tenant_id` is always set by `get_current_user` before any zone query runs. This differs from Phase 1's `auth/service.py`, which explicitly filters by tenant because `register`/`login` run *before* authentication (no `current_tenant_id` yet) — that reasoning doesn't apply here. INSERTs still set `tenant_id` explicitly (unavoidable — nothing infers it for a new row).
+- Zones are GeoJSON polygons stored as a plain JSON column — no PostGIS, no DB-level spatial types. Point-in-polygon is a pure-Python function. Per `docs/design.md` Geofencing section.
+- Service layer owns business rules; routers thin; models logic-free — per `docs/design.md` Stack section.
+- `created_at`/`assigned_at` columns use `DateTime(timezone=True)` in both the model and the migration, matching the fix from Phase 1's final review (naive `DateTime` fed timezone-aware Python values broke on Postgres).
+- Two roles: `rep`, `manager` (from Phase 1's `User.role`). Zone create/list/get and zone-assignment are manager-only for this phase.
+
+---
+
+## File Structure
+
+```
+backend/
+  app/
+    core/
+      geo.py                    # NEW: point_in_polygon(), point_in_geojson_polygon()
+    auth/
+      deps.py                   # MODIFY: add require_manager
+    zones/
+      __init__.py                # NEW
+      models.py                   # NEW: Zone, ZoneAssignment
+      schemas.py                   # NEW: GeoJSONPolygon, ZoneCreate, ZoneOut, ZoneAssignmentCreate, ZoneAssignmentOut
+      service.py                    # NEW: create_zone, list_zones, get_zone, assign_rep_to_zone
+      router.py                      # NEW: POST/GET /api/v1/zones, GET /api/v1/zones/{id}, POST /api/v1/zones/{id}/assignments
+  alembic/versions/
+    <new migration>              # NEW: create zones + zone_assignments tables
+  tests/
+    core/
+      test_geo.py                # NEW
+    auth/
+      test_deps.py                # NEW: require_manager tests
+    zones/
+      __init__.py                  # NEW
+      test_models.py                # NEW
+      test_service.py                # NEW
+      test_router.py                  # NEW
+```
+
+**Interfaces summary (for cross-task consistency):**
+- `app.core.geo.point_in_polygon(point: tuple[float, float], polygon: list[tuple[float, float]]) -> bool` — raw ray-casting check. `point` and each polygon vertex are `(x, y)` pairs.
+- `app.core.geo.point_in_geojson_polygon(point: tuple[float, float], geojson_polygon: dict) -> bool` — takes a GeoJSON `Polygon` geometry dict (`{"type": "Polygon", "coordinates": [[[lng, lat], ...]]}`), extracts the exterior ring (`coordinates[0]`), maps each `[lng, lat]` pair to an `(x, y) = (lng, lat)` tuple, and delegates to `point_in_polygon`. Holes (`coordinates[1:]`) are ignored — out of scope for this phase.
+- `app.auth.deps.require_manager(current_user: User = Depends(get_current_user)) -> User` — raises `HTTPException(403)` if `current_user.role != "manager"`, else returns the user.
+- `app.zones.models.Zone` — `id: Mapped[uuid.UUID]` (PK), `tenant_id` (via mixin), `name: Mapped[str]`, `boundary: Mapped[dict]` (JSON column, a GeoJSON `Polygon` geometry), `created_at: Mapped[datetime]`.
+- `app.zones.models.ZoneAssignment` — `id: Mapped[uuid.UUID]` (PK), `tenant_id` (via mixin), `zone_id: Mapped[uuid.UUID]` (FK → `zones.id`), `rep_id: Mapped[uuid.UUID]` (FK → `users.id`), `assigned_at: Mapped[datetime]`, unique on `(tenant_id, zone_id, rep_id)`.
+- `app.zones.service.create_zone(db, tenant_id, name: str, boundary: dict) -> Zone`
+- `app.zones.service.list_zones(db) -> list[Zone]` (no `tenant_id` param — relies on the global filter, per the Global Constraints decision above)
+- `app.zones.service.get_zone(db, zone_id: uuid.UUID) -> Zone | None`
+- `app.zones.service.assign_rep_to_zone(db, tenant_id, zone_id: uuid.UUID, rep_id: uuid.UUID) -> ZoneAssignment` (raises `ZoneNotFoundError` or `RepNotFoundError` — both plain `Exception` subclasses, matching the `EmailAlreadyRegisteredError` pattern from `auth/service.py`)
+
+---
+
+### Task 1: Point-in-polygon geofencing utility
+
+**Files:**
+- Create: `backend/app/core/geo.py`
+- Test: `backend/tests/core/test_geo.py`
+
+**Interfaces:**
+- Produces: `point_in_polygon(point, polygon) -> bool`, `point_in_geojson_polygon(point, geojson_polygon) -> bool` (signatures above).
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# backend/tests/core/test_geo.py
+from app.core.geo import point_in_geojson_polygon, point_in_polygon
+
+# A 10x10 square: (0,0) -> (10,0) -> (10,10) -> (0,10)
+SQUARE = [(0, 0), (10, 0), (10, 10), (0, 10)]
+
+
+def test_point_clearly_inside_returns_true():
+    assert point_in_polygon((5, 5), SQUARE) is True
+
+
+def test_point_clearly_outside_returns_false():
+    assert point_in_polygon((15, 15), SQUARE) is False
+
+
+def test_point_outside_but_within_bounding_box_returns_false():
+    # (1, 1) is inside the box's bounding rectangle only if the box were
+    # concave; for this convex square it's actually inside — use a point
+    # outside on one axis but within the other's range instead.
+    assert point_in_polygon((-1, 5), SQUARE) is False
+
+
+def test_point_on_bottom_edge_returns_true():
+    # Ray-casting's standard half-open convention: bottom/left boundary
+    # points count as inside, top/right do not. This is the actual,
+    # deterministic behavior of the algorithm below — not an
+    # approximation. Point (5, 0) sits exactly on the bottom edge.
+    assert point_in_polygon((5, 0), SQUARE) is True
+
+
+def test_point_on_vertex_returns_true():
+    # (0, 0) is a vertex of SQUARE; same half-open convention applies.
+    assert point_in_polygon((0, 0), SQUARE) is True
+
+
+def test_point_in_geojson_polygon_extracts_exterior_ring():
+    geojson = {
+        "type": "Polygon",
+        "coordinates": [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]],
+    }
+    # GeoJSON order is [lng, lat] -> (x, y) = (lng, lat)
+    assert point_in_geojson_polygon((5, 5), geojson) is True
+    assert point_in_geojson_polygon((15, 15), geojson) is False
+
+
+def test_point_in_geojson_polygon_ignores_holes():
+    geojson = {
+        "type": "Polygon",
+        "coordinates": [
+            [[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]],  # exterior
+            [[4, 4], [6, 4], [6, 6], [4, 6], [4, 4]],  # hole (ignored)
+        ],
+    }
+    # (5, 5) is inside the hole geometrically, but holes are out of scope
+    # for this phase, so the exterior-ring-only check still returns True.
+    assert point_in_geojson_polygon((5, 5), geojson) is True
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/core/test_geo.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'app.core.geo'`
+
+- [ ] **Step 3: Write `app/core/geo.py`**
+
+```python
+# backend/app/core/geo.py
+def point_in_polygon(point: tuple[float, float], polygon: list[tuple[float, float]]) -> bool:
+    """Ray-casting point-in-polygon test. Uses the standard half-open
+    convention: a point exactly on the bottom or left boundary counts as
+    inside; a point on the top or right boundary does not."""
+    x, y = point
+    n = len(polygon)
+    inside = False
+    j = n - 1
+    for i in range(n):
+        xi, yi = polygon[i]
+        xj, yj = polygon[j]
+        if (yi > y) != (yj > y):
+            x_intersect = (xj - xi) * (y - yi) / (yj - yi) + xi
+            if x < x_intersect:
+                inside = not inside
+        j = i
+    return inside
+
+
+def point_in_geojson_polygon(point: tuple[float, float], geojson_polygon: dict) -> bool:
+    """Checks a point against a GeoJSON Polygon geometry's exterior ring
+    only — interior rings (holes) are ignored (out of scope for this
+    phase)."""
+    exterior_ring = geojson_polygon["coordinates"][0]
+    polygon = [(lng, lat) for lng, lat in exterior_ring]
+    return point_in_polygon(point, polygon)
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/core/test_geo.py -v`
+Expected: all 7 tests `PASSED`.
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/core/geo.py backend/tests/core/test_geo.py
+git commit -m "feat(backend): point-in-polygon geofencing utility
+
+Refs PLAN 2.2"
+```
+
+---
+
+### Task 2: `require_manager` auth dependency
+
+**Files:**
+- Modify: `backend/app/auth/deps.py`
+- Test: `backend/tests/auth/test_deps.py`
+
+**Interfaces:**
+- Consumes: `app.auth.deps.get_current_user`, `app.auth.models.User` (Phase 1).
+- Produces: `require_manager(current_user: User = Depends(get_current_user)) -> User`.
+
+- [ ] **Step 1: Read the current `backend/app/auth/deps.py` in full** before editing, to see the exact existing `get_current_user` implementation and import style — do not guess at its current shape, it was modified during Phase 1's final-review fix round (converted to a yield-dependency with `try/finally`).
+
+- [ ] **Step 2: Write the failing test**
+
+```python
+# backend/tests/auth/test_deps.py
+import uuid
+
+import pytest
+from fastapi import HTTPException
+
+from app.auth.deps import require_manager
+from app.auth.models import User
+
+pytestmark = pytest.mark.asyncio
+
+
+def _make_user(role: str) -> User:
+    return User(
+        id=uuid.uuid4(),
+        tenant_id=uuid.uuid4(),
+        email="x@example.com",
+        hashed_password="irrelevant",
+        role=role,
+    )
+
+
+async def test_require_manager_allows_manager():
+    manager = _make_user("manager")
+    result = await require_manager(current_user=manager)
+    assert result is manager
+
+
+async def test_require_manager_rejects_rep():
+    rep = _make_user("rep")
+    with pytest.raises(HTTPException) as exc_info:
+        await require_manager(current_user=rep)
+    assert exc_info.value.status_code == 403
+```
+
+- [ ] **Step 3: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/auth/test_deps.py -v`
+Expected: FAIL — `ImportError: cannot import name 'require_manager'`
+
+- [ ] **Step 4: Add `require_manager` to `app/auth/deps.py`**
+
+Append this function to the end of the existing `backend/app/auth/deps.py` (keep every existing line — `get_tenant_id`, `get_current_user`, and their imports — untouched; only add the new function and, if not already imported, add `HTTPException`/`status` to the existing `fastapi` import line rather than adding a second import line):
+
+```python
+async def require_manager(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role != "manager":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="manager role required",
+        )
+    return current_user
+```
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/auth/test_deps.py -v`
+Expected: both tests `PASSED`.
+
+- [ ] **Step 6: Run the full suite to confirm no regression**
+
+Run: `cd backend && uv run pytest -v`
+Expected: all previously-passing tests (50 from Phase 1) plus the 2 new ones still pass.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/auth/deps.py backend/tests/auth/test_deps.py
+git commit -m "feat(backend): require_manager auth dependency
+
+Refs PLAN 2.1"
+```
+
+---
+
+### Task 3: Zone & ZoneAssignment models + migration
+
+**Files:**
+- Create: `backend/app/zones/__init__.py`
+- Create: `backend/app/zones/models.py`
+- Test: `backend/tests/zones/__init__.py` (empty)
+- Test: `backend/tests/zones/test_models.py`
+
+**Interfaces:**
+- Consumes: `app.db.Base`, `app.core.tenancy.TenantScopedMixin` (Phase 1), `app.auth.models.User` (Phase 1, for the FK).
+- Produces: `Zone`, `ZoneAssignment` (columns per the plan header's Interfaces summary).
+
+- [ ] **Step 1: Write `backend/app/zones/__init__.py`** (empty)
+
+```python
+# backend/app/zones/__init__.py
+```
+
+- [ ] **Step 2: Write `backend/tests/zones/__init__.py`** (empty)
+
+```python
+# backend/tests/zones/__init__.py
+```
+
+- [ ] **Step 3: Write the failing test**
+
+```python
+# backend/tests/zones/test_models.py
+import uuid
+from datetime import datetime
+
+import pytest
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+
+from app.zones.models import Zone, ZoneAssignment
+
+pytestmark = pytest.mark.asyncio
+
+SQUARE_GEOJSON = {
+    "type": "Polygon",
+    "coordinates": [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]],
+}
+
+
+async def test_create_and_fetch_zone(db_session):
+    tenant_id = uuid.uuid4()
+    zone = Zone(id=uuid.uuid4(), tenant_id=tenant_id, name="Downtown", boundary=SQUARE_GEOJSON)
+    db_session.add(zone)
+    await db_session.commit()
+
+    result = await db_session.execute(select(Zone).where(Zone.name == "Downtown"))
+    fetched = result.scalar_one()
+
+    assert fetched.tenant_id == tenant_id
+    assert fetched.boundary == SQUARE_GEOJSON
+    assert isinstance(fetched.created_at, datetime)
+    assert fetched.created_at.tzinfo is not None
+
+
+async def test_create_and_fetch_zone_assignment(db_session):
+    tenant_id = uuid.uuid4()
+    zone = Zone(id=uuid.uuid4(), tenant_id=tenant_id, name="Downtown", boundary=SQUARE_GEOJSON)
+    db_session.add(zone)
+    await db_session.flush()
+
+    from app.auth.models import User
+
+    rep = User(
+        id=uuid.uuid4(), tenant_id=tenant_id, email="rep@example.com",
+        hashed_password="irrelevant", role="rep",
+    )
+    db_session.add(rep)
+    await db_session.flush()
+
+    assignment = ZoneAssignment(id=uuid.uuid4(), tenant_id=tenant_id, zone_id=zone.id, rep_id=rep.id)
+    db_session.add(assignment)
+    await db_session.commit()
+
+    result = await db_session.execute(select(ZoneAssignment).where(ZoneAssignment.rep_id == rep.id))
+    fetched = result.scalar_one()
+
+    assert fetched.zone_id == zone.id
+    assert isinstance(fetched.assigned_at, datetime)
+
+
+async def test_duplicate_zone_assignment_rejected(db_session):
+    tenant_id = uuid.uuid4()
+    zone = Zone(id=uuid.uuid4(), tenant_id=tenant_id, name="Downtown", boundary=SQUARE_GEOJSON)
+    db_session.add(zone)
+    await db_session.flush()
+
+    from app.auth.models import User
+
+    rep = User(
+        id=uuid.uuid4(), tenant_id=tenant_id, email="rep2@example.com",
+        hashed_password="irrelevant", role="rep",
+    )
+    db_session.add(rep)
+    await db_session.flush()
+
+    db_session.add(ZoneAssignment(id=uuid.uuid4(), tenant_id=tenant_id, zone_id=zone.id, rep_id=rep.id))
+    await db_session.commit()
+
+    db_session.add(ZoneAssignment(id=uuid.uuid4(), tenant_id=tenant_id, zone_id=zone.id, rep_id=rep.id))
+    with pytest.raises(IntegrityError):
+        await db_session.commit()
+```
+
+- [ ] **Step 4: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/zones/test_models.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'app.zones.models'`
+
+- [ ] **Step 5: Write `app/zones/models.py`**
+
+```python
+# backend/app/zones/models.py
+import uuid
+from datetime import datetime, timezone
+
+from sqlalchemy import JSON, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.core.tenancy import TenantScopedMixin
+from app.db import Base
+
+
+class Zone(Base, TenantScopedMixin):
+    __tablename__ = "zones"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(nullable=False)
+    boundary: Mapped[dict] = mapped_column(JSON, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class ZoneAssignment(Base, TenantScopedMixin):
+    __tablename__ = "zone_assignments"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "zone_id", "rep_id", name="uq_zone_assignments_tenant_zone_rep"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    zone_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("zones.id"), nullable=False, index=True)
+    rep_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+```
+
+- [ ] **Step 6: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/zones/test_models.py -v`
+Expected: all 3 tests `PASSED`.
+
+- [ ] **Step 7: Register the new models with Alembic**
+
+Edit `backend/alembic/env.py` — find the existing `from app.auth.models import User  # noqa: E402, F401` line (added in Phase 1 Task 4) and add a new import line directly below it:
+
+```python
+from app.zones.models import Zone, ZoneAssignment  # noqa: E402, F401
+```
+
+- [ ] **Step 8: Generate the migration**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/backend
+uv run alembic revision --autogenerate -m "create zones and zone_assignments tables"
+```
+
+Expected: a new file under `alembic/versions/` with `op.create_table("zones", ...)` and `op.create_table("zone_assignments", ...)`, both using `sa.Uuid()` for id/tenant_id/zone_id/rep_id columns (NOT `sa.String()` or a raw UUID type — matches Phase 1's `User` table pattern), `sa.JSON()` for `boundary`, `sa.DateTime(timezone=True)` for `created_at`/`assigned_at`, and the `uq_zone_assignments_tenant_zone_rep` unique constraint. If autogenerate produces `sa.DateTime()` without `timezone=True`, manually edit the generated file to add `timezone=True` to both — this is exactly the mistake Phase 1's final review caught and fixed; don't reintroduce it.
+
+- [ ] **Step 9: Verify the migration applies cleanly**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/backend
+DATABASE_URL="sqlite+aiosqlite:///./alembic_check.db" uv run alembic upgrade head
+rm -f alembic_check.db
+```
+
+Expected: no errors.
+
+- [ ] **Step 10: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/
+git commit -m "feat(backend): Zone + ZoneAssignment models, Alembic migration
+
+Refs PLAN 2.1"
+```
+
+---
+
+### Task 4: Zone schemas + read/create service
+
+**Files:**
+- Create: `backend/app/zones/schemas.py`
+- Create: `backend/app/zones/service.py`
+- Test: `backend/tests/zones/test_service.py`
+
+**Interfaces:**
+- Consumes: `app.zones.models.Zone` (Task 3).
+- Produces: `app.zones.schemas.GeoJSONPolygon`, `ZoneCreate`, `ZoneOut`. `app.zones.service.create_zone(db, tenant_id, name, boundary) -> Zone`, `list_zones(db) -> list[Zone]`, `get_zone(db, zone_id) -> Zone | None`.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# backend/tests/zones/test_service.py
+import uuid
+
+import pytest
+
+from app.core.tenancy import current_tenant_id, install_tenancy_filter
+from app.zones.service import create_zone, get_zone, list_zones
+
+pytestmark = pytest.mark.asyncio
+
+SQUARE_GEOJSON = {
+    "type": "Polygon",
+    "coordinates": [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]],
+}
+
+
+async def test_create_zone_persists_name_and_boundary(db_session):
+    tenant_id = uuid.uuid4()
+    zone = await create_zone(db_session, tenant_id=tenant_id, name="Downtown", boundary=SQUARE_GEOJSON)
+    assert zone.name == "Downtown"
+    assert zone.boundary == SQUARE_GEOJSON
+    assert zone.tenant_id == tenant_id
+
+
+async def test_list_zones_only_returns_current_tenant_via_global_filter(db_session):
+    install_tenancy_filter()
+    tenant_a = uuid.uuid4()
+    tenant_b = uuid.uuid4()
+    await create_zone(db_session, tenant_id=tenant_a, name="A-Zone", boundary=SQUARE_GEOJSON)
+    await create_zone(db_session, tenant_id=tenant_b, name="B-Zone", boundary=SQUARE_GEOJSON)
+
+    token = current_tenant_id.set(tenant_a)
+    try:
+        zones = await list_zones(db_session)
+    finally:
+        current_tenant_id.reset(token)
+
+    assert [z.name for z in zones] == ["A-Zone"]
+
+
+async def test_get_zone_returns_zone_by_id(db_session):
+    tenant_id = uuid.uuid4()
+    created = await create_zone(db_session, tenant_id=tenant_id, name="Downtown", boundary=SQUARE_GEOJSON)
+
+    fetched = await get_zone(db_session, created.id)
+
+    assert fetched is not None
+    assert fetched.id == created.id
+
+
+async def test_get_zone_returns_none_for_unknown_id(db_session):
+    fetched = await get_zone(db_session, uuid.uuid4())
+    assert fetched is None
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/zones/test_service.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'app.zones.service'`
+
+- [ ] **Step 3: Write `app/zones/schemas.py`**
+
+```python
+# backend/app/zones/schemas.py
+import uuid
+from typing import Literal
+
+from pydantic import BaseModel
+
+
+class GeoJSONPolygon(BaseModel):
+    type: Literal["Polygon"] = "Polygon"
+    coordinates: list[list[list[float]]]
+
+
+class ZoneCreate(BaseModel):
+    name: str
+    boundary: GeoJSONPolygon
+
+
+class ZoneOut(BaseModel):
+    id: uuid.UUID
+    name: str
+    boundary: GeoJSONPolygon
+
+    model_config = {"from_attributes": True}
+```
+
+- [ ] **Step 4: Write `app/zones/service.py`**
+
+```python
+# backend/app/zones/service.py
+import uuid
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.zones.models import Zone
+
+
+async def create_zone(db: AsyncSession, tenant_id: uuid.UUID, name: str, boundary: dict) -> Zone:
+    zone = Zone(id=uuid.uuid4(), tenant_id=tenant_id, name=name, boundary=boundary)
+    db.add(zone)
+    await db.commit()
+    await db.refresh(zone)
+    return zone
+
+
+async def list_zones(db: AsyncSession) -> list[Zone]:
+    result = await db.execute(select(Zone))
+    return list(result.scalars().all())
+
+
+async def get_zone(db: AsyncSession, zone_id: uuid.UUID) -> Zone | None:
+    result = await db.execute(select(Zone).where(Zone.id == zone_id))
+    return result.scalar_one_or_none()
+```
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/zones/test_service.py -v`
+Expected: all 4 tests `PASSED`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/zones/schemas.py backend/app/zones/service.py backend/tests/zones/test_service.py
+git commit -m "feat(backend): zone create/list/get service + schemas
+
+Refs PLAN 2.1"
+```
+
+---
+
+### Task 5: Zone assignment service
+
+**Files:**
+- Modify: `backend/app/zones/schemas.py` (add `ZoneAssignmentCreate`, `ZoneAssignmentOut`)
+- Modify: `backend/app/zones/service.py` (add `assign_rep_to_zone`, `ZoneNotFoundError`, `RepNotFoundError`)
+- Modify: `backend/tests/zones/test_service.py` (append tests — do not replace the file, add to it)
+
+**Interfaces:**
+- Consumes: `app.zones.models.Zone`, `ZoneAssignment` (Task 3), `app.auth.models.User` (Phase 1).
+- Produces: `app.zones.service.assign_rep_to_zone(db, tenant_id, zone_id, rep_id) -> ZoneAssignment`, `ZoneNotFoundError`, `RepNotFoundError` (both plain `Exception` subclasses). `app.zones.schemas.ZoneAssignmentCreate` (`rep_id: uuid.UUID`), `ZoneAssignmentOut` (`id`, `zone_id`, `rep_id`).
+
+- [ ] **Step 1: Append the failing tests to `backend/tests/zones/test_service.py`**
+
+Add these imports at the top of the existing file (merge with the existing `import` lines, don't duplicate):
+
+```python
+from app.auth.models import User
+from app.zones.service import RepNotFoundError, ZoneNotFoundError, assign_rep_to_zone
+```
+
+Append these test functions to the end of the file:
+
+```python
+async def test_assign_rep_to_zone_creates_assignment(db_session):
+    tenant_id = uuid.uuid4()
+    zone = await create_zone(db_session, tenant_id=tenant_id, name="Downtown", boundary=SQUARE_GEOJSON)
+    rep = User(
+        id=uuid.uuid4(), tenant_id=tenant_id, email="rep@example.com",
+        hashed_password="irrelevant", role="rep",
+    )
+    db_session.add(rep)
+    await db_session.commit()
+
+    assignment = await assign_rep_to_zone(db_session, tenant_id=tenant_id, zone_id=zone.id, rep_id=rep.id)
+
+    assert assignment.zone_id == zone.id
+    assert assignment.rep_id == rep.id
+
+
+async def test_assign_rep_to_unknown_zone_raises(db_session):
+    with pytest.raises(ZoneNotFoundError):
+        await assign_rep_to_zone(
+            db_session, tenant_id=uuid.uuid4(), zone_id=uuid.uuid4(), rep_id=uuid.uuid4()
+        )
+
+
+async def test_assign_unknown_rep_to_zone_raises(db_session):
+    tenant_id = uuid.uuid4()
+    zone = await create_zone(db_session, tenant_id=tenant_id, name="Downtown", boundary=SQUARE_GEOJSON)
+
+    with pytest.raises(RepNotFoundError):
+        await assign_rep_to_zone(db_session, tenant_id=tenant_id, zone_id=zone.id, rep_id=uuid.uuid4())
+
+
+async def test_assign_manager_to_zone_raises_rep_not_found(db_session):
+    # A manager account exists, but assign_rep_to_zone only accepts role="rep".
+    tenant_id = uuid.uuid4()
+    zone = await create_zone(db_session, tenant_id=tenant_id, name="Downtown", boundary=SQUARE_GEOJSON)
+    manager = User(
+        id=uuid.uuid4(), tenant_id=tenant_id, email="mgr@example.com",
+        hashed_password="irrelevant", role="manager",
+    )
+    db_session.add(manager)
+    await db_session.commit()
+
+    with pytest.raises(RepNotFoundError):
+        await assign_rep_to_zone(db_session, tenant_id=tenant_id, zone_id=zone.id, rep_id=manager.id)
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/zones/test_service.py -v`
+Expected: FAIL — `ImportError: cannot import name 'assign_rep_to_zone'`
+
+- [ ] **Step 3: Add `ZoneAssignmentCreate`/`ZoneAssignmentOut` to `app/zones/schemas.py`**
+
+Append to the existing file:
+
+```python
+class ZoneAssignmentCreate(BaseModel):
+    rep_id: uuid.UUID
+
+
+class ZoneAssignmentOut(BaseModel):
+    id: uuid.UUID
+    zone_id: uuid.UUID
+    rep_id: uuid.UUID
+
+    model_config = {"from_attributes": True}
+```
+
+- [ ] **Step 4: Add `assign_rep_to_zone` and the two exceptions to `app/zones/service.py`**
+
+Add these imports to the top of the existing file (merge with existing imports):
+
+```python
+from app.auth.models import User
+from app.zones.models import ZoneAssignment
+```
+
+Append to the end of the file:
+
+```python
+class ZoneNotFoundError(Exception):
+    pass
+
+
+class RepNotFoundError(Exception):
+    pass
+
+
+async def assign_rep_to_zone(
+    db: AsyncSession, tenant_id: uuid.UUID, zone_id: uuid.UUID, rep_id: uuid.UUID
+) -> ZoneAssignment:
+    zone = await get_zone(db, zone_id)
+    if zone is None:
+        raise ZoneNotFoundError(zone_id)
+
+    rep_result = await db.execute(select(User).where(User.id == rep_id, User.role == "rep"))
+    rep = rep_result.scalar_one_or_none()
+    if rep is None:
+        raise RepNotFoundError(rep_id)
+
+    assignment = ZoneAssignment(id=uuid.uuid4(), tenant_id=tenant_id, zone_id=zone_id, rep_id=rep_id)
+    db.add(assignment)
+    await db.commit()
+    await db.refresh(assignment)
+    return assignment
+```
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/zones/test_service.py -v`
+Expected: all 8 tests (4 from Task 4 + 4 new) `PASSED`.
+
+- [ ] **Step 6: Run the full suite**
+
+Run: `cd backend && uv run pytest -v`
+Expected: all tests pass, no regressions.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/zones/schemas.py backend/app/zones/service.py backend/tests/zones/test_service.py
+git commit -m "feat(backend): zone assignment service (assign rep to zone)
+
+Refs PLAN 2.1"
+```
+
+---
+
+### Task 6: Zone router
+
+**Files:**
+- Create: `backend/app/zones/router.py`
+- Modify: `backend/app/main.py` (mount the router)
+- Test: `backend/tests/zones/test_router.py`
+
+**Interfaces:**
+- Consumes: `app.zones.service.*`, `app.zones.schemas.*` (Tasks 4-5), `app.auth.deps.require_manager`, `get_current_user` (Task 2, Phase 1).
+- Produces: `POST /api/v1/zones` → 201 `ZoneOut` (manager only), `GET /api/v1/zones` → 200 `list[ZoneOut]` (manager only), `GET /api/v1/zones/{zone_id}` → 200 `ZoneOut` | 404 (manager only), `POST /api/v1/zones/{zone_id}/assignments` → 201 `ZoneAssignmentOut` | 404 (manager only).
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# backend/tests/zones/test_router.py
+import uuid
+
+import pytest
+
+pytestmark = pytest.mark.asyncio
+
+TENANT_HEADER = "X-Tenant-Id"
+
+SQUARE_GEOJSON = {
+    "type": "Polygon",
+    "coordinates": [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]],
+}
+
+
+async def _register(client, tenant_id, email, role):
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": "hunter2pass", "role": role},
+        headers={TENANT_HEADER: tenant_id},
+    )
+    return response.json()["access_token"]
+
+
+async def test_manager_can_create_zone(client):
+    tenant_id = str(uuid.uuid4())
+    token = await _register(client, tenant_id, "mgr@example.com", "manager")
+
+    response = await client.post(
+        "/api/v1/zones",
+        json={"name": "Downtown", "boundary": SQUARE_GEOJSON},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["name"] == "Downtown"
+    assert body["boundary"]["type"] == "Polygon"
+
+
+async def test_rep_cannot_create_zone(client):
+    tenant_id = str(uuid.uuid4())
+    token = await _register(client, tenant_id, "rep@example.com", "rep")
+
+    response = await client.post(
+        "/api/v1/zones",
+        json={"name": "Downtown", "boundary": SQUARE_GEOJSON},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 403
+
+
+async def test_manager_can_list_zones(client):
+    tenant_id = str(uuid.uuid4())
+    token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    await client.post(
+        "/api/v1/zones",
+        json={"name": "Downtown", "boundary": SQUARE_GEOJSON},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    response = await client.get("/api/v1/zones", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    assert response.json()[0]["name"] == "Downtown"
+
+
+async def test_list_zones_only_shows_own_tenant(client):
+    tenant_a = str(uuid.uuid4())
+    tenant_b = str(uuid.uuid4())
+    token_a = await _register(client, tenant_a, "mgr-a@example.com", "manager")
+    token_b = await _register(client, tenant_b, "mgr-b@example.com", "manager")
+
+    await client.post(
+        "/api/v1/zones",
+        json={"name": "A-Zone", "boundary": SQUARE_GEOJSON},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    await client.post(
+        "/api/v1/zones",
+        json={"name": "B-Zone", "boundary": SQUARE_GEOJSON},
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+
+    response = await client.get("/api/v1/zones", headers={"Authorization": f"Bearer {token_a}"})
+
+    assert response.status_code == 200
+    names = [z["name"] for z in response.json()]
+    assert names == ["A-Zone"]
+
+
+async def test_get_zone_by_id(client):
+    tenant_id = str(uuid.uuid4())
+    token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    create_response = await client.post(
+        "/api/v1/zones",
+        json={"name": "Downtown", "boundary": SQUARE_GEOJSON},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    zone_id = create_response.json()["id"]
+
+    response = await client.get(f"/api/v1/zones/{zone_id}", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    assert response.json()["id"] == zone_id
+
+
+async def test_get_unknown_zone_returns_404(client):
+    tenant_id = str(uuid.uuid4())
+    token = await _register(client, tenant_id, "mgr@example.com", "manager")
+
+    response = await client.get(
+        f"/api/v1/zones/{uuid.uuid4()}", headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 404
+
+
+async def test_manager_can_assign_rep_to_zone(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    rep_token = await _register(client, tenant_id, "rep@example.com", "rep")
+
+    me_response = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {rep_token}"})
+    rep_id = me_response.json()["id"]
+
+    create_response = await client.post(
+        "/api/v1/zones",
+        json={"name": "Downtown", "boundary": SQUARE_GEOJSON},
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+    zone_id = create_response.json()["id"]
+
+    response = await client.post(
+        f"/api/v1/zones/{zone_id}/assignments",
+        json={"rep_id": rep_id},
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["zone_id"] == zone_id
+    assert response.json()["rep_id"] == rep_id
+
+
+async def test_assign_to_unknown_zone_returns_404(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    rep_token = await _register(client, tenant_id, "rep@example.com", "rep")
+    me_response = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {rep_token}"})
+    rep_id = me_response.json()["id"]
+
+    response = await client.post(
+        f"/api/v1/zones/{uuid.uuid4()}/assignments",
+        json={"rep_id": rep_id},
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+
+    assert response.status_code == 404
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/zones/test_router.py -v`
+Expected: FAIL — `404` on `/api/v1/zones` (router not mounted) or `ModuleNotFoundError` for `app.zones.router`.
+
+- [ ] **Step 3: Write `app/zones/router.py`**
+
+```python
+# backend/app/zones/router.py
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth.deps import require_manager
+from app.auth.models import User
+from app.db import get_db
+from app.zones.schemas import (
+    ZoneAssignmentCreate,
+    ZoneAssignmentOut,
+    ZoneCreate,
+    ZoneOut,
+)
+from app.zones.service import (
+    RepNotFoundError,
+    ZoneNotFoundError,
+    assign_rep_to_zone,
+    create_zone,
+    get_zone,
+    list_zones,
+)
+
+router = APIRouter(prefix="/api/v1/zones", tags=["zones"])
+
+
+@router.post("", response_model=ZoneOut, status_code=status.HTTP_201_CREATED)
+async def create_zone_endpoint(
+    body: ZoneCreate,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+) -> ZoneOut:
+    zone = await create_zone(
+        db, tenant_id=current_user.tenant_id, name=body.name, boundary=body.boundary.model_dump()
+    )
+    return zone
+
+
+@router.get("", response_model=list[ZoneOut])
+async def list_zones_endpoint(
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+) -> list[ZoneOut]:
+    return await list_zones(db)
+
+
+@router.get("/{zone_id}", response_model=ZoneOut)
+async def get_zone_endpoint(
+    zone_id: uuid.UUID,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+) -> ZoneOut:
+    zone = await get_zone(db, zone_id)
+    if zone is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="zone not found")
+    return zone
+
+
+@router.post("/{zone_id}/assignments", response_model=ZoneAssignmentOut, status_code=status.HTTP_201_CREATED)
+async def assign_rep_to_zone_endpoint(
+    zone_id: uuid.UUID,
+    body: ZoneAssignmentCreate,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+) -> ZoneAssignmentOut:
+    try:
+        return await assign_rep_to_zone(
+            db, tenant_id=current_user.tenant_id, zone_id=zone_id, rep_id=body.rep_id
+        )
+    except ZoneNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="zone not found") from exc
+    except RepNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="rep not found") from exc
+```
+
+- [ ] **Step 4: Mount the router in `app/main.py`**
+
+Read the current `backend/app/main.py` first (it was last touched in Phase 1's final-review fix, which added the `install_tenancy_filter()` call — do not remove or reorder that). Add the import and `include_router` call following the exact pattern already used for `auth_router`:
+
+```python
+from app.zones.router import router as zones_router
+```
+
+(add alongside the existing `from app.auth.router import router as auth_router` line)
+
+```python
+app.include_router(zones_router)
+```
+
+(add alongside the existing `app.include_router(auth_router)` line)
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/zones/test_router.py -v`
+Expected: all 9 tests `PASSED`.
+
+- [ ] **Step 6: Run the full suite**
+
+Run: `cd backend && uv run pytest -v`
+Expected: all tests pass (Phase 1's 50 + Task 1's 7 + Task 2's 2 + Task 3's 3 + Task 4's 4 + Task 5's 4 + Task 6's 9 = 79), no regressions.
+
+- [ ] **Step 7: Run ruff**
+
+Run: `cd backend && uv run ruff check .`
+Expected: clean.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/zones/router.py backend/app/main.py backend/tests/zones/test_router.py
+git commit -m "feat(backend): zone router (create/list/get + assign rep)
+
+Refs PLAN 2.1"
+```
+
+---
+
+## After this plan
+
+Update `PROGRESS.md` with a new entry (append, don't replace) summarizing Phase 2: zones (GeoJSON polygon storage), zone assignments, point-in-polygon geofencing utility (reusable for Phase 3's visit check-in), manager-only zone CRUD + assignment endpoints. Tick PLAN.md 2.1 and 2.2. Then a final whole-branch review before merge (same as Phase 1), then plan Phase 3 (location pings) fresh against the actual code.

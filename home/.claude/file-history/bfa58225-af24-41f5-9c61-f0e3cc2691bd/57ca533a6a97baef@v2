@@ -1,0 +1,87 @@
+### Task 6: Wire the retention job into `job_runner` + FastAPI lifespan
+
+**Files:**
+- Modify: `backend/app/main.py`
+- Test: `backend/tests/test_main.py`
+
+**Interfaces:**
+- Consumes: `app.core.jobs.job_runner` (Phase 1, currently unused — this is its first real consumer), `app.pings.service.prune_old_pings` (Task 3).
+- Produces: `create_app()` registers a `"prune_old_pings"` job with `job_runner` synchronously (safe at import time — `JobRunner.register` only populates a dict, no event loop needed); a new `lifespan` context manager starts periodic pruning on app startup and calls `job_runner.stop_all()` on shutdown (needs a running event loop — this is why it's in `lifespan`, not in `create_app()` directly).
+
+- [ ] **Step 1: Read `backend/app/main.py` and `backend/app/core/jobs.py` in full** before editing. `main.py` currently has no `lifespan` parameter on its `FastAPI(...)` call — you're adding one for the first time. `jobs.py`'s `JobRunner.register(name, func)` takes a zero-argument `Callable[[], Awaitable[None]]`; `start_periodic(name, interval_seconds)` schedules it; `stop_all()` cancels and awaits every scheduled task.
+
+- [ ] **Step 2: Write the failing test**
+
+```python
+# backend/tests/test_main.py
+from app.core.jobs import job_runner
+from app.main import create_app
+
+
+def test_create_app_registers_the_retention_job():
+    create_app()
+    assert "prune_old_pings" in job_runner._jobs
+```
+
+- [ ] **Step 3: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/test_main.py -v`
+Expected: FAIL — `AssertionError` (job not registered yet).
+
+- [ ] **Step 4: Add the retention job wiring to `app/main.py`**
+
+Add these imports (merge with existing ones — don't duplicate `FastAPI` or anything already imported):
+
+```python
+from contextlib import asynccontextmanager
+
+from app.core.jobs import job_runner
+from app.db import async_session_maker
+from app.pings.service import prune_old_pings
+
+RETENTION_JOB_INTERVAL_SECONDS = 24 * 60 * 60  # once a day
+
+
+async def _run_prune_old_pings_job() -> None:
+    async with async_session_maker() as db:
+        await prune_old_pings(db)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    job_runner.start_periodic("prune_old_pings", interval_seconds=RETENTION_JOB_INTERVAL_SECONDS)
+    yield
+    await job_runner.stop_all()
+```
+
+In `create_app()`, add the registration call right after the `FastAPI(...)` instantiation (before the router mounts), and pass `lifespan=lifespan` to the `FastAPI(...)` constructor call:
+
+```python
+def create_app() -> FastAPI:
+    app = FastAPI(title="Atlas Field Force", version="0.1.0", lifespan=lifespan)
+    install_tenancy_filter()
+    job_runner.register("prune_old_pings", _run_prune_old_pings_job)
+    ...
+```
+
+(Keep every existing line — `install_tenancy_filter()`, the `/health` route, all three `include_router` calls — exactly where they are; only add the `lifespan=lifespan` argument and the `job_runner.register(...)` line.)
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/test_main.py -v`
+Expected: `PASSED`.
+
+- [ ] **Step 6: Run the full suite and ruff**
+
+Run: `cd backend && uv run pytest -v && uv run ruff check .`
+Expected: all tests pass (baseline before this task + 1 new), ruff clean. Note: `create_app()` is called multiple times across the test suite (once per test via the `app` fixture) — `job_runner.register()` on the same name is idempotent-safe (it just overwrites the dict entry, per `JobRunner`'s Phase-1 implementation), so this should not cause failures, but if you see unexpected behavior from repeated registration across tests, report it rather than working around it silently.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/main.py backend/tests/test_main.py
+git commit -m "feat(backend): wire retention job into job_runner + app lifespan
+
+Refs PLAN 3.2"
+```

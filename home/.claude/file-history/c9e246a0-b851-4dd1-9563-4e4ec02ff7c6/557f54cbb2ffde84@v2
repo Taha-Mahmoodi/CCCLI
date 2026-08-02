@@ -1,0 +1,22 @@
+"use client";
+
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { markAllNotificationsRead } from "@/actions/notifications";
+
+// On visiting the notifications page, clear unread state and refresh so the
+// nav badge disappears. No visible output.
+export function NotificationsSeen({ hasUnread }: { hasUnread: boolean }) {
+  const router = useRouter();
+  useEffect(() => {
+    if (!hasUnread) return;
+    let active = true;
+    void markAllNotificationsRead().then(() => {
+      if (active) router.refresh();
+    });
+    return () => {
+      active = false;
+    };
+  }, [hasUnread, router]);
+  return null;
+}

@@ -1,0 +1,11 @@
+packages:
+  - apps/*
+  - services/*
+  - packages/*
+
+# Build scripts we explicitly trust (pnpm blocks all by default).
+# sharp: next/image optimization. unrs-resolver: eslint import resolution.
+allowBuilds:
+  esbuild: true
+  sharp: true
+  unrs-resolver: true

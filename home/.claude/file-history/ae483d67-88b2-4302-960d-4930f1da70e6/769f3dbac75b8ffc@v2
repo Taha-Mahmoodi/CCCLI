@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Third Eye World">
+  <rect width="512" height="512" fill="#0a0a0a"/>
+  <path d="M136 256 C192 192 320 192 376 256 C320 320 192 320 136 256 Z" fill="none" stroke="#fafafa" stroke-width="20" stroke-linejoin="round"/>
+  <circle cx="256" cy="256" r="44" fill="#fafafa"/>
+  <circle cx="256" cy="256" r="18" fill="#0a0a0a"/>
+</svg>

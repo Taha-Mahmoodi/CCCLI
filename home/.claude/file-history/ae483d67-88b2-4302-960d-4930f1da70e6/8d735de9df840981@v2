@@ -1,0 +1,78 @@
+#if os(iOS)
+import AVFoundation
+import Foundation
+import MediaPlayer
+
+/// Real iOS audio: recording + gapless playback + the lock-screen/headphone
+/// transport route. Compiles under Xcode/iOS SDK. VoiceOver ducks automatically
+/// for spoken audio, so we do NOT implement our own ducking (spec §6.4); mode
+/// `.spokenAudio` makes the system pause over memos rather than talk on top.
+public final class IosAudioService: NSObject, AudioService {
+  private var recorder: AVAudioRecorder?
+  private var player: AVAudioPlayer?
+  private var recordingURL: URL?
+  private var recordingStart: Date?
+
+  public override init() { super.init() }
+
+  public func configureSession() {
+    let session = AVAudioSession.sharedInstance()
+    // .playAndRecord while we may record; .spokenAudio so the system treats
+    // memos as speech and prefers pausing over ducking (§6.4).
+    try? session.setCategory(.playAndRecord, mode: .spokenAudio, options: [.defaultToSpeaker, .allowBluetooth])
+    try? session.setActive(true)
+  }
+
+  public func startRecording() throws {
+    let url = FileManager.default.temporaryDirectory
+      .appendingPathComponent(UUID().uuidString).appendingPathExtension("m4a")
+    let settings: [String: Any] = [
+      AVFormatIDKey: kAudioFormatMPEG4AAC,
+      AVSampleRateKey: 24_000,        // spoken voice — small + intelligible (§8.1)
+      AVNumberOfChannelsKey: 1,
+      AVEncoderAudioQualityKey: AVAudioQuality.medium.rawValue,
+    ]
+    let rec = try AVAudioRecorder(url: url, settings: settings)
+    rec.record()
+    recorder = rec
+    recordingURL = url
+    recordingStart = Date()
+  }
+
+  public func stopRecording() throws -> (url: URL, durationMs: Int) {
+    recorder?.stop()
+    let ms = Int((recordingStart.map { Date().timeIntervalSince($0) } ?? 0) * 1000)
+    defer { recorder = nil; recordingStart = nil }
+    guard let url = recordingURL else { throw NSError(domain: "tew.audio", code: 1) }
+    return (url, ms)
+  }
+
+  public func play(url: URL, rate: Double) {
+    let p = try? AVAudioPlayer(contentsOf: url)
+    p?.enableRate = true
+    p?.rate = Float(rate)
+    p?.play()
+    player = p
+  }
+
+  public func pause() { player?.pause() }
+
+  public func setRate(_ rate: Double) { player?.rate = Float(rate) }
+
+  public func bindRemoteCommands(play: @escaping () -> Void, pause: @escaping () -> Void,
+                                 next: @escaping () -> Void, previous: @escaping () -> Void) {
+    let center = MPRemoteCommandCenter.shared()
+    center.playCommand.addTarget { _ in play(); return .success }
+    center.pauseCommand.addTarget { _ in pause(); return .success }
+    center.nextTrackCommand.addTarget { _ in next(); return .success }
+    center.previousTrackCommand.addTarget { _ in previous(); return .success }
+  }
+
+  public func setNowPlaying(title: String) {
+    MPNowPlayingInfoCenter.default().nowPlayingInfo = [
+      MPMediaItemPropertyTitle: title,
+      MPMediaItemPropertyArtist: "Third Eye World",
+    ]
+  }
+}
+#endif

@@ -1,0 +1,8 @@
+Include /Users/taha/.colima/ssh_config
+
+
+Host lucifers-vps
+    HostName 147.93.138.77
+    User root
+    IdentityFile ~/.ssh/claude-code
+    IdentitiesOnly yes

@@ -1,0 +1,59 @@
+import re, os
+
+BASE = '/private/tmp/claude-501/-Users-taha/51b90afe-944f-4f8c-a234-21ade39239a8/scratchpad'
+OUT = f'{BASE}/assets/badges'
+os.makedirs(OUT, exist_ok=True)
+
+def extract_path(svg_file):
+    with open(svg_file) as f:
+        svg = f.read()
+    m = re.search(r'<path\s+d="([^"]+)"', svg)
+    return m.group(1) if m else None
+
+# (file, label, bg, fg, logo_slug or None for powershell special)
+TECH = [
+    ('typescript', 'TypeScript', '#3178C6', '#ffffff', 'typescript'),
+    ('javascript', 'JavaScript', '#F7DF1E', '#1a1a1a', 'javascript'),
+    ('python',     'Python',     '#3776AB', '#ffffff', 'python'),
+    ('php',        'PHP',        '#777BB4', '#ffffff', 'php'),
+    ('powershell', 'PowerShell', '#2671BE', '#ffffff', None),
+    ('nodejs',     'Node.js',    '#5FA04E', '#ffffff', 'nodejs'),
+    ('react',      'React',      '#61DAFB', '#1a1a1a', 'react'),
+    ('electron',   'Electron',   '#47848F', '#ffffff', 'electron'),
+    ('fastify',    'Fastify',    '#1a1a1a', '#ffffff', 'fastify'),
+    ('postgresql', 'PostgreSQL', '#4169E1', '#ffffff', 'postgresql'),
+    ('threejs',    'Three.js',   '#1a1a1a', '#ffffff', 'threejs'),
+]
+
+H = 30
+FS = 12.5
+CW = 7.5
+PAD_L = 8
+LOGO = 15
+GAP = 7
+PAD_R = 12
+FONT = 'SFMono-Regular, Menlo, Consolas, monospace'
+
+def badge(fname, label, bg, fg, slug):
+    text_x = PAD_L + LOGO + GAP
+    W = round(text_x + len(label) * CW + PAD_R)
+    ty = H / 2 + FS * 0.35
+    ly = (H - LOGO) / 2
+    p = [f'<svg width="{W}" height="{H}" viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg">']
+    p.append(f'<rect width="{W}" height="{H}" rx="7" fill="{bg}"/>')
+    if slug:
+        d = extract_path(f'{BASE}/logos/tech/{slug}.svg')
+        s = LOGO / 24
+        p.append(f'<g transform="translate({PAD_L},{ly}) scale({s:.4f})"><path d="{d}" fill="{fg}"/></g>')
+    else:
+        # PowerShell: draw a >_ prompt mark
+        p.append(f'<text x="{PAD_L + LOGO/2}" y="{H/2 + 4.5}" text-anchor="middle" font-family="{FONT}" font-size="14" font-weight="700" fill="{fg}">&gt;_</text>')
+    p.append(f'<text x="{text_x}" y="{ty:.1f}" font-family="{FONT}" font-size="{FS}" font-weight="600" fill="{fg}">{label}</text>')
+    p.append('</svg>')
+    with open(f'{OUT}/tech-{fname}.svg', 'w') as f:
+        f.write('\n'.join(p))
+    print(f'tech-{fname}.svg  W={W}')
+
+for fname, label, bg, fg, slug in TECH:
+    badge(fname, label, bg, fg, slug)
+print('done')

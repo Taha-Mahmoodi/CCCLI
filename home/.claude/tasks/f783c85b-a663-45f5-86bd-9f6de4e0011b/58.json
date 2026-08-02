@@ -1,0 +1,8 @@
+{
+  "id": "58",
+  "subject": "Next: live-preview markdown rendering (Editor final)",
+  "description": "CM6 live-preview: render markdown syntax inline (headings large, bold/italic rendered) via HighlightStyle, then hide markers at rest (ViewPlugin). Last Editor increment. Then 2c wikilinks, then Slices 3-7.",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

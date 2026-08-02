@@ -1,0 +1,269 @@
+"use client";
+
+// Record a voice memo. Start/stop TOGGLE — never press-and-hold (#6: no timed
+// or precise gestures; nerve damage is common in this population). Chunked
+// recording (start(1000)) so iOS Safari doesn't buffer the whole take in memory.
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Mic, Square } from "lucide-react";
+import { usePlayer } from "@/stores/player";
+import { pickMimeType } from "@/lib/audio/mime";
+import { startTranscription } from "@/lib/speech";
+import { announce, prefersReducedMotion } from "@/lib/a11y";
+import { formatDuration, spokenDuration } from "@/lib/format";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+const SOFT_CAP_MS = 90_000; // 90s — soft cap, warn
+const HARD_CAP_MS = 180_000; // 3min — hard cap, auto-stop
+
+export function MemoRecorder() {
+  const addMemo = usePlayer((s) => s.addMemo);
+  const activeChannel = usePlayer((s) => s.activeChannel);
+  const channels = usePlayer((s) => s.channels);
+  const stationName =
+    activeChannel === "all"
+      ? "Main"
+      : (channels.find((c) => c.id === activeChannel)?.name ?? "Main");
+
+  const [isRecording, setIsRecording] = useState(false);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const startRef = useRef(0);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const meterRef = useRef<HTMLSpanElement>(null);
+  const ringRef = useRef<HTMLSpanElement>(null);
+  const softWarnedRef = useRef(false);
+  const transcriberRef = useRef<{ stop: () => string } | null>(null);
+
+  const cleanup = useCallback(() => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+      void audioCtxRef.current.close();
+    }
+    audioCtxRef.current = null;
+    analyserRef.current = null;
+    // stop any dangling transcriber (error paths); onstop reads it first
+    if (transcriberRef.current) {
+      transcriberRef.current.stop();
+      transcriberRef.current = null;
+    }
+    if (meterRef.current) meterRef.current.style.transform = "scaleX(0)";
+  }, []);
+
+  useEffect(() => cleanup, [cleanup]);
+
+  const stop = useCallback(() => {
+    setIsRecording(false);
+    const recorder = recorderRef.current;
+    if (recorder && recorder.state !== "inactive") recorder.stop();
+    recorderRef.current = null;
+  }, []);
+
+  const start = useCallback(async () => {
+    setError(null);
+    if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+      setError("Recording isn't supported in this browser. Use the upload option below.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+
+      const mime = pickMimeType();
+      const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      recorderRef.current = recorder;
+      chunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      recorder.onstop = async () => {
+        const type = recorder.mimeType || mime || "audio/webm";
+        const blob = new Blob(chunksRef.current, { type });
+        const durationMs = performance.now() - startRef.current;
+        const transcript = transcriberRef.current?.stop() ?? "";
+        transcriberRef.current = null;
+        cleanup();
+        if (blob.size > 0) {
+          await addMemo(blob, durationMs, type, transcript);
+          announce(`Memo saved, ${spokenDuration(durationMs)}.`);
+        }
+      };
+
+      // Level metering (optional).
+      try {
+        const AC: typeof AudioContext =
+          window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const ctx = new AC();
+        audioCtxRef.current = ctx;
+        const source = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 512;
+        source.connect(analyser);
+        analyserRef.current = analyser;
+      } catch {
+        // metering is optional — recording proceeds without it
+      }
+
+      startRef.current = performance.now();
+      softWarnedRef.current = false;
+      transcriberRef.current = startTranscription(); // best-effort client-side ASR
+      recorder.start(1000); // chunk every second
+      setIsRecording(true);
+      setElapsedMs(0);
+      announce("Recording started. Press stop when you're done.");
+
+      // Local rAF loop — meter + elapsed + caps. Local self-reference is fine.
+      const loop = () => {
+        const analyser = analyserRef.current;
+        if (analyser && meterRef.current) {
+          const buf = new Uint8Array(analyser.fftSize);
+          analyser.getByteTimeDomainData(buf);
+          let sum = 0;
+          for (let i = 0; i < buf.length; i++) {
+            const v = (buf[i] - 128) / 128;
+            sum += v * v;
+          }
+          const level = Math.min(1, Math.sqrt(sum / buf.length) * 3);
+          meterRef.current.style.transform = `scaleX(${level.toFixed(3)})`;
+        }
+        const el = performance.now() - startRef.current;
+        setElapsedMs(el);
+        if (!softWarnedRef.current && el >= SOFT_CAP_MS) {
+          softWarnedRef.current = true;
+          announce("90 seconds — wrap up soon.");
+        }
+        if (el >= HARD_CAP_MS) {
+          stop();
+          return;
+        }
+        rafRef.current = requestAnimationFrame(loop);
+      };
+      rafRef.current = requestAnimationFrame(loop);
+    } catch {
+      setError(
+        "Microphone permission was denied. Allow the microphone, or use the upload option below.",
+      );
+      cleanup();
+    }
+  }, [addMemo, cleanup, stop]);
+
+  // Record-pulse ring (anime.js v4) — decorative, compositor-only, reduced-motion-safe.
+  // anime.js is dynamically imported so it stays out of the first-load bundle.
+  useEffect(() => {
+    const el = ringRef.current;
+    if (!el || !isRecording || prefersReducedMotion()) return;
+    let anim: { pause: () => void } | undefined;
+    let cancelled = false;
+    void import("animejs")
+      .then(({ animate }) => {
+        if (cancelled || !el) return;
+        anim = animate(el, {
+          scale: [1, 1.6],
+          opacity: [0.5, 0],
+          duration: 1400,
+          loop: true,
+          ease: "outQuad",
+        });
+      })
+      .catch(() => {
+        // animation must never break recording
+      });
+    return () => {
+      cancelled = true;
+      anim?.pause();
+    };
+  }, [isRecording]);
+
+  const onFile = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      const durationMs = await new Promise<number>((resolve) => {
+        const a = new Audio();
+        a.preload = "metadata";
+        a.onloadedmetadata = () => resolve(Number.isFinite(a.duration) ? a.duration * 1000 : 0);
+        a.onerror = () => resolve(0);
+        a.src = url;
+      });
+      URL.revokeObjectURL(url);
+      await addMemo(file, durationMs, file.type || "audio/*");
+      announce(`Memo uploaded, ${spokenDuration(durationMs)}.`);
+      e.target.value = "";
+    },
+    [addMemo],
+  );
+
+  return (
+    <div className="flex flex-col items-center gap-4">
+      <div className="relative flex items-center justify-center">
+        {isRecording && (
+          <span
+            ref={ringRef}
+            aria-hidden="true"
+            className="absolute inset-0 rounded-full bg-destructive/40"
+          />
+        )}
+        <Button
+          type="button"
+          size="icon"
+          variant={isRecording ? "destructive" : "default"}
+          className="relative size-20 rounded-full"
+          aria-pressed={isRecording}
+          aria-label={isRecording ? "Stop recording" : "Record a voice memo"}
+          onClick={isRecording ? stop : start}
+        >
+          {isRecording ? (
+            <Square className="size-7" aria-hidden="true" />
+          ) : (
+            <Mic className="size-8" aria-hidden="true" />
+          )}
+        </Button>
+      </div>
+
+      <p className="text-sm text-muted-foreground" aria-live="off">
+        {isRecording ? `Recording · ${formatDuration(elapsedMs)}` : "Tap to record a memo"}
+      </p>
+      {!isRecording && (
+        <p className="text-xs text-muted-foreground">New memos post to {stationName}</p>
+      )}
+
+      {/* Input level meter — decorative (screen readers get spoken cues instead). */}
+      <div
+        aria-hidden="true"
+        className={cn(
+          "h-1.5 w-40 overflow-hidden rounded-full bg-muted transition-opacity",
+          isRecording ? "opacity-100" : "opacity-0",
+        )}
+      >
+        <span
+          ref={meterRef}
+          className="block h-full w-full origin-left bg-destructive"
+          style={{ transform: "scaleX(0)" }}
+        />
+      </div>
+
+      {error && (
+        <p role="alert" className="max-w-xs text-center text-sm text-destructive">
+          {error}
+        </p>
+      )}
+
+      <label className="cursor-pointer text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground">
+        Or upload an audio file
+        <input type="file" accept="audio/*" className="sr-only" onChange={onFile} />
+      </label>
+    </div>
+  );
+}

@@ -1,0 +1,120 @@
+/* home.css — the home page. Consumes tokens, defines none. */
+
+/* ---- hero: full-bleed and FIRST in source order, so a screen reader meets the
+   claim before it meets seven nav links. ---- */
+.hero h1{
+  font-size:var(--p-text-3xl);
+  line-height:var(--p-leading-tight);
+  font-weight:700;
+  margin:0.4em 0 var(--p-space-6);
+  max-width:16ch;
+  overflow-wrap:break-word;
+  text-wrap:balance;
+  hanging-punctuation:first;
+}
+@media (min-width:48rem){ .hero h1{letter-spacing:-0.02em} }
+
+.hero-foot{
+  display:flex;flex-wrap:wrap;align-items:flex-start;
+  gap:var(--p-space-5) var(--p-space-7);
+}
+.hero-foot button{
+  display:inline-flex;align-items:center;gap:var(--p-space-3);
+  font-family:var(--p-font-body);font-size:var(--p-text-xl);font-weight:700;
+  color:var(--p-accent-ink);background:var(--p-accent);
+  border:0;padding:0.62em 1.15em;cursor:pointer;text-align:left;
+}
+.hero-foot button:hover:not(:disabled){background:var(--p-state-hover)}
+.hero-foot button:disabled{opacity:1;background:var(--p-surface-2);color:var(--p-text-2);cursor:not-allowed}
+.hero-foot .glyph{
+  inline-size:0.62em;block-size:0.72em;flex:none;background:currentColor;
+  clip-path:polygon(0 0,100% 50%,0 100%);
+}
+[data-state="playing"] .glyph{clip-path:polygon(0 0,35% 0,35% 100%,0 100%,0 0),polygon(65% 0,100% 0,100% 100%,65% 100%)}
+
+/* only exists once there is progress to show — otherwise it reads as a stray
+   underline under the button rather than as a control. */
+.progress{display:none;block-size:2px;background:var(--p-rule);margin-top:var(--p-space-3);max-inline-size:22rem}
+[data-state="playing"] .progress,[data-state="paused"] .progress{display:block}
+.progress i{display:block;block-size:100%;inline-size:0%;background:var(--p-accent)}
+.status{margin-top:var(--p-space-2);color:var(--p-text-2);min-block-size:1.2em}
+
+.transcript{
+  margin:0;max-inline-size:var(--p-measure-narrow);
+  border-top:1px solid var(--p-rule);padding-top:var(--p-space-3);
+}
+.transcript p{font-size:var(--p-text-lg);line-height:1.35}
+.transcript cite{
+  display:block;margin-top:var(--p-space-3);color:var(--p-text-2);
+  font-style:normal;text-transform:none;letter-spacing:0;line-height:1.5;
+}
+
+/* ---- body: outline nav beside the content, on desktop only ---- */
+.body-grid{
+  display:grid;grid-template-columns:minmax(0,15rem) minmax(0,1fr);
+  gap:clamp(1.5rem,5vw,6rem);margin-top:var(--p-rhythm);
+}
+@media (max-width:60rem){ .body-grid{grid-template-columns:1fr;gap:var(--p-space-7)} }
+
+.body-main>section{margin-bottom:var(--p-rhythm)}
+.body-main h2{font-size:var(--p-text-2xl);font-weight:700;line-height:1.1;margin-bottom:var(--p-space-5)}
+.body-main h3{font-size:var(--p-text-xl);font-weight:700;line-height:1.15}
+
+.lede{max-inline-size:var(--p-measure)}
+.lede p+p{margin-top:var(--p-space-4)}
+
+.feature h3{display:flex;flex-wrap:wrap;align-items:baseline;gap:var(--p-space-2) var(--p-space-5)}
+.feature h3 a{color:inherit;text-decoration:none}
+.feature h3 a:hover{color:var(--p-accent)}
+.feature p{max-inline-size:var(--p-measure);margin-top:var(--p-space-4)}
+.more a{color:var(--p-accent)}
+
+/* ---- the slate: rows, not cards. the honest status label IS the design ---- */
+.slate{margin:0;padding:0;list-style:none}
+.row{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;
+  gap:var(--p-space-4) var(--p-space-6);align-items:baseline;
+  padding:var(--p-space-5) var(--p-space-2) var(--p-space-5) 0;
+  border-top:1px solid var(--p-rule);
+  text-decoration:none;color:inherit;
+}
+.slate li:last-child .row{border-bottom:1px solid var(--p-rule)}
+.row .name{display:block;font-size:var(--p-text-xl);font-weight:700;line-height:1.15}
+.row:hover .name{color:var(--p-accent)}
+.row .desc{
+  display:block;margin-top:var(--p-space-1);color:var(--p-text-2);
+  font-size:var(--p-text-sm);line-height:1.5;max-inline-size:52ch;
+}
+@media (max-width:38rem){
+  .row{grid-template-columns:minmax(0,1fr)}
+  .row .p-tag{margin-top:var(--p-space-2)}
+}
+.note{
+  margin-top:var(--p-space-6);color:var(--p-text-2);font-size:var(--p-text-sm);
+  max-inline-size:var(--p-measure-narrow);
+  border-top:1px solid var(--p-rule);padding-top:var(--p-space-3);
+}
+
+/* ---- who he is ---- */
+.who{display:grid;gap:var(--p-space-6)}
+@media (min-width:60rem){ .who{grid-template-columns:22rem minmax(0,1fr);gap:var(--p-space-7)} }
+.who img{inline-size:100%;block-size:auto}
+.who-text{max-inline-size:var(--p-measure)}
+.who-text p+p{margin-top:var(--p-space-4)}
+
+/* ---- the ask ---- */
+.contact a{
+  font-size:var(--p-text-lg);color:var(--p-accent);
+  text-decoration-thickness:2px;text-underline-offset:0.22em;
+}
+#ask .lede{margin-bottom:var(--p-space-5)}
+
+/* ---- footer ---- */
+footer{
+  margin-top:var(--p-space-9);padding-top:var(--p-space-5);
+  border-top:1px solid var(--p-rule);
+  color:var(--p-text-2);font-size:var(--p-text-sm);max-inline-size:var(--p-measure);
+}
+footer p+p{margin-top:var(--p-space-4)}
+footer a{color:var(--p-accent)}
+footer .credit{margin-top:var(--p-space-6);font-family:var(--p-font-mono);font-size:var(--p-text-xs)}

@@ -1,0 +1,104 @@
+import Foundation
+import ThirdEyeCore
+
+// Assert-based self-check — XCTest/swift-testing need Xcode, absent here, so we
+// verify behavior by running the engine and exiting non-zero on any failure.
+// Mirrors the web store's unit tests.
+
+var passed = 0
+
+@MainActor
+func check(_ cond: Bool, _ msg: String) {
+  if cond {
+    passed += 1
+  } else {
+    FileHandle.standardError.write(Data("✗ FAILED: \(msg)\n".utf8))
+    exit(1)
+  }
+}
+
+func memo(_ id: String, channel: String = "main", transcript: String = "") -> Memo {
+  Memo(id: id, createdAt: 0, durationMs: 1000, mime: "audio/webm", channelId: channel,
+       machineTranscript: transcript)
+}
+
+// addMemo + queue
+do {
+  var e = RadioEngine()
+  e.addMemo(memo("a"))
+  e.addMemo(memo("b"))
+  check(e.memos.count == 2, "adds memos")
+  check(e.queue.count == 2, "all-channel queue holds both")
+}
+
+// next advances then ends the stream (#3)
+do {
+  var e = RadioEngine()
+  e.addMemo(memo("a"))
+  e.addMemo(memo("b"))
+  e.play()
+  e.next()
+  check(e.currentIndex == 1, "next advances")
+  e.next()
+  check(e.status == .ended && !e.isPlaying, "the stream ends past the last memo")
+}
+
+// previous clears ended, clamps at 0
+do {
+  var e = RadioEngine()
+  e.addMemo(memo("a"))
+  e.addMemo(memo("b"))
+  e.play(); e.next(); e.next()  // ended
+  e.previous()
+  check(e.currentIndex == 0 && e.status == .paused, "previous steps back and clears ended")
+  e.previous()
+  check(e.currentIndex == 0, "previous clamps at start")
+}
+
+// channels: posting follows the active station; queue filters; all aggregates
+do {
+  var e = RadioEngine()
+  e.addMemo(memo("m1"))            // -> main (active is "all")
+  e.createChannel("Music")         // active becomes "music"
+  e.addMemo(memo("m2"))            // -> music
+  check(e.channels.contains(where: { $0.id == "music" }), "createChannel slugs an id")
+  e.setActiveChannel("music")
+  check(e.queue.map(\.id) == ["m2"], "queue follows the active station")
+  e.setActiveChannel(allChannels)
+  check(e.queue.count == 2, "'all' aggregates every station")
+}
+
+// shuffle: injected order is applied; late memos appended
+do {
+  var e = RadioEngine()
+  e.addMemo(memo("x")); e.addMemo(memo("y")); e.addMemo(memo("z"))
+  e.setShuffleOrder(["z", "x", "y"])
+  check(e.queue.map(\.id) == ["z", "x", "y"], "shuffle order is applied")
+  e.disableShuffle()
+  check(e.queue.map(\.id) == ["x", "y", "z"], "disabling shuffle restores chronological")
+}
+
+// playback rate cycles 1 -> 1.25 -> 1.5 -> 2 -> 1
+do {
+  var e = RadioEngine()
+  check(e.playbackRate == 1, "default rate 1x")
+  e.cyclePlaybackRate(); check(e.playbackRate == 1.25, "rate 1.25x")
+  e.cyclePlaybackRate(); e.cyclePlaybackRate(); check(e.playbackRate == 2, "rate 2x")
+  e.cyclePlaybackRate(); check(e.playbackRate == 1, "rate wraps to 1x")
+}
+
+// transcript correction never overwrites the machine text (#8.3)
+do {
+  var e = RadioEngine()
+  e.addMemo(memo("d", transcript: "helo ther"))
+  let id = e.memos[0].id
+  e.correctTranscript(id, "  hello there  ")
+  check(e.memos[0].machineTranscript == "helo ther", "machine transcript preserved")
+  check(e.memos[0].displayTranscript == "hello there", "correction shown + trimmed")
+}
+
+// helpers
+check(slugify("My Cool Station!") == "my-cool-station", "slugify")
+check(uniqueChannelId("Main", [Channel(id: "main", name: "Main")]) == "main-2", "unique channel id")
+
+print("✓ \(passed) ThirdEyeCore checks passed")

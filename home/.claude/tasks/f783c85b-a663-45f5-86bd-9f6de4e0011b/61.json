@@ -1,0 +1,8 @@
+{
+  "id": "61",
+  "subject": "2c-2 clickable wikilinks (PR #79, CI running)",
+  "description": "ViewPlugin decorating [[links]] as clickable → navigate to the note; clicking a missing link creates it type-first. Completes wikilinks (2c). Then Slices 3-7.",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

@@ -1,0 +1,7 @@
+# SDD Progress — feat/phase10-deployability
+
+Plan: docs/superpowers/plans/2026-07-21-phase10-deployability.md
+
+Task 1: complete (commits 6d2fb7d..29de95d, review clean) — Backend Dockerfile (multi-stage, uv builder + slim runtime), docker-entrypoint.sh (exec uvicorn, PID-1 confirmed via docker top by the reviewer), PYTHONPATH=/app insurance. Reviewer independently rebuilt the image (same image ID) and re-ran the full real-Postgres verification from scratch rather than trusting the report, including a docker top check the report itself hadn't done. docker-compose.yml confirmed untouched.
+Task 2: not started — Dashboard Dockerfile, nginx SPA config, verified serving
+Task 3: not started — Root docker-compose.yml, README quickstart, punch list

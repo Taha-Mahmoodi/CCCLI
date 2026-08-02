@@ -1,0 +1,9 @@
+{
+  "id": "3",
+  "subject": "Slice 6: Docker & production",
+  "description": "Multi-stage Dockerfile, docker-compose (app+postgres+migrate), health DB check, smoke test in sandbox, deploy docs. PR by Said.",
+  "activeForm": "Dockerizing for production",
+  "status": "in_progress",
+  "blocks": [],
+  "blockedBy": []
+}

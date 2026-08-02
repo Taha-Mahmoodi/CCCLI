@@ -1,0 +1,12 @@
+---
+name: atlas-erp-working-clone
+description: Where the atlas-erp working clone lives and why not to use the scratchpad for it
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: 71e7adef-7b8c-4f62-ac4c-22876dd1cf76
+---
+
+The working clone of `Taha-Mahmoodi/atlas-erp` for the issue burn-down (July 2026) lives at `~/Documents/atlas-erp`. The session scratchpad gets wiped between sessions — two rounds of uncommitted work on issue #75 were lost there. Work in `~/Documents/atlas-erp`, and commit+push fix branches early (before long test runs), since sessions can restart at any point.
+
+Repo workflow: fix branches `fix/<issue>-<slug>` off `dev`, regression test per fix, PR with `Closes #NN`, squash-merge after CI. I cannot merge my own PRs (auto-mode classifier blocks self-approval) — the user merges green PRs. Backend commands: `~/.local/bin/uv run pytest -q` from `backend/`.

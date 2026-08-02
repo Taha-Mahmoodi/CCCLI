@@ -1,0 +1,9 @@
+{
+  "id": "17",
+  "subject": "Brainstorm Real-time collaboration sub-project structure",
+  "description": "Ask clarifying questions on sub-project 5: CRDT sync scope, presence/cursors, permission interaction with live edit access, conflict with autosave, offline behavior. No code, research/structure only.",
+  "activeForm": "Brainstorming Real-time collaboration structure",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

@@ -1,0 +1,247 @@
+# Loop 2 — Design
+
+**Goal:** decide what it looks like and how it renders, and prove both before a single
+line of the real site is written.
+
+**Input:** `BRIEF.md`, specifically the translation table, the message hierarchy, and
+the competitive chart.
+
+**Output:** `DIRECTION.md`, one design image per section or template, one runnable
+prototype per technique.
+
+```text
+2a DIRECTION ──────► Gate B1 ──────► 2b CRAFT ──────► Gate B2
+   palette, type,     concept          technique per     motion, budget,
+   2-3 concepts,      picked           section, motion    tag list locked
+   image per section                   spec, prototypes
+```
+
+---
+
+## 2a — Direction
+
+### Read the translation table first
+
+The style shortlist comes from strategy, not taste (`STYLES.md`):
+
+- **The competitive cluster** is the fence. Whatever five of six competitors look
+  like is what this site does not look like (`§3`)
+- **The empty position** is the field
+- **Anti-positioning** bans styles outright. Honor absolutely
+- **The buyer's risk appetite** sets how strange you can be. A procurement committee
+  and a founder buying a design sprint tolerate different amounts
+- **Load-bearing brand elements** are constraints. Extensions were agreed at Gate A
+- **The top objection** decides what the first screen has to do
+
+### The page and section list is already fixed
+
+Gate A settled which pages exist and what each is for. Loop 2 designs them; it does
+not re-litigate them. If the design work reveals the page list is wrong, that goes
+back to Gate A rather than being quietly changed — a page invented in Loop 2 has no
+message-hierarchy slot and no copy plan.
+
+Multi-page sites design **per template**, not per instance (`ARCHITECTURE.md`): home,
+product, pricing, case study, blog post. One template covers every page that uses it.
+
+### Palette
+
+Sampled from reality (`§12`) — the existing logo, product, and real materials. Then
+extended: an accent, a substrate, a neutral ramp, and a full state set including
+error, success, warning, focus, and disabled, because this site has forms and the
+forms need them.
+
+Work in OKLCH so gradients have no gray dead zone. Check every text pair at 4.5:1 as
+you build the ramp rather than after (`§17`), and check the brand accent as a button
+background with white and with black text — a brand color that cannot hold a label is
+a constraint to design around, not an opinion to argue with.
+
+Art-direct **light and dark as two designs**, not one inverted. `STYLES.md` names
+which styles collapse under naive inversion.
+
+### Type
+
+Two families at most, one if the style earns it. Variable where the design drives an
+axis. Self-hosted, subset, `font-display: swap`. Confirm the web license covers the
+client's use (`COMPLIANCE.md §3`) — an unlicensed font is a bill with their name on
+it. Check the script renders for every market (`§26`).
+
+### Concepts
+
+Top-tier work, and the conductor does it rather than a worker
+([`MODELS.md`](../MODELS.md)).
+
+Generate **2–3 distinct concepts** (`§4`). Each states:
+
+- The **collision or subversion** — this run's `§3` answer, in one sentence. Which
+  parent carries structure, which carries surface
+- The **opening move** — what happens in the first three seconds, and how the visitor
+  learns what kind of thing this is (`POSITIONING.md §4`)
+- How **proof is presented** — invent it. Not a logo bar and a testimonial slider by
+  reflex
+- How **the product is shown** (`§11`) — the single most consequential choice on a
+  software marketing site
+- How **pricing is displayed**, if there is a pricing page
+- How **the ask** appears, where it repeats, and what it looks like on mobile
+- How **navigation** works
+- The **section order per template**, derived from the objection ladder rather than
+  from convention
+
+Run two checks on each concept before it goes to the gate:
+
+1. **The category-reflex check.** If it is guessable from "site for a
+   \<category\> company", or from category-plus-obvious-twist, throw it out
+2. **The competitor overlay.** Put the concept beside the three competitor
+   screenshots. If a visitor could not tell them apart in a squint test, it has not
+   done its job
+
+Note one concept you rejected and why, so the client sees the range.
+
+### Design images
+
+Dispatch `section-designer`, **one agent per section or template**. Each returns one
+horizontal image.
+
+Never compress multiple sections into one board. Eight sections means eight images. A
+compressed board hides exactly the detail the client needs to judge — and on a
+commercial site the detail that gets hidden is usually the CTA and the form.
+
+Design at least one image with **real copy lengths** from the message hierarchy, not
+lorem. A hero that only works with a six-word headline is a design that Loop 3 will
+break.
+
+> ## Gate B1 — human decision
+>
+> The named decision-maker decides. Present the rendered images per concept, the
+> palette with its sampled sources and the contrast results, the type system, and the
+> collision sentence for each. Show the competitor overlay — clients underestimate how
+> much they look like their category until they see it side by side.
+>
+> They pick a concept, or pick pieces across concepts. Iterate here; it is far cheaper
+> than iterating in code.
+
+### When B1 rejects
+
+How far back it goes depends on what was rejected. Diagnose before regenerating.
+
+| What was rejected | Where it goes back to |
+|---|---|
+| **Execution** — wrong palette in the render, wrong crop, the image did not capture the concept | Regenerate the images with corrected direction. Same concept, same section list, same collision |
+| **Concept** — the collision does not land, the opening move is wrong, proof is presented wrong | Back to 2a concept generation. New concepts, not a patch on the rejected one |
+| **Strategy** — their reaction reveals the ICP, positioning, or objection ranking was misread | Back to Gate A. Fix `BRIEF.md` first. Designing on a misread brief produces another rejection |
+| **Committee** — two stakeholders want opposite things | Not a design problem. Take it to the named decision-maker (`§1`) rather than averaging it into something neither wanted |
+
+The last two rows are the ones that get missed. When the client says the images look
+fine and still sounds unhappy, the brief is the suspect. When the feedback contradicts
+itself, the process is.
+
+**Three rejections at the same gate means the brief is wrong, not the execution.**
+Stop iterating, re-open Loop 1e, and come back through Gate A.
+
+## 2b — Craft
+
+### Assign techniques
+
+For each section, assign a technique from [`CRAFT.md`](../CRAFT.md) that serves the
+approved style. Style decides what is on the table; the technique executes it.
+
+Every assignment passes the commercial test in `CRAFT.md`:
+
+1. What does this make the visitor **understand**?
+2. Which **objection** does it answer or which **proof** does it carry?
+3. What does it cost in **bytes and main-thread time**?
+
+No answer to the first two means cut it. Impressive and irrelevant is not neutral on a
+company site — it is scroll depth the converting section needed (`§7`).
+
+**Spend the technique budget where the money is.** The hero, the product
+demonstration, and the moment just before the ask. A beautifully animated
+about-page timeline is budget taken from the pricing table.
+
+### Prototype before you design around it
+
+Dispatch `technique-prototyper`, **one agent per technique**. Each one researches
+freely, builds a standalone runnable HTML proof, screenshots it, measures frame rate
+under load on throttled hardware, records the byte cost, and builds all three states
+(full, designed reduced-motion, fallback).
+
+Prototypes live in `runs/<slug>/prototypes/`. A technique that fails here is cut now,
+cheaply. The same failure in Loop 4 costs a rebuild.
+
+### Motion spec
+
+Write it down: easing curves, durations, stagger, scroll mapping, what triggers what.
+Motion character comes from the positioning — an institutional brand moves slowly and
+inevitably; a challenger moves abruptly. Undocumented motion gets rebuilt three times.
+
+Two rules specific to commercial sites: **nothing animates in above the fold** (it is
+already visible; animating it makes it briefly not), and **motion never gates
+information** (a skimmer who cannot skim leaves).
+
+### The third-party tag list (`§15`)
+
+New at this gate, and it belongs here rather than in Loop 5, because tags are a
+performance decision as much as a marketing one.
+
+List every third party the client wants: analytics, chat, heatmap, ad pixels, review
+widget, embedded booking, consent platform, tag manager. For each: the named owner,
+the job it does, the data it sees, the byte cost, and when it loads relative to
+consent and first paint.
+
+Bring the list to the gate with a recommendation on what to cut. Marketing teams add
+tags by default and nobody ever removes one; this is the only moment in the project
+where the whole list is visible at once.
+
+### The performance budget
+
+Declare it, per `§19`:
+
+- **Shell** — HTML, CSS, fonts, critical JS. Under 100KB. Paints something real alone.
+  LCP under 2.0s on a throttled mid-range Android, targeting 1.5s
+- **Heavy layer** — shaders, 3D, video, physics. Lazy-loaded after first paint, gated
+  on intersection, never in the LCP path. State the number
+- **Third-party** — the total from the tag list, with its own number
+
+A technique that cannot be deferred has to justify its bytes at this gate, in front of
+the client, against the conversion goal.
+
+### Write `DIRECTION.md`
+
+Concept and why it won. The collision, and which parent is structural. Palette with
+hexes, sampled sources, and contrast results. Type system and licensing. Per-template
+technique assignment. Motion spec. All three budget tiers. The tag list with owners.
+**What was invented** — the thing that exists in this run and no other (`§3`).
+Prototype results including the failures.
+
+> ## Gate B2 — human decision
+>
+> Show the prototype screenshots, the motion spec, the three-tier budget, and the tag
+> list. They approve the technique set or cut what does not earn its place, and they
+> approve or cut each tag with its owner named.
+>
+> This is the last stop before real code.
+
+### When B2 rejects
+
+Cut the technique, or swap it for another from `CRAFT.md`, then re-prototype. A
+rejected prototype never gets argued into acceptance, tuned during the build, or
+carried forward on the theory that it comes together in integration.
+
+The replacement faces the same three-question test. Cutting with nothing in its place
+is a valid outcome — the section ships in its base state and the budget improves.
+
+### A rejection is information about the brief
+
+Record what the rejection **revealed** in `DIRECTION.md`, alongside the new direction:
+what they reacted against, and what that says about the ICP, the buyer's risk
+appetite, or the positioning that `BRIEF.md` failed to capture. Recording only the
+correction throws away the more valuable half.
+
+## Skip costs
+
+| Skipping | Costs |
+|---|---|
+| 2a design images | Seeing it before it is built. You iterate in code instead: slower, and biased toward whatever got built first |
+| Gate B1 | The concept choice. You pick; they see it at Gate C, which is a late place to discover a disagreement |
+| 2b prototypes | Proof the technique works before the design depends on it. Late failures are expensive |
+| 2b tag list | The only moment the whole third-party list is visible at once. Tags get added later with no owner and no budget |
+| Gate B2 | Motion review, and the performance budget goes undeclared |

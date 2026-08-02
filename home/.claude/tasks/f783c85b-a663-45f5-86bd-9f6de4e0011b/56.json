@@ -1,0 +1,8 @@
+{
+  "id": "56",
+  "subject": "SDD 2b4: note creation (type-first)",
+  "description": "createNote API + useCreateNote (invalidate tree) + NewNoteForm (type datalist + name, slug-validate, error) + VaultLayout wiring (canEdit-gated, navigate on create). Rename/delete deferred to 2b-5.",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

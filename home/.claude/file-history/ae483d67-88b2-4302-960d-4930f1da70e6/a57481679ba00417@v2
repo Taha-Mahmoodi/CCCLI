@@ -1,0 +1,33 @@
+package com.thirdeyeworld.android
+
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaSession
+import androidx.media3.session.MediaSessionService
+
+/**
+ * Media3 MediaSessionService — auto-creates the media notification and exposes
+ * the hardware / lock-screen / headphone transport route (spec §6.3). The
+ * foreground service type is `mediaPlayback` (AndroidManifest). ExoPlayer is
+ * configured for spoken audio so TalkBack pauses over memos rather than talking
+ * on top of them (§6.4) when wired to real audio on-device.
+ */
+class PlaybackService : MediaSessionService() {
+  private var session: MediaSession? = null
+
+  override fun onCreate() {
+    super.onCreate()
+    val player = ExoPlayer.Builder(this).build()
+    session = MediaSession.Builder(this, player).build()
+  }
+
+  override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
+
+  override fun onDestroy() {
+    session?.let {
+      it.player.release()
+      it.release()
+    }
+    session = null
+    super.onDestroy()
+  }
+}

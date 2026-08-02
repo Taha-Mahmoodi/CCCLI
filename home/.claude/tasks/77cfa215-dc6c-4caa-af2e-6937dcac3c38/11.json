@@ -1,0 +1,9 @@
+{
+  "id": "11",
+  "subject": "User review of spec + transition to writing-plans",
+  "description": "Get user sign-off on spec, then invoke writing-plans skill.",
+  "activeForm": "Awaiting spec review",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

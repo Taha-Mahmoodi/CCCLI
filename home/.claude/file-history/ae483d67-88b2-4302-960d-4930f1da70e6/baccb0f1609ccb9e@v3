@@ -1,0 +1,396 @@
+import { describe, it, expect, beforeEach } from "vitest";
+import { createApp, type AppDeps } from "../src/app";
+import { openDb } from "../src/db";
+import { stubTranscriber } from "../src/transcribe";
+import { createRateLimiter } from "../src/ratelimit";
+import type { Storage } from "../src/storage";
+
+function memStorage(): Storage {
+  const map = new Map<string, Uint8Array>();
+  return {
+    async put(k, d) {
+      map.set(k, d);
+    },
+    async get(k) {
+      const v = map.get(k);
+      if (!v) throw new Error("missing");
+      return v;
+    },
+  };
+}
+
+const MODERATORS = { "tok-a": "mod-a", "tok-b": "mod-b" };
+const modAuth = (token: string) => ({ authorization: `Bearer ${token}` });
+
+function makeApp(rate?: { capacity: number; refillPerSec: number }) {
+  const deps: AppDeps = {
+    db: openDb(":memory:"),
+    storage: memStorage(),
+    transcribe: stubTranscriber,
+    rateLimit: createRateLimiter(rate ?? { capacity: 1000, refillPerSec: 1000 }),
+    moderators: { ...MODERATORS },
+    authDevMode: true,
+    publicBaseUrl: "https://api.test",
+  };
+  return createApp(deps);
+}
+
+const form = (fields: Record<string, string>) => ({
+  method: "POST" as const,
+  headers: { "content-type": "application/x-www-form-urlencoded" },
+  body: new URLSearchParams(fields).toString(),
+});
+
+const json = (body: unknown) => ({
+  method: "POST" as const,
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify(body),
+});
+
+function audioForm(fields: Record<string, string> = {}) {
+  const fd = new FormData();
+  fd.set("audio", new File([new Uint8Array([1, 2, 3, 4])], "memo.webm", { type: "audio/webm" }));
+  fd.set("channelId", "main");
+  fd.set("durationMs", "2000");
+  for (const [k, v] of Object.entries(fields)) fd.set(k, v);
+  return fd;
+}
+
+let app: ReturnType<typeof makeApp>;
+beforeEach(() => {
+  app = makeApp();
+});
+
+describe("API", () => {
+  it("health", async () => {
+    const res = await app.request("/health");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+  });
+
+  it("POST /memos stores audio and a machine transcript, returns the memo", async () => {
+    const res = await app.request("/memos", { method: "POST", body: audioForm() });
+    expect(res.status).toBe(201);
+    const memo = (await res.json()) as any;
+    expect(memo.channelId).toBe("main");
+    expect(memo.audioUrl).toBe(`/audio/${memo.id}`);
+    expect(memo.transcript.isMachine).toBe(true);
+    expect(memo.transcript.text).toBe(""); // stub ASR yields empty, honestly labeled
+  });
+
+  it("rejects an unknown channel", async () => {
+    const res = await app.request("/memos", { method: "POST", body: audioForm({ channelId: "nope" }) });
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /timeline returns memos, newest first, with cursor", async () => {
+    await app.request("/memos", { method: "POST", body: audioForm() });
+    await app.request("/memos", { method: "POST", body: audioForm() });
+    const res = await app.request("/timeline?limit=1");
+    const body = (await res.json()) as any;
+    expect(body.items).toHaveLength(1);
+    expect(body.nextCursor).toBeTypeOf("string"); // compound "<ts>_<id>" cursor
+    // page 2 returns the other memo (same-ms tie handled by the compound cursor)
+    const res2 = await app.request(`/timeline?limit=1&cursor=${body.nextCursor}`);
+    const body2 = (await res2.json()) as any;
+    expect(body2.items).toHaveLength(1);
+    expect(body2.items[0].id).not.toBe(body.items[0].id);
+  });
+
+  it("GET /audio/:id serves the stored bytes", async () => {
+    const memo = (await (await app.request("/memos", { method: "POST", body: audioForm() })).json()) as any;
+    const res = await app.request(`/audio/${memo.id}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("audio/webm");
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3, 4]));
+  });
+
+  it("POST /like never returns a count (#4)", async () => {
+    const memo = (await (await app.request("/memos", { method: "POST", body: audioForm() })).json()) as any;
+    const res = await app.request(`/memos/${memo.id}/like`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "u1" }),
+    });
+    const body = (await res.json()) as any;
+    expect(body).toEqual({ liked: true });
+    expect(body.count).toBeUndefined();
+  });
+
+  it("TTS memo uses source text as the transcript; search finds it", async () => {
+    await app.request("/memos", {
+      method: "POST",
+      body: audioForm({ isTts: "true", sourceText: "the quick brown fox" }),
+    });
+    const res = await app.request("/search?q=quick");
+    const body = (await res.json()) as any;
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0].transcript.text).toBe("the quick brown fox");
+    expect(body.items[0].transcript.isMachine).toBe(false);
+  });
+
+  it("correction updates the shown transcript without overwriting machine text", async () => {
+    const memo = (await (await app.request("/memos", { method: "POST", body: audioForm() })).json()) as any;
+    const res = await app.request(`/memos/${memo.id}/transcript/correction`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "corrected words" }),
+    });
+    const body = (await res.json()) as any;
+    expect(body.transcript.text).toBe("corrected words");
+    expect(body.transcript.isMachine).toBe(false);
+  });
+
+  it("POST /reports gives DMs a faster SLA than public content", async () => {
+    const pub = (await (await app.request("/reports", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ targetType: "memo", targetId: "m1" }),
+    })).json()) as any;
+    const dm = (await (await app.request("/reports", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ targetType: "dm", targetId: "d1" }),
+    })).json()) as any;
+    expect(dm.slaDueAt).toBeLessThan(pub.slaDueAt);
+  });
+
+  it("rate limits per IP (429 past capacity)", async () => {
+    const limited = makeApp({ capacity: 2, refillPerSec: 0 });
+    expect((await limited.request("/health")).status).toBe(200);
+    expect((await limited.request("/health")).status).toBe(200);
+    expect((await limited.request("/health")).status).toBe(429);
+  });
+});
+
+async function memoAndReport(app: ReturnType<typeof makeApp>) {
+  const memo = (await (
+    await app.request("/memos", { method: "POST", body: audioForm() })
+  ).json()) as any;
+  const report = (await (
+    await app.request("/reports", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ targetType: "memo", targetId: memo.id, reason: "spam" }),
+    })
+  ).json()) as any;
+  return { memo, report };
+}
+
+const jsonMod = (token: string) => ({ ...modAuth(token), "content-type": "application/json" });
+
+describe("Auth (magic link)", () => {
+  async function login(email: string) {
+    const req = (await (await app.request("/auth/request", json({ email }))).json()) as any;
+    const ver = await app.request("/auth/verify", json({ token: req.devToken }));
+    return { req, ver, body: (await ver.json()) as any };
+  }
+
+  it("request → verify → me returns the user", async () => {
+    const { req, ver, body } = await login("Alice@Example.com ");
+    expect(req.devToken).toBeTypeOf("string");
+    expect(ver.status).toBe(200);
+    expect(body.user.email).toBe("alice@example.com"); // normalized
+    const me = await app.request("/auth/me", { headers: { authorization: `Bearer ${body.session}` } });
+    expect(me.status).toBe(200);
+    expect(((await me.json()) as any).user.email).toBe("alice@example.com");
+  });
+
+  it("rejects an invalid email", async () => {
+    expect((await app.request("/auth/request", json({ email: "nope" }))).status).toBe(400);
+  });
+
+  it("a login token is single-use", async () => {
+    const req = (await (await app.request("/auth/request", json({ email: "b@x.com" }))).json()) as any;
+    expect((await app.request("/auth/verify", json({ token: req.devToken }))).status).toBe(200);
+    expect((await app.request("/auth/verify", json({ token: req.devToken }))).status).toBe(401);
+  });
+
+  it("rejects a bogus token and a missing session", async () => {
+    expect((await app.request("/auth/verify", json({ token: "bogus" }))).status).toBe(401);
+    expect((await app.request("/auth/me")).status).toBe(401);
+    expect(
+      (await app.request("/auth/me", { headers: { authorization: "Bearer nope" } })).status,
+    ).toBe(401);
+  });
+
+  it("does not leak the token when dev mode is off", async () => {
+    const prod = makeApp();
+    // rebuild with authDevMode off
+    const off = createApp({
+      db: openDb(":memory:"),
+      storage: memStorage(),
+      transcribe: stubTranscriber,
+      rateLimit: createRateLimiter({ capacity: 1000, refillPerSec: 1000 }),
+      moderators: {},
+      authDevMode: false,
+    });
+    void prod;
+    const req = (await (await off.request("/auth/request", json({ email: "c@x.com" }))).json()) as any;
+    expect(req.sent).toBe(true);
+    expect(req.devToken).toBeUndefined();
+  });
+});
+
+describe("DM transport (E2EE relay)", () => {
+  const bearer = (s: string) => ({ authorization: `Bearer ${s}` });
+  const dmPost = (session: string, body: unknown) => ({
+    method: "POST" as const,
+    headers: { ...bearer(session), "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  async function signup(email: string) {
+    const req = (await (await app.request("/auth/request", json({ email }))).json()) as any;
+    const ver = (await (await app.request("/auth/verify", json({ token: req.devToken }))).json()) as any;
+    return { session: ver.session as string, id: ver.user.id as string };
+  }
+
+  it("requires auth", async () => {
+    expect((await app.request("/dm/threads")).status).toBe(401);
+  });
+
+  it("relays opaque prekey bundles", async () => {
+    const alice = await signup("alice-dm@x.com");
+    await app.request("/dm/keys", dmPost(alice.session, { bundle: "OPAQUE_BUNDLE" }));
+    const res = await app.request(`/dm/keys/${alice.id}`, { headers: bearer(alice.session) });
+    expect(((await res.json()) as any).bundle).toBe("OPAQUE_BUNDLE");
+  });
+
+  it("enforces the stranger request queue: one memo until accepted (§7)", async () => {
+    const alice = await signup("a-dm@x.com");
+    const bob = await signup("b-dm@x.com");
+    const send1 = (await (
+      await app.request("/dm/send", dmPost(alice.session, { to: bob.id, ciphertext: "CT1", type: 3 }))
+    ).json()) as any;
+    expect(send1.status).toBe("request");
+    // a second request memo is blocked until acceptance
+    expect(
+      (await app.request("/dm/send", dmPost(alice.session, { to: bob.id, ciphertext: "CT2", type: 2 }))).status,
+    ).toBe(429);
+    // Bob can't send into the request queue either — he must accept first
+    expect(
+      (await app.request("/dm/send", dmPost(bob.session, { to: alice.id, ciphertext: "CTx", type: 3 }))).status,
+    ).toBe(403);
+    // Bob accepts → the thread opens
+    const acc = (await (
+      await app.request(`/dm/threads/${send1.threadId}/accept`, { method: "POST", headers: bearer(bob.session) })
+    ).json()) as any;
+    expect(acc.status).toBe("open");
+    // now both directions flow
+    expect(
+      (await app.request("/dm/send", dmPost(alice.session, { to: bob.id, ciphertext: "CT3", type: 2 }))).status,
+    ).toBe(201);
+    expect(
+      (await app.request("/dm/send", dmPost(bob.session, { to: alice.id, ciphertext: "CT4", type: 2 }))).status,
+    ).toBe(201);
+    const msgs = (await (
+      await app.request(`/dm/threads/${send1.threadId}/messages`, { headers: bearer(bob.session) })
+    ).json()) as any;
+    expect(msgs.messages.map((m: any) => m.ciphertext)).toEqual(["CT1", "CT3", "CT4"]);
+  });
+
+  it("only the recipient can accept, never the sender", async () => {
+    const alice = await signup("a2-dm@x.com");
+    const bob = await signup("b2-dm@x.com");
+    const send = (await (
+      await app.request("/dm/send", dmPost(alice.session, { to: bob.id, ciphertext: "CT", type: 3 }))
+    ).json()) as any;
+    expect(
+      (await app.request(`/dm/threads/${send.threadId}/accept`, { method: "POST", headers: bearer(alice.session) })).status,
+    ).toBe(403);
+  });
+});
+
+describe("IVR (dial-in)", () => {
+  it("welcome greets and gathers a keypress", async () => {
+    const res = await app.request("/ivr/welcome", { method: "POST" });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/xml");
+    const body = await res.text();
+    expect(body).toContain("Welcome to Third Eye World");
+    expect(body).toContain('action="/ivr/menu"');
+  });
+
+  it("pressing 1 plays the latest memo with next-nav", async () => {
+    const memo = (await (await app.request("/memos", { method: "POST", body: audioForm() })).json()) as any;
+    const res = await app.request("/ivr/menu", form({ Digits: "1" }));
+    const body = await res.text();
+    expect(body).toContain(`<Play>https://api.test/audio/${memo.id}</Play>`);
+    expect(body).toContain('action="/ivr/nav?i=0"');
+    expect(body).toContain("Memo 1 of 1");
+  });
+
+  it("nav past the last memo returns to the menu", async () => {
+    await app.request("/memos", { method: "POST", body: audioForm() }); // 1 memo
+    const res = await app.request("/ivr/nav?i=0", form({ Digits: "1" })); // next → none
+    const body = await res.text();
+    expect(body).toContain("No more memos");
+    expect(body).toContain("/ivr/welcome");
+  });
+
+  it("pressing 2 repeats the current memo; unknown keys return to menu", async () => {
+    const memo = (await (await app.request("/memos", { method: "POST", body: audioForm() })).json()) as any;
+    const repeat = await (await app.request("/ivr/nav?i=0", form({ Digits: "2" }))).text();
+    expect(repeat).toContain(`/audio/${memo.id}`);
+    const menu = await (await app.request("/ivr/menu", form({ Digits: "9" }))).text();
+    expect(menu).toContain("/ivr/welcome");
+  });
+});
+
+describe("Moderation", () => {
+  it("the queue requires moderator auth", async () => {
+    expect((await app.request("/moderation/queue")).status).toBe(401);
+  });
+
+  it("a moderator reviews the queue, decides, and it leaves the open queue + counts in transparency", async () => {
+    const { memo, report } = await memoAndReport(app);
+    const q = (await (await app.request("/moderation/queue", { headers: modAuth("tok-a") })).json()) as any;
+    expect(q.items.map((i: any) => i.id)).toContain(report.id);
+    expect(q.items[0].target.id).toBe(memo.id); // reviewer gets the memo to review
+
+    const dec = await app.request("/moderation/decisions", {
+      method: "POST",
+      headers: jsonMod("tok-a"),
+      body: JSON.stringify({ reportId: report.id, action: "remove", rationaleCode: "spam" }),
+    });
+    expect(dec.status).toBe(201);
+
+    const q2 = (await (await app.request("/moderation/queue", { headers: modAuth("tok-a") })).json()) as any;
+    expect(q2.items.map((i: any) => i.id)).not.toContain(report.id);
+
+    const t = (await (await app.request("/moderation/transparency", { headers: modAuth("tok-a") })).json()) as any;
+    expect(t.breakdown.find((b: any) => b.rationale === "spam")?.count).toBe(1);
+  });
+
+  it("an appeal must be reviewed by a DIFFERENT moderator", async () => {
+    const { report } = await memoAndReport(app);
+    await app.request("/moderation/decisions", {
+      method: "POST",
+      headers: jsonMod("tok-a"),
+      body: JSON.stringify({ reportId: report.id, action: "keep", rationaleCode: "ok" }),
+    });
+    expect((await app.request(`/reports/${report.id}/appeal`, { method: "POST" })).status).toBe(200);
+
+    // same moderator (a) is blocked from reviewing their own decision's appeal
+    const same = await app.request("/moderation/decisions", {
+      method: "POST",
+      headers: jsonMod("tok-a"),
+      body: JSON.stringify({ reportId: report.id, action: "keep", rationaleCode: "ok" }),
+    });
+    expect(same.status).toBe(403);
+
+    // a different moderator (b) can decide the appeal
+    const other = await app.request("/moderation/decisions", {
+      method: "POST",
+      headers: jsonMod("tok-b"),
+      body: JSON.stringify({ reportId: report.id, action: "remove", rationaleCode: "reversed" }),
+    });
+    expect(other.status).toBe(201);
+    expect(((await other.json()) as any).isAppeal).toBe(true);
+  });
+
+  it("only resolved reports can be appealed", async () => {
+    const { report } = await memoAndReport(app);
+    expect((await app.request(`/reports/${report.id}/appeal`, { method: "POST" })).status).toBe(400);
+  });
+});

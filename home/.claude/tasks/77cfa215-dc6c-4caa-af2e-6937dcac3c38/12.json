@@ -1,0 +1,9 @@
+{
+  "id": "12",
+  "subject": "Brainstorm Editor sub-project structure",
+  "description": "Ask clarifying questions on Editor (#2) structure: navigation, wikilinks, frontmatter UI, save behavior, backlinks scope, permission-aware read-only mode. No code, research/structure only.",
+  "activeForm": "Brainstorming Editor structure",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

@@ -1,0 +1,51 @@
+"use client";
+
+import * as React from "react";
+
+/**
+ * Scroll-reveal (fade + rise) via IntersectionObserver — no animation library,
+ * to keep the JS budget small. Reduced motion: globals.css zeroes
+ * transition-duration, so content just appears (SPEC §10).
+ */
+export function Reveal({
+  children,
+  delay = 0,
+  className = "",
+}: {
+  children: React.ReactNode;
+  delay?: number;
+  className?: string;
+}) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const [shown, setShown] = React.useState(false);
+
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting) {
+          setShown(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "0px 0px -10% 0px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  return (
+    <div
+      ref={ref}
+      className={`transition-[opacity,transform] duration-500 ease-[cubic-bezier(0.33,0.1,0.25,1)] ${className}`}
+      style={{
+        opacity: shown ? 1 : 0,
+        transform: shown ? "none" : "translateY(16px)",
+        transitionDelay: `${delay}ms`,
+      }}
+    >
+      {children}
+    </div>
+  );
+}

@@ -1,0 +1,15 @@
+import { hash, verify } from "@node-rs/argon2";
+
+// argon2id via library defaults (memory-hard, sane cost). ponytail: defaults are
+// correct until a measured throughput problem says otherwise — then tune the
+// options object here, not at every call site.
+export function hashPassword(password: string): Promise<string> {
+  return hash(password);
+}
+
+export function verifyPassword(
+  password: string,
+  digest: string,
+): Promise<boolean> {
+  return verify(digest, password);
+}

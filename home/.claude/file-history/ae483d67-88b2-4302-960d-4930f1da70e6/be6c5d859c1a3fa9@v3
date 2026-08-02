@@ -1,0 +1,200 @@
+"use client";
+
+// The timeline — memos in chronological order (the stream has an order and an
+// end). No counts, no ranking (#4). Each item is playable, likeable, and shows
+// its transcript (on by default), which the author can correct. Filtered by the
+// stream search query. All reachable by keyboard and screen reader.
+
+import { useMemo, useState } from "react";
+import { Heart, Play, Radio } from "lucide-react";
+import { usePlayer } from "@/stores/player";
+import { orderedQueue } from "@/lib/channels";
+import { formatDuration, spokenDuration } from "@/lib/format";
+import { displayTranscript } from "@/lib/types";
+import { filterMemos } from "@/lib/search";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+export function MemoList({ query = "" }: { query?: string }) {
+  const memos = usePlayer((s) => s.memos);
+  const activeChannel = usePlayer((s) => s.activeChannel);
+  const shuffle = usePlayer((s) => s.shuffle);
+  const shuffleOrder = usePlayer((s) => s.shuffleOrder);
+  const currentIndex = usePlayer((s) => s.currentIndex);
+  const status = usePlayer((s) => s.status);
+  const showTranscripts = usePlayer((s) => s.showTranscripts);
+  const playFrom = usePlayer((s) => s.playFrom);
+  const toggleLike = usePlayer((s) => s.toggleLike);
+  const correctTranscript = usePlayer((s) => s.correctTranscript);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+
+  const queue = useMemo(
+    () => orderedQueue(memos, activeChannel, shuffle ? shuffleOrder : null),
+    [memos, activeChannel, shuffle, shuffleOrder],
+  );
+
+  if (queue.length === 0) {
+    const allView = activeChannel === "all";
+    return (
+      <div className="rounded-2xl border border-dashed border-border p-8 text-center">
+        <Radio aria-hidden="true" className="mx-auto mb-3 size-8 text-muted-foreground" />
+        <p className="font-medium">{allView ? "Your radio is quiet" : "This station is quiet"}</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {allView
+            ? "Record the first memo — it becomes the first thing on your stream."
+            : "Record a memo — it becomes the first thing on this station."}
+        </p>
+      </div>
+    );
+  }
+
+  const visible = filterMemos(queue, query);
+  if (visible.length === 0) {
+    return (
+      <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+        No memos match “{query.trim()}”.
+      </p>
+    );
+  }
+
+  const startEdit = (id: string, current: string) => {
+    setEditingId(id);
+    setDraft(current);
+  };
+  const saveEdit = (id: string) => {
+    correctTranscript(id, draft);
+    setEditingId(null);
+  };
+
+  return (
+    <ul aria-label="Your stream, oldest first" className="flex flex-col gap-2">
+      {visible.map(({ memo, index }) => {
+        const isCurrent = index === currentIndex && status !== "ended";
+        const transcript = displayTranscript(memo);
+        const isCorrected = !!memo.correctedTranscript;
+        const editing = editingId === memo.id;
+        return (
+          <li key={memo.id}>
+            <div
+              aria-current={isCurrent ? "true" : undefined}
+              className={cn(
+                "flex flex-col gap-2 rounded-xl border p-3 transition-colors",
+                isCurrent ? "border-primary bg-primary/5" : "border-border",
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <Button
+                  type="button"
+                  size="icon"
+                  variant={isCurrent ? "default" : "outline"}
+                  className="size-11 shrink-0 rounded-full"
+                  aria-label={`Play memo ${index + 1}, ${spokenDuration(memo.durationMs)}${
+                    isCurrent ? ", currently selected" : ""
+                  }`}
+                  onClick={() => playFrom(index)}
+                >
+                  <Play className="size-4" aria-hidden="true" />
+                </Button>
+
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">Memo {index + 1}</p>
+                  <p className="text-xs text-muted-foreground">{formatDuration(memo.durationMs)}</p>
+                </div>
+
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="size-11 shrink-0 rounded-full"
+                  aria-pressed={memo.liked}
+                  aria-label={memo.liked ? `Unlike memo ${index + 1}` : `Like memo ${index + 1}`}
+                  onClick={() => toggleLike(memo.id)}
+                >
+                  <Heart
+                    className={cn("size-4", memo.liked && "fill-current text-primary")}
+                    aria-hidden="true"
+                  />
+                </Button>
+              </div>
+
+              {showTranscripts && (
+                <div className="ps-14">
+                  {editing ? (
+                    <div className="flex flex-col gap-2">
+                      <label htmlFor={`transcript-${memo.id}`} className="text-xs text-muted-foreground">
+                        Correct the transcript for memo {index + 1}
+                      </label>
+                      <textarea
+                        id={`transcript-${memo.id}`}
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        rows={2}
+                        className="w-full rounded-lg border border-border bg-background p-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                      />
+                      <div className="flex gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-10 px-4"
+                          onClick={() => saveEdit(memo.id)}
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-10 px-4"
+                          onClick={() => setEditingId(null)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  ) : transcript ? (
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm text-foreground/90">
+                        {transcript}
+                        {!isCorrected && (
+                          <span className="ms-1 text-xs text-muted-foreground">
+                            (machine transcript — may contain errors)
+                          </span>
+                        )}
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-10 shrink-0 px-3"
+                        aria-label={`Suggest a correction for memo ${index + 1}`}
+                        onClick={() => startEdit(memo.id, transcript)}
+                      >
+                        Correct
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm text-muted-foreground">No transcript yet.</p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-10 shrink-0 px-3"
+                        aria-label={`Add a transcript for memo ${index + 1}`}
+                        onClick={() => startEdit(memo.id, "")}
+                      >
+                        Add
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}

@@ -1,0 +1,795 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
+import { Microphone, MicrophoneSlash, X } from '@phosphor-icons/react';
+
+// The Web Speech API isn't in lib.dom.d.ts as a constructor — type as
+// a permissive shape that covers what we use.
+interface SpeechRecognitionErrorEvent {
+  error: string;
+  message?: string;
+}
+
+interface SpeechRecognitionLike {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  maxAlternatives: number;
+  onresult: ((event: { resultIndex: number; results: { [k: number]: { [k: number]: { transcript: string }; isFinal: boolean }; length: number } }) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEvent) => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+}
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionCtor;
+    webkitSpeechRecognition?: SpeechRecognitionCtor;
+    __teSimulate?: (text: string) => CommandDescriptor;
+  }
+}
+
+type Intent =
+  | 'noop'
+  | 'disable'
+  | 'help'
+  | 'audio-pause'
+  | 'audio-resume'
+  | 'audio-stop'
+  | 'audio-start'
+  | 'scroll'
+  | 'read-page'
+  | 'theme'
+  | 'navigate'
+  | 'unknown';
+
+interface CommandDescriptor {
+  intent: Intent;
+  payload?: string;
+  confirm?: string;
+}
+
+type Status = 'idle' | 'listening' | 'awake' | 'disabled' | 'error';
+
+/*
+ * TE — Third Eye voice assistant.
+ *
+ * TE does NOT listen automatically. Press-to-talk is the only default
+ * listening path; the wake word is opt-in via the panel's "Enable TE"
+ * button. This is a deliberate change from the old behavior of arming
+ * the recogniser on the first user gesture, which collided with PTT
+ * (the recogniser would already be running and in some other state
+ * when Space / two-finger / shake / long-press fired).
+ *
+ * Listening modes:
+ *   - Press-to-talk (default, recommended). Holding Space / shaking
+ *     the device / touching two fingers / long-pressing the FAB /
+ *     pressing the panel "Hold to talk" button starts the recogniser
+ *     for the duration of the press; releasing stops it fully. TE is
+ *     idle between presses.
+ *   - Continuous wake-word ("Hey TE"). Opt-in. The "Enable TE" button
+ *     in the panel starts the recogniser running continuously; it
+ *     listens for "hey TE" / "hi TE" / "okay TE" / "yo TE" plus the
+ *     bare-word fallback "te" / "tee", and runs until the user
+ *     explicitly disables.
+ *
+ * AudioTour previously called window.startTeTour() to auto-arm TE on
+ * page load; that hook is now a no-op so the launch overlay can still
+ * play its pre-recorded tour without re-enabling the recogniser
+ * behind the user's back.
+ *
+ * Sensitivity: when running (PTT or continuous), SpeechRecognition
+ * uses continuous + interim and restarts with a 100 ms debounce after
+ * onend. Wake-word regex matches "hey TE", "hi TE", "okay TE",
+ * "hey tee", "hey t e", "hey t.e." (plus a final-result-only fallback
+ * that fires on a bare "TE" uttered alone).
+ *
+ * Browser support: window.SpeechRecognition / webkitSpeechRecognition
+ * (Chrome, Edge, Safari). Without it, the panel shows a support note
+ * instead of the listening UI.
+ *
+ * Testability: window.__teSimulate(text) runs a phrase through the
+ * intent router without needing a real microphone.
+ */
+
+const PAGE_ROUTES: Record<string, { path: string; aliases: string[] }> = {
+  home:       { path: '/',            aliases: ['home', 'the home page', 'main page', 'start page', 'front page'] },
+  about:      { path: '/about',       aliases: ['about', 'about page', 'about us'] },
+  projects:   { path: '/projects',    aliases: ['projects', 'project page', 'projects page', 'programs', 'program', 'our projects'] },
+  donate:     { path: '/donate',      aliases: ['donate', 'donate page', 'donation', 'donations', 'give', 'contribute'] },
+  media:      { path: '/media',       aliases: ['media', 'media page', 'photos', 'podcasts', 'videos'] },
+  documents:  { path: '/documents',   aliases: ['documents', 'document page', 'blogs', 'blog', 'stories', 'story'] },
+  volunteers: { path: '/volunteers',  aliases: ['volunteers', 'volunteer', 'volunteer page', 'get involved'] },
+  comingSoon: { path: '/coming-soon', aliases: ['coming soon', 'launch', 'countdown'] },
+};
+
+const HELP_TEXT = (
+  'You can ask me to go to pages like home, about, projects, donate, media, documents, or volunteers. ' +
+  'Or say: scroll down, scroll up, top of page, bottom of page, read this page, dark mode, or stop listening.'
+);
+
+const INTRO_TEXT = (
+  "Hi, I'm TE — Third Eye Worldwide's voice guide. " +
+  'I can take you anywhere on this site by voice. ' +
+  'Just say "Hey TE" followed by where you want to go. ' +
+  'For example, "Hey TE, projects." Or "Hey TE, dark mode." ' +
+  'Say "Hey TE, help" to hear everything I can do. ' +
+  "I'm listening now."
+);
+
+// Wake-word regex. Tolerates the common dictation outputs Chrome/Edge
+// produce for "hey TE": "hey te", "hey tee", "hey t e", "hey t.e.",
+// and the synonyms "hi TE" / "okay TE". Also accepts "yo TE".
+const WAKE_RE = /\b(hey|hi|okay|ok|yo)\s+(te|tee|t\s*e|t\.\s*e\.?)\b/i;
+
+// Fallback wake: a final transcript that's *just* the syllable "te"
+// or "tee" by itself. Tighter than the prefix regex so we don't
+// false-fire on words like "tea", "tell", "team".
+const BARE_WAKE_RE = /^(te|tee)[\s.,!?]*$/i;
+
+/**
+ * iOS 13+ requires explicit permission for `devicemotion` events. Call this
+ * inside a user gesture (button click). Returns `true` if motion events will
+ * fire, `false` if denied or unavailable. Other browsers don't gate this and
+ * resolve `true` immediately.
+ */
+async function requestMotionPermission(): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  const DM = (window as unknown as {
+    DeviceMotionEvent?: { requestPermission?: () => Promise<'granted' | 'denied'> };
+  }).DeviceMotionEvent;
+  if (!DM) return false;
+  if (typeof DM.requestPermission !== 'function') return true; // Android / desktop
+  try {
+    const result = await DM.requestPermission();
+    return result === 'granted';
+  } catch {
+    return false;
+  }
+}
+
+function speak(text: string): SpeechSynthesisUtterance | null {
+  if (typeof window === 'undefined' || !window.speechSynthesis || !window.SpeechSynthesisUtterance) return null;
+  try {
+    window.speechSynthesis.cancel();
+    const u = new window.SpeechSynthesisUtterance(text);
+    u.rate = 1;
+    u.pitch = 1;
+    u.volume = 1;
+    window.speechSynthesis.speak(u);
+    return u;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parse a raw command string and return an { intent, payload, confirm }
+ * descriptor. Keyword-based; not a general NLU.
+ */
+export function parseCommand(raw: string): CommandDescriptor {
+  const text = String(raw || '').trim().toLowerCase();
+  if (!text) return { intent: 'noop' };
+
+  if (/\b(stop listening|disable te|turn off|sleep|goodbye|bye)\b/.test(text)) {
+    return { intent: 'disable', confirm: 'Goodbye. Tap the TE button to wake me again.' };
+  }
+  if (/\b(help|what can (i|you) (say|do)|commands?)\b/.test(text)) {
+    return { intent: 'help', confirm: HELP_TEXT };
+  }
+
+  if (/\bpause (the )?(audio|tour)\b/.test(text))  return { intent: 'audio-pause',  confirm: 'Pausing the audio tour.' };
+  if (/\b(resume|play|continue) (the )?(audio|tour)\b/.test(text))
+    return { intent: 'audio-resume', confirm: 'Resuming the audio tour.' };
+  if (/\bstop (the )?(audio|tour)\b/.test(text))   return { intent: 'audio-stop',   confirm: 'Stopping the audio tour.' };
+  if (/\b(start|play) (the )?(audio tour|tour)\b/.test(text))
+    return { intent: 'audio-start', confirm: 'Starting the audio tour.' };
+
+  if (/\b(scroll (down|to the bottom)|go down|page down)\b/.test(text))
+    return { intent: 'scroll', payload: 'down', confirm: 'Scrolling down.' };
+  if (/\b(scroll (up|to the top)|go up|page up)\b/.test(text))
+    return { intent: 'scroll', payload: 'up', confirm: 'Scrolling up.' };
+  if (/\b(top of (the )?page|back to top|top)\b/.test(text))
+    return { intent: 'scroll', payload: 'top', confirm: 'Going to the top.' };
+  if (/\b(bottom of (the )?page|end of (the )?page|bottom)\b/.test(text))
+    return { intent: 'scroll', payload: 'bottom', confirm: 'Going to the bottom.' };
+
+  if (/\b(read|describe) (this|the) (page|thing)\b/.test(text) || /\bread it\b/.test(text))
+    return { intent: 'read-page', confirm: 'Reading the page.' };
+
+  if (/\b(dark|night) (mode|theme)\b/.test(text))          return { intent: 'theme', payload: 'dark',          confirm: 'Switching to dark mode.' };
+  if (/\b(light|day) (mode|theme)\b/.test(text))           return { intent: 'theme', payload: 'light',         confirm: 'Switching to light mode.' };
+  if (/\bhigh[\s-]?contrast( mode| theme)?\b/.test(text))  return { intent: 'theme', payload: 'high-contrast', confirm: 'High contrast mode on.' };
+
+  // Navigation — "go to X", "open X", "take me to X", etc., or just the page name.
+  const navMatch = text.match(/\b(go to|open|take me to|navigate to|show me)\s+(.+)$/);
+  const candidate = navMatch ? navMatch[2].trim() : text.trim();
+  for (const [key, { path, aliases }] of Object.entries(PAGE_ROUTES)) {
+    for (const a of aliases) {
+      if (candidate === a || candidate.endsWith(' ' + a) || candidate.startsWith(a + ' ') || candidate === a.replace(/\s+/g, '')) {
+        return { intent: 'navigate', payload: path, confirm: `Going to ${key === 'comingSoon' ? 'coming soon' : key}.` };
+      }
+    }
+  }
+
+  return { intent: 'unknown', confirm: "Sorry, I didn't catch that. Say help to hear what I can do." };
+}
+
+// How long the FAB must be held before a press counts as press-to-talk
+// rather than a tap-to-toggle-panel. 250 ms is the same threshold WhatsApp /
+// iMessage use for hold-to-record on voice messages.
+const PTT_HOLD_THRESHOLD_MS = 250;
+
+// Grace period after PTT release before we drop awake state. Lets the
+// recogniser finalise an in-flight transcript that arrived a beat after
+// the user lifted their finger / key.
+const PTT_RELEASE_GRACE_MS = 800;
+
+// Shake-to-talk: deliberate shake opens TE for SHAKE_LISTEN_WINDOW_MS.
+// SHAKE_THRESHOLD is delta-acceleration in m/s² between two consecutive
+// `devicemotion` samples — empirically ~25 is a deliberate wrist flick;
+// walking is 12–15, hand-tremor < 8. SHAKE_COOLDOWN_MS stops a single
+// vigorous shake from firing the listener two or three times.
+const SHAKE_THRESHOLD = 25;
+const SHAKE_COOLDOWN_MS = 1500;
+const SHAKE_LISTEN_WINDOW_MS = 4000;
+
+export default function VoiceAssistant() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const [supported, setSupported] = useState(true);
+  const [status, setStatus] = useState<Status>('disabled');
+  const [lastHeard, setLastHeard] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [pttActive, setPttActive] = useState(false);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const awakeRef = useRef(false);
+  const enabledRef = useRef(false);
+  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // Press-to-talk refs. pttActiveRef mirrors pttActive for use inside
+  // event handlers that don't see the React state closure.
+  const pttActiveRef = useRef(false);
+  const pttReleaseTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const fabHoldTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const fabHoldFiredRef = useRef(false);
+  // True while the current SpeechRecognition session was started by a
+  // PTT gesture (Space / two-finger / shake / FAB long-press / panel
+  // button) rather than by an explicit Enable-TE click. On PTT release
+  // we fully stop the recognizer in this case so TE goes idle between
+  // presses — that's the whole point of "no automatic listening".
+  const startedByPttRef = useRef(false);
+  // Shake-to-talk + two-finger refs.
+  const motionGrantedRef = useRef(false);
+  const shakeWindowTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const twoFingerActiveRef = useRef(false);
+
+  const statusRef = useRef<Status>(status);
+  useEffect(() => { statusRef.current = status; }, [status]);
+
+  function executeIntent(descriptor: CommandDescriptor | null | undefined) {
+    const { intent, payload, confirm } = descriptor || ({} as CommandDescriptor);
+    if (confirm) speak(confirm);
+    switch (intent) {
+      case 'navigate':
+        if (payload) router.push(payload);
+        break;
+      case 'scroll': {
+        if (payload === 'down')   window.scrollBy({ top:  window.innerHeight * 0.8, behavior: 'smooth' });
+        if (payload === 'up')     window.scrollBy({ top: -window.innerHeight * 0.8, behavior: 'smooth' });
+        if (payload === 'top')    window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (payload === 'bottom') window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+        break;
+      }
+      case 'read-page': {
+        const h = document.querySelector<HTMLElement>('main h1, main h2');
+        const p = document.querySelector<HTMLElement>('main p');
+        const parts = [h?.innerText, p?.innerText].filter(Boolean);
+        if (parts.length) speak(parts.join('. '));
+        else speak("I couldn't find readable content on this page.");
+        break;
+      }
+      case 'audio-start':  window.startAudioTour?.();  break;
+      case 'audio-pause':  window.pauseAudioTour?.();  break;
+      case 'audio-resume': window.resumeAudioTour?.(); break;
+      case 'audio-stop':   window.stopAudioTour?.();   break;
+      case 'theme':        if (payload) window.setTheme(payload); break;
+      case 'disable':      disable();                  break;
+      case 'help': /* HELP_TEXT already spoken via confirm */ break;
+      default: /* unknown / noop */ break;
+    }
+  }
+
+  function handleCommand(text: string) {
+    setLastHeard(text);
+    executeIntent(parseCommand(text));
+    awakeRef.current = false;
+    pttActiveRef.current = false;
+    setPttActive(false);
+    if (statusRef.current !== 'disabled') setStatus('listening');
+  }
+
+  // Press-to-talk: skip the wake word entirely. While the user holds
+  // Space (desktop) or long-presses the FAB (mobile), we force awake mode
+  // on so the next final transcript is treated as a command. This is the
+  // reliability escape hatch for noisy environments, non-native accents,
+  // and short / phonetically generic wake words.
+  function startPtt() {
+    clearTimeout(pttReleaseTimerRef.current);
+    // Cancel any in-flight TTS so we don't capture our own voice on the mic.
+    try { window.speechSynthesis?.cancel(); } catch {}
+    // If TE isn't enabled yet, start the recogniser just for this PTT
+    // session. startedByPttRef tells endPtt() to fully shut it back down
+    // on release so we don't slip into continuous listening behind the
+    // user's back. The user gesture (key / pointer) that triggered this
+    // call satisfies the browser's mic-permission activation rule.
+    if (!enabledRef.current) {
+      setErrorMsg('');
+      enabledRef.current = true;
+      startedByPttRef.current = true;
+      startRecognition();
+    }
+    pttActiveRef.current = true;
+    setPttActive(true);
+    awakeRef.current = true;
+    setStatus('awake');
+  }
+
+  function endPtt() {
+    pttActiveRef.current = false;
+    setPttActive(false);
+    clearTimeout(pttReleaseTimerRef.current);
+    // Keep awake mode for a short grace window so a final transcript that
+    // arrives just after release still fires the command. After the grace
+    // window, if this session was started by PTT (not by an explicit
+    // Enable-TE click), fully shut down the recogniser — TE should be
+    // idle between presses.
+    pttReleaseTimerRef.current = setTimeout(() => {
+      if (pttActiveRef.current) return;
+      awakeRef.current = false;
+      if (startedByPttRef.current) {
+        startedByPttRef.current = false;
+        disable();
+      } else if (enabledRef.current && statusRef.current !== 'disabled') {
+        setStatus('listening');
+      }
+    }, PTT_RELEASE_GRACE_MS);
+  }
+
+  function startRecognition() {
+    if (typeof window === 'undefined') return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { setSupported(false); return; }
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch {}
+      recognitionRef.current = null;
+    }
+    const rec = new SR();
+    rec.lang = 'en-US';
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    rec.onresult = (event: { resultIndex: number; results: { [k: number]: { [k: number]: { transcript: string }; isFinal: boolean }; length: number } }) => {
+      if (!enabledRef.current) return;
+      let transcript = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+      const lower = transcript.trim().toLowerCase();
+      if (!lower) return;
+
+      const lastFinal = event.results[event.results.length - 1].isFinal;
+
+      if (!awakeRef.current) {
+        // Tier 1 — explicit prefix "hey/hi/okay/yo TE".
+        if (WAKE_RE.test(lower)) {
+          awakeRef.current = true;
+          setStatus('awake');
+          const rest = lower.replace(/.*?\b(hey|hi|okay|ok|yo)\s+(te|tee|t\s*e|t\.\s*e\.?)\b/i, '').trim();
+          if (rest && lastFinal) {
+            handleCommand(rest);
+            return;
+          }
+          speak('Yes?');
+          return;
+        }
+        // Tier 2 — bare "TE" / "tee" alone, only when the recogniser
+        // says it's a final result, so we don't false-fire on partials.
+        if (lastFinal && BARE_WAKE_RE.test(lower)) {
+          awakeRef.current = true;
+          setStatus('awake');
+          speak('Yes?');
+        }
+      } else if (lastFinal) {
+        handleCommand(lower);
+      }
+    };
+    rec.onerror = (event: SpeechRecognitionErrorEvent) => {
+      const { error } = event;
+      if (error === 'not-allowed') {
+        enabledRef.current = false;
+        clearTimeout(restartTimerRef.current);
+        setStatus('error');
+        setErrorMsg(
+          'Microphone access was denied. Open your browser’s site settings, allow the microphone for this site, then click “Enable TE”.'
+        );
+      } else if (error === 'service-not-available') {
+        enabledRef.current = false;
+        clearTimeout(restartTimerRef.current);
+        setStatus('error');
+        setErrorMsg(
+          'Speech recognition service is unavailable. Check your internet connection, then click “Enable TE” to try again.'
+        );
+      } else if (error === 'audio-capture') {
+        enabledRef.current = false;
+        clearTimeout(restartTimerRef.current);
+        setStatus('error');
+        setErrorMsg('No microphone found. Connect a microphone and click “Enable TE”.');
+      }
+      // Transient errors (network, no-speech, aborted): onend fires next and restarts.
+    };
+    rec.onend = () => {
+      if (!enabledRef.current) return;
+      clearTimeout(restartTimerRef.current);
+      // Aggressive restart so the recogniser doesn't sit idle between
+      // utterances (was 300 ms — 100 ms feels noticeably snappier).
+      restartTimerRef.current = setTimeout(() => {
+        if (!enabledRef.current) return;
+        try { rec.start(); } catch { startRecognition(); }
+      }, 100);
+    };
+    recognitionRef.current = rec;
+    try { rec.start(); setStatus('listening'); } catch {}
+  }
+
+  // Explicit Enable-TE: turn on continuous wake-word listening. Opt-in
+  // only — TE never starts on its own. Triggered exclusively by the
+  // "Enable TE" button in the panel.
+  function enable({ intro = false }: { intro?: boolean } = {}) {
+    setErrorMsg('');
+    enabledRef.current = true;
+    startedByPttRef.current = false;
+    setStatus('listening');
+    startRecognition();
+    // Fire-and-forget: request iOS motion permission so shake-to-talk works.
+    // If denied or unsupported, shake just won't fire — everything else
+    // (Space, long-press, two-finger, wake word) keeps working.
+    requestMotionPermission().then((granted) => {
+      motionGrantedRef.current = granted;
+    });
+    if (intro) speak(INTRO_TEXT);
+    else       speak('TE here. Say hey T E to give me a command.');
+  }
+
+  function disable() {
+    enabledRef.current = false;
+    awakeRef.current = false;
+    setStatus('disabled');
+    clearTimeout(restartTimerRef.current);
+    try { recognitionRef.current?.stop(); } catch {}
+    recognitionRef.current = null;
+    try { window.speechSynthesis?.cancel(); } catch {}
+  }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    setSupported(!!SR);
+
+    window.__teSimulate = (text: string): CommandDescriptor => {
+      setLastHeard(text);
+      const descriptor = parseCommand(text);
+      executeIntent(descriptor);
+      return descriptor;
+    };
+
+    // Public hook formerly used by AudioTour to auto-arm TE on page
+    // load. TE no longer auto-listens; this is a deliberate no-op so
+    // the AudioTour overlay still mounts (it plays pre-recorded audio
+    // independently of TE) without silently re-enabling the recogniser
+    // behind the user's back.
+    window.startTeTour = () => { /* intentional no-op — see comment */ };
+
+    return () => {
+      enabledRef.current = false;
+      clearTimeout(restartTimerRef.current);
+      try { recognitionRef.current?.stop(); } catch {}
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Desktop press-to-talk: hold Space anywhere on the page. Ignored when
+  // the user is typing in a form field so we don't hijack normal typing.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!supported) return;
+
+    const isTypingTarget = (t: EventTarget | null): boolean => {
+      const el = t as HTMLElement | null;
+      if (!el || !el.tagName) return false;
+      const tag = el.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+      if (el.isContentEditable) return true;
+      return false;
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || e.repeat) return;
+      if (isTypingTarget(e.target)) return;
+      // Don't fight modifier-combo shortcuts (Ctrl+Space, etc.).
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      e.preventDefault();
+      startPtt();
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code !== 'Space') return;
+      if (isTypingTarget(e.target)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // Only consume the keyup if PTT was actually started — otherwise
+      // we'd swallow Space activation on focused buttons elsewhere.
+      if (!pttActiveRef.current) return;
+      e.preventDefault();
+      endPtt();
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supported]);
+
+  // Two-finger touch — hold-to-talk anywhere on screen. We deliberately do
+  // NOT preventDefault on touchstart so browser pinch-zoom keeps working;
+  // the user just gets TE listening in parallel during a pinch. Trade-off
+  // the user accepted explicitly.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!supported) return;
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length >= 2 && !twoFingerActiveRef.current) {
+        twoFingerActiveRef.current = true;
+        startPtt();
+      }
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      if (twoFingerActiveRef.current && e.touches.length < 2) {
+        twoFingerActiveRef.current = false;
+        endPtt();
+      }
+    };
+    const onTouchCancel = () => {
+      if (twoFingerActiveRef.current) {
+        twoFingerActiveRef.current = false;
+        endPtt();
+      }
+    };
+
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', onTouchCancel, { passive: true });
+    return () => {
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchcancel', onTouchCancel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supported]);
+
+  // Shake-to-talk — one deliberate shake opens TE for a fixed listen window.
+  // Unlike Space / long-press / two-finger this is *tap*-style, not
+  // hold-style: you can't reasonably hold a shake. Cooldown stops a single
+  // vigorous wrist motion from firing repeatedly.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!supported) return;
+
+    let lastX = 0, lastY = 0, lastZ = 0;
+    let lastShakeAt = 0;
+    let hasBaseline = false;
+
+    const onMotion = (e: DeviceMotionEvent) => {
+      const acc = e.accelerationIncludingGravity;
+      if (!acc) return;
+      const x = acc.x ?? 0;
+      const y = acc.y ?? 0;
+      const z = acc.z ?? 0;
+      if (!hasBaseline) {
+        lastX = x; lastY = y; lastZ = z;
+        hasBaseline = true;
+        return;
+      }
+      const dx = x - lastX, dy = y - lastY, dz = z - lastZ;
+      const delta = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      lastX = x; lastY = y; lastZ = z;
+
+      const now = Date.now();
+      if (delta > SHAKE_THRESHOLD && now - lastShakeAt > SHAKE_COOLDOWN_MS) {
+        lastShakeAt = now;
+        startPtt();
+        clearTimeout(shakeWindowTimerRef.current);
+        shakeWindowTimerRef.current = setTimeout(() => {
+          endPtt();
+        }, SHAKE_LISTEN_WINDOW_MS);
+      }
+    };
+
+    window.addEventListener('devicemotion', onMotion);
+    return () => {
+      window.removeEventListener('devicemotion', onMotion);
+      clearTimeout(shakeWindowTimerRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [supported]);
+
+  const statusLabel: string = ({
+    disabled:  'TE is off',
+    listening: 'Listening for "Hey TE"',
+    awake:     "Yes? I'm listening",
+    idle:      'TE',
+    error:     'TE needs attention',
+  } as Record<Status, string>)[status] || 'TE';
+
+  const dotClass: string = ({
+    disabled:  'te-dot-off',
+    listening: 'te-dot-listen',
+    awake:     'te-dot-awake',
+    idle:      '',
+    error:     'te-dot-off',
+  } as Record<Status, string>)[status] || '';
+
+  // Suppressed inside the admin dashboard. The voice "navigate to X"
+  // commands target public-site routes only.
+  if (pathname?.startsWith('/ad-min')) return null;
+
+  // FAB pointer handlers — distinguish tap (toggle panel) from long-press
+  // (press-to-talk). The 250 ms threshold matches WhatsApp/iMessage.
+  const onFabPointerDown = () => {
+    fabHoldFiredRef.current = false;
+    clearTimeout(fabHoldTimerRef.current);
+    fabHoldTimerRef.current = setTimeout(() => {
+      fabHoldFiredRef.current = true;
+      startPtt();
+    }, PTT_HOLD_THRESHOLD_MS);
+  };
+  const onFabPointerUp = () => {
+    clearTimeout(fabHoldTimerRef.current);
+    if (fabHoldFiredRef.current) {
+      endPtt();
+    } else {
+      setPanelOpen((o) => !o);
+    }
+    fabHoldFiredRef.current = false;
+  };
+  const onFabPointerCancel = () => {
+    clearTimeout(fabHoldTimerRef.current);
+    if (fabHoldFiredRef.current) endPtt();
+    fabHoldFiredRef.current = false;
+  };
+
+  // Panel "Hold to talk" handlers — same logic, no threshold (immediate).
+  const onPttBtnPointerDown = (e: React.PointerEvent) => {
+    e.preventDefault();
+    startPtt();
+  };
+  const onPttBtnPointerUp = (e: React.PointerEvent) => {
+    e.preventDefault();
+    endPtt();
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        className={`te-fab te-status-${status}${pttActive ? ' te-fab-ptt' : ''}`}
+        onPointerDown={onFabPointerDown}
+        onPointerUp={onFabPointerUp}
+        onPointerCancel={onFabPointerCancel}
+        onPointerLeave={onFabPointerCancel}
+        onContextMenu={(e) => e.preventDefault()}
+        aria-label={panelOpen ? 'Close TE voice assistant panel (long-press to talk)' : 'Open TE voice assistant panel (long-press to talk)'}
+        aria-expanded={panelOpen}
+        aria-controls="te-panel"
+        style={{ touchAction: 'none', userSelect: 'none' }}
+      >
+        <span className={`te-dot ${dotClass}`} aria-hidden="true"></span>
+        <span className="te-fab-label">TE</span>
+      </button>
+
+      {panelOpen ? (
+        <div id="te-panel" className="te-panel" role="dialog" aria-label="TE voice assistant">
+          <div className="te-panel-head">
+            <div className="te-panel-title">
+              <span className={`te-dot ${dotClass}`} aria-hidden="true"></span>
+              {statusLabel}
+            </div>
+            <button
+              type="button"
+              className="te-panel-close"
+              onClick={() => setPanelOpen(false)}
+              aria-label="Close panel"
+            >
+              <X size="1em" aria-hidden="true" />
+            </button>
+          </div>
+
+          {supported ? (
+            <>
+              <p className="te-panel-desc">
+                I&apos;m TE — Third Eye&apos;s voice guide. {status === 'disabled' || status === 'error'
+                  ? 'Enable me, then just say '
+                  : 'Say '}
+                <strong>&ldquo;Hey&nbsp;TE&rdquo;</strong> and tell me where you want to go.
+              </p>
+
+              {errorMsg ? (
+                <p className="te-error-msg" role="alert">{errorMsg}</p>
+              ) : null}
+
+              <div className="te-panel-actions">
+                {status === 'disabled' || status === 'error' ? (
+                  <button type="button" className="btn-primary te-btn-enable" onClick={() => enable({ intro: true })}>
+                    <Microphone weight="fill" size="1em" aria-hidden="true" /> Enable TE
+                  </button>
+                ) : (
+                  <button type="button" className="btn-secondary te-btn-disable" onClick={disable}>
+                    <MicrophoneSlash size="1em" aria-hidden="true" /> Turn off
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={`te-btn-ptt${pttActive ? ' te-btn-ptt-active' : ''}`}
+                  onPointerDown={onPttBtnPointerDown}
+                  onPointerUp={onPttBtnPointerUp}
+                  onPointerCancel={endPtt}
+                  onPointerLeave={() => { if (pttActiveRef.current) endPtt(); }}
+                  onContextMenu={(e) => e.preventDefault()}
+                  aria-label="Hold to speak a command without the wake word"
+                  aria-pressed={pttActive}
+                  style={{ touchAction: 'none', userSelect: 'none' }}
+                >
+                  <Microphone weight="fill" size="1em" aria-hidden="true" />{' '}
+                  {pttActive ? 'Listening — release when done' : 'Hold to talk'}
+                </button>
+              </div>
+
+              <p className="te-panel-hint">
+                Tip: hold <kbd>Space</kbd> on desktop, long-press the TE button, two-finger touch the screen, or shake your phone to skip the wake word.
+              </p>
+
+              <details className="te-panel-cheats">
+                <summary>What can I say?</summary>
+                <ul>
+                  <li><em>&ldquo;Hey TE, go to projects&rdquo;</em> — navigate to any page.</li>
+                  <li><em>&ldquo;Hey TE, scroll down / top of page&rdquo;</em> — jump around.</li>
+                  <li><em>&ldquo;Hey TE, read this page&rdquo;</em> — TE reads the heading + intro.</li>
+                  <li><em>&ldquo;Hey TE, pause audio / resume audio&rdquo;</em> — control the audio tour.</li>
+                  <li><em>&ldquo;Hey TE, dark mode&rdquo;</em> — switch theme.</li>
+                  <li><em>&ldquo;Hey TE, help&rdquo;</em> — list everything.</li>
+                  <li><em>&ldquo;Hey TE, goodbye&rdquo;</em> — turn me off.</li>
+                </ul>
+              </details>
+
+              {lastHeard ? (
+                <div className="te-last" aria-live="polite">
+                  <span className="te-last-lbl">Last heard:</span> &ldquo;{lastHeard}&rdquo;
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <p className="te-panel-desc">
+              Your browser doesn&apos;t support the Web Speech API. TE works best in
+              Chrome, Edge, or Safari on desktop and Android.
+            </p>
+          )}
+        </div>
+      ) : null}
+    </>
+  );
+}

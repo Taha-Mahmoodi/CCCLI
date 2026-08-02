@@ -1,0 +1,16 @@
+- [Atlas ERP working clone](atlas-erp-working-clone.md) — ~/Documents/atlas-erp; scratchpad wipes between sessions; push early
+- [Atlas ERP frontend progress, July 2026](atlas-erp-frontend-progress-2026-07.md) — paused 2026-07-04, resume 2026-07-09; PLAN 15.8 manufacturing slice 1 in progress
+- [GitHub accounts](github-accounts.md) — Taha-Mahmoodi is main; wafa-khairi-1020 (learning) and sadeqisaidmohaddes-star (sadqi, collaborator) must not cross-contaminate
+- [Third Eye Kit v2](third-eye-kit-v2.md) — pushed to github.com/sadeqisaidmohaddes-star/third-eye-kit-v2, 2026-07-05; vision/spec only, nothing built
+- [Third Eye research repos, July 2026](third-eye-research-repos-2026-07.md) — 2 public research-paper-style repos pushed to sadqi's GitHub, 2026-07-12
+- [Said-account collaborator contributions, July 2026](said-account-collaborator-contributions-2026-07.md) — 9 PRs from Taha-Mahmoodi across sadqi's repos; collaborator not fork; scope confirmed per-repo
+- [Heard redesign](heard-redesign.md) — heard-backup UI rebuild; spec DESIGN_SPEC_V2.md; issue→PR→merge auto workflow; colima flaky
+- [TEWW redesign](teww-redesign.md) — built then fully rolled back at owner request; PR #23 reverts it cleanly
+- [Atlas ERP PR merge authorization](atlas-erp-pr-merge-authorization.md) — user authorized auto-merging PRs in this project (2026-07-04); merge after green CI, keep building
+- [Yildizim messenger](yildizim-messenger.md) — private 2-person self-destruct messenger w/ calendar-disguise; design doc @ github.com/Taha-Mahmoodi/Yildizim, 2026-07-12; nothing built yet
+- [Third Eye World build](third-eye-world-build.md) — prod web build (marketing + Commons app); ~/Documents/third-eye-world-engineering-build; repo private under Taha, Said opens PRs, user merges (agent never)
+- [Chapters project](chapters-project.md) — OSS second-brain platform, github.com/PIIIX-org/chapters; design phase complete, 11 specs + audit + diagrams, next is implementation
+- [Chapters README workflow](chapters-readme-workflow.md) — update README.md alongside every meaningful change, same PR
+- [Chapters PR merge authorization](chapters-pr-merge-authorization.md) — user authorized auto-merging PRs in this project (2026-07-15)
+- [Creative design question style](creative-design-question-style.md) — for visual/creative brainstorming, ask open-ended provocative questions, not drafts or multiple-choice
+- [Yildizim galaxy project](yildizim-galaxy-project.md) — closed-source 3D galaxy layer for hosted Chapters; PIIIX-org/yildizim private; mechanics design done, multiplayer→v2, galaxy-clarity hypothesis recorded

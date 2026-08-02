@@ -1,0 +1,9 @@
+{
+  "id": "2",
+  "subject": "Phase 1: Install Docker",
+  "description": "Install Docker Engine + compose plugin via get.docker.com. Verify hello-world. Additive, touches nothing live.",
+  "activeForm": "Installing Docker",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

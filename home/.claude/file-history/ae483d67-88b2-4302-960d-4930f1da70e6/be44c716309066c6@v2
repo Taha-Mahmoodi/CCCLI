@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Compose draws its own UI; a framework NoActionBar theme is enough. -->
+  <style name="Theme.ThirdEyeWorld" parent="@android:style/Theme.Material.Light.NoActionBar" />
+</resources>

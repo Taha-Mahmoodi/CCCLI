@@ -1,0 +1,8 @@
+{
+  "id": "8",
+  "subject": "Language switcher visual form",
+  "description": "Placement/behavior covered already; visual form isn't. Extend with the same \"follows the collision, names the flag-icon anti-pattern\" treatment the dark-mode toggle got.",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

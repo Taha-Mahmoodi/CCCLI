@@ -1,0 +1,33 @@
+import * as React from "react";
+
+/**
+ * Decorative field of concentric "listening" arcs — the logo's mark, blown up
+ * into a background motif (DESIGN_SPEC_V2 §1). Strictly decorative
+ * (aria-hidden); position with the className (usually absolute, one edge,
+ * pointer-events-none). At most one per viewport.
+ */
+export function ArcField({ className = "" }: { className?: string }) {
+  // Five arcs sharing the logo's center-dot geometry; the second-outermost is
+  // amber, the rest teal at whisper opacity.
+  const radii = [90, 150, 210, 270, 330];
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 480 720"
+      fill="none"
+      className={["pointer-events-none select-none", className].join(" ")}
+    >
+      <circle cx="60" cy="360" r="7" fill="var(--color-primary)" opacity="0.25" />
+      {radii.map((r, i) => (
+        <path
+          key={r}
+          d={`M ${60 + r * Math.cos(-1.05)} ${360 + r * Math.sin(-1.05)} A ${r} ${r} 0 0 1 ${60 + r * Math.cos(1.05)} ${360 + r * Math.sin(1.05)}`}
+          stroke={i === 3 ? "var(--color-accent)" : "var(--color-primary)"}
+          strokeOpacity={i === 3 ? 0.3 : 0.12}
+          strokeWidth="2.5"
+          strokeLinecap="round"
+        />
+      ))}
+    </svg>
+  );
+}

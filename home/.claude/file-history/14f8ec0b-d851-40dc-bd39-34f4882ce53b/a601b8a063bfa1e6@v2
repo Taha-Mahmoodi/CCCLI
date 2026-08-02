@@ -1,0 +1,116 @@
+/**
+ * Third Eye Kit — Node B: Lower Ranging (Shoes)
+ *
+ * Dual ultrasonic sensors for left and right foot.
+ * Detects ground-plane hazards (curbs, holes, steps).
+ * Feedback: Haptic vibration motors + passive LED visibility.
+ * Status: [IMPLEMENTED]
+ *
+ * Platform: Arduino Mini Pro (5V)
+ * Sensors: 2 × HC-SR04 Ultrasonic
+ * Actuators: 2 × Vibration motors, LDR + LED
+ */
+
+// Left Shoe Sensor
+#define LEFT_TRIG  9
+#define LEFT_ECHO  10
+
+// Right Shoe Sensor
+#define RIGHT_TRIG 3
+#define RIGHT_ECHO 4
+
+// Haptic & LED
+#define LEFT_HAPTIC  5   // PWM
+#define RIGHT_HAPTIC 6   // PWM
+#define LDR_PIN      A0  // Analog input
+#define LED_PIN      7   // Digital output
+
+// Configuration
+#define ALERT_CM_LEFT  60   // cm — tune per user stride
+#define ALERT_CM_RIGHT 60   // cm
+#define LED_THRESHOLD  300  // Ambient light threshold (0-1023 ADC)
+
+float getDistance(int trigPin, int echoPin);
+void activateHaptic(int pin, int duration);
+
+void setup() {
+  Serial.begin(9600);
+
+  // Sensor pins
+  pinMode(LEFT_TRIG, OUTPUT);
+  pinMode(LEFT_ECHO, INPUT);
+  pinMode(RIGHT_TRIG, OUTPUT);
+  pinMode(RIGHT_ECHO, INPUT);
+
+  // Haptic & LED
+  pinMode(LEFT_HAPTIC, OUTPUT);
+  pinMode(RIGHT_HAPTIC, OUTPUT);
+  pinMode(LED_PIN, OUTPUT);
+
+  Serial.println("Node B: Lower Ranging System (Dual Shoe)");
+  Serial.print("Left alert: ");
+  Serial.print(ALERT_CM_LEFT);
+  Serial.println(" cm");
+  Serial.print("Right alert: ");
+  Serial.print(ALERT_CM_RIGHT);
+  Serial.println(" cm");
+}
+
+void loop() {
+  float leftDist = getDistance(LEFT_TRIG, LEFT_ECHO);
+  float rightDist = getDistance(RIGHT_TRIG, RIGHT_ECHO);
+
+  // Left shoe hazard detection
+  if (leftDist > 0 && leftDist < ALERT_CM_LEFT) {
+    activateHaptic(LEFT_HAPTIC, 100);
+    Serial.print("LEFT: ");
+    Serial.print(leftDist);
+    Serial.println(" cm");
+  }
+
+  // Right shoe hazard detection
+  if (rightDist > 0 && rightDist < ALERT_CM_RIGHT) {
+    activateHaptic(RIGHT_HAPTIC, 100);
+    Serial.print("RIGHT: ");
+    Serial.print(rightDist);
+    Serial.println(" cm");
+  }
+
+  // Ambient light detection for passive visibility (LDR + LED)
+  int ambientLight = analogRead(LDR_PIN);
+  if (ambientLight < LED_THRESHOLD) {
+    digitalWrite(LED_PIN, HIGH);  // Turn on LED in darkness
+  } else {
+    digitalWrite(LED_PIN, LOW);
+  }
+
+  delay(100);  // Sampling interval (10 Hz)
+}
+
+float getDistance(int trigPin, int echoPin) {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  long pulseDuration = pulseIn(echoPin, HIGH, 30000);
+
+  if (pulseDuration == 0) {
+    return -1;
+  }
+
+  float distance = pulseDuration / 58.0;
+
+  if (distance < 2 || distance > 400) {
+    return -1;
+  }
+
+  return distance;
+}
+
+void activateHaptic(int pin, int duration) {
+  digitalWrite(pin, HIGH);
+  delay(duration);
+  digitalWrite(pin, LOW);
+}

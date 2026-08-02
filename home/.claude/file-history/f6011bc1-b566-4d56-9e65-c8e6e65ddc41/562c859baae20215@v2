@@ -1,0 +1,61 @@
+/* ── VOLUNTEERS ────────────────── */
+.vol-split { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: start; }
+
+/* Roles — two-column editorial list (spec §5): Literata names, meta chips,
+   quiet surface that lights a gold border on hover. */
+.role-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-top: 24px; }
+.role-card { background: transparent; border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; transition: border-color .2s, background .2s, transform .2s; }
+.role-card:hover { border-color: var(--brand); background: var(--bg-elevated); transform: translateY(-2px); }
+.role-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.role-card .role-icon { display: inline-flex; color: var(--brand); font-size: 20px; flex-shrink: 0; }
+.role-card h4 { font-family: var(--font-display); font-size: 1.15rem; font-weight: 600; letter-spacing: -.01em; color: var(--fg); }
+.role-card p { font-size: .9rem; color: var(--fg-muted); line-height: 1.6; margin-bottom: 14px; }
+.role-tags { display: flex; gap: 8px; flex-wrap: wrap; }
+.role-tag { font-family: var(--font-body); font-size: .68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--fg-muted); border: 1px solid var(--border-strong); padding: 4px 10px; border-radius: var(--radius-full); }
+
+/* Steps — numbered vertical timeline: gold connector line down the left,
+   oversized Literata numerals (spec §5). */
+.vol-steps { display: flex; flex-direction: column; gap: 0; counter-reset: vstep; position: relative; }
+.vol-steps::before { content: ''; position: absolute; top: 8px; bottom: 8px; left: 0; width: 1px; background: color-mix(in oklab, var(--brand) 55%, transparent); }
+[data-theme="high-contrast"] .vol-steps::before { background: var(--brand); width: 2px; }
+.vol-step { display: grid; grid-template-columns: 76px 1fr; gap: 16px; padding: 20px 0; counter-increment: vstep; position: relative; }
+.vol-step::before { content: counter(vstep, decimal-leading-zero); font-family: var(--font-display); font-size: 2.1rem; font-weight: 600; line-height: 1.05; color: var(--brand); font-variant-numeric: tabular-nums; letter-spacing: -.02em; padding-left: 24px; }
+.vol-step h4 { font-family: var(--font-display); font-size: 1.1rem; font-weight: 600; color: var(--fg); margin: 6px 0 4px; letter-spacing: -.01em; }
+.vol-step p { font-size: .92rem; color: var(--fg-muted); line-height: 1.6; }
+
+/* Application form — elevated night panel with a gold hairline top. */
+.vol-form { position: relative; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 32px; overflow: hidden; }
+.vol-form::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: var(--brand); }
+[data-theme="high-contrast"] .vol-form { border-width: 2px; }
+.vol-form h3 { font-family: var(--font-display); font-size: 1.35rem; font-weight: 600; letter-spacing: -.01em; color: var(--fg); margin-bottom: 12px; }
+.checkbox-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cb-pill { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border-strong); border-radius: var(--radius-md); cursor: pointer; font-family: var(--font-body); font-size: .85rem; font-weight: 600; color: var(--fg); transition: border-color .15s, background .15s; }
+.cb-pill:hover { border-color: var(--brand); }
+.cb-pill input { width: 16px; height: 16px; accent-color: var(--brand); flex-shrink: 0; }
+.cb-pill:has(input:checked) { border-color: var(--brand); background: var(--brand-subtle); }
+
+/* ── VALUES/PILLARS ─────────────── */
+.pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; background: var(--bg-elevated); }
+.pillar { padding: 36px 32px; border-right: 1px solid var(--border); }
+.pillar:last-child { border-right: none; }
+.pillar .num-badge { font-family: var(--font-display); font-size: .72rem; font-weight: 700; letter-spacing: .1em; color: var(--brand); margin-bottom: 16px; }
+.pillar h3 { font-family: var(--font-display); font-size: 1.2rem; font-weight: 700; color: var(--fg); margin-bottom: 12px; letter-spacing: -.01em; }
+.pillar p { font-size: .92rem; color: var(--fg-muted); line-height: 1.6; }
+
+/* ── QUOTE CTA BAND ─────────── */
+/* Gold-on-night statement (spec §5): the deepest surface on the page with
+   the headline lit gold — never light-on-gold, which fails contrast. */
+.cta-band { padding: 96px var(--space-8); background: #0b0a10; color: var(--fg); text-align: center; position: relative; overflow: hidden; border-top: 1px solid color-mix(in oklab, var(--brand) 45%, transparent); border-bottom: 1px solid color-mix(in oklab, var(--brand) 45%, transparent); }
+[data-theme="light"] .cta-band { background: var(--bg-inverse); color: var(--fg-inverse); }
+[data-theme="high-contrast"] .cta-band { background: var(--bg); border-top: 2px solid var(--brand); border-bottom: 2px solid var(--brand); }
+/* Echo ripples — one point of light, sound radiating outward. */
+.cta-band::before { content: ''; position: absolute; top: 50%; right: -140px; width: 520px; height: 520px; transform: translateY(-50%); border-radius: 50%; border: 1px solid color-mix(in oklab, var(--brand) 35%, transparent); box-shadow: 0 0 0 80px color-mix(in oklab, var(--brand) 12%, transparent), 0 0 0 170px color-mix(in oklab, var(--brand) 7%, transparent), 0 0 0 270px color-mix(in oklab, var(--brand) 4%, transparent); }
+.cta-inner { position: relative; max-width: 780px; margin: 0 auto; z-index: 1; }
+.cta-inner h2 { font-family: var(--font-display); font-size: var(--text-title); font-weight: 600; margin-bottom: 14px; letter-spacing: -.015em; line-height: 1.12; color: var(--brand); text-wrap: balance; }
+[data-theme="light"] .cta-inner h2 { color: #e8a33d; }
+.cta-inner p { font-size: 1.1rem; opacity: .92; margin-bottom: 28px; max-width: 600px; margin-left: auto; margin-right: auto; line-height: 1.6; }
+.cta-band .btn-accent { padding: 15px 32px; font-size: 1.05rem; background: var(--brand); color: var(--brand-fg); }
+.cta-band .btn-accent:hover { background: var(--brand-hover); color: var(--brand-fg); }
+.cta-band .btn-secondary { color: currentColor; border-color: color-mix(in oklab, currentColor 40%, transparent); }
+.cta-band .btn-secondary:hover { background: color-mix(in oklab, currentColor 10%, transparent); color: currentColor; border-color: currentColor; }
+

@@ -1,0 +1,150 @@
+// Real end-to-end encrypted direct messages using libsignal (spec §7).
+// This is the audited Signal protocol (PQXDH prekey bundles + Double Ratchet) —
+// NOT hand-rolled crypto. The server only ever relays ciphertext; keys live on
+// the devices (Keychain/Secure Enclave, Android Keystore). In-memory stores here
+// stand in for the device-backed stores in the native apps.
+//
+// This module is a **standalone Node package** (outside the pnpm workspace)
+// because libsignal ships a 54 MB native tarball; it's installed with plain
+// `npm` and verified by its own CI job. See README.
+
+import * as sig from "@signalapp/libsignal-client";
+
+const {
+  ProtocolAddress,
+  IdentityKeyPair,
+  PrivateKey,
+  KEMKeyPair,
+  PreKeyRecord,
+  SignedPreKeyRecord,
+  KyberPreKeyRecord,
+  PreKeyBundle,
+  PreKeySignalMessage,
+  SignalMessage,
+  SessionStore,
+  IdentityKeyStore,
+  PreKeyStore,
+  SignedPreKeyStore,
+  KyberPreKeyStore,
+  processPreKeyBundle,
+  signalEncrypt,
+  signalDecrypt,
+  signalDecryptPreKey,
+  IdentityChange,
+} = sig;
+
+const addrKey = (a) => `${a.name()}::${a.deviceId()}`;
+const randomRegistrationId = () => Math.floor(Math.random() * 16380) + 1;
+
+class Sessions extends SessionStore {
+  m = new Map();
+  async saveSession(a, r) { this.m.set(addrKey(a), r); }
+  async getSession(a) { return this.m.get(addrKey(a)) ?? null; }
+  async getExistingSessions(addrs) {
+    return addrs.map((a) => {
+      const s = this.m.get(addrKey(a));
+      if (!s) throw new Error("no session for " + addrKey(a));
+      return s;
+    });
+  }
+}
+class Identities extends IdentityKeyStore {
+  constructor(idKeyPair, registrationId) {
+    super();
+    this.idKeyPair = idKeyPair;
+    this.registrationId = registrationId;
+    this.known = new Map();
+  }
+  async getIdentityKey() { return this.idKeyPair.privateKey; }
+  async getLocalRegistrationId() { return this.registrationId; }
+  async saveIdentity(a, key) { this.known.set(a.name(), key); return IdentityChange.NewOrUnchanged; }
+  async isTrustedIdentity() { return true; }
+  async getIdentity(a) { return this.known.get(a.name()) ?? null; }
+}
+class PreKeys extends PreKeyStore {
+  m = new Map();
+  async savePreKey(id, r) { this.m.set(id, r); }
+  async getPreKey(id) { return this.m.get(id); }
+  async removePreKey(id) { this.m.delete(id); }
+}
+class SignedPreKeys extends SignedPreKeyStore {
+  m = new Map();
+  async saveSignedPreKey(id, r) { this.m.set(id, r); }
+  async getSignedPreKey(id) { return this.m.get(id); }
+}
+class KyberPreKeys extends KyberPreKeyStore {
+  m = new Map();
+  used = new Set();
+  async saveKyberPreKey(id, r) { this.m.set(id, r); }
+  async getKyberPreKey(id) { return this.m.get(id); }
+  async markKyberPreKeyUsed(id) { this.used.add(id); }
+}
+
+/** A party (device): identity + prekeys + the four device stores. */
+export function createParty(name, deviceId = 1) {
+  const idKeyPair = IdentityKeyPair.generate();
+  const registrationId = randomRegistrationId();
+  return {
+    name,
+    address: ProtocolAddress.new(name, deviceId),
+    idKeyPair,
+    registrationId,
+    sessions: new Sessions(),
+    identities: new Identities(idKeyPair, registrationId),
+    preKeys: new PreKeys(),
+    signedPreKeys: new SignedPreKeys(),
+    kyberPreKeys: new KyberPreKeys(),
+    _preKey: PrivateKey.generate(),
+    _signedPreKey: PrivateKey.generate(),
+    _kyberPreKey: KEMKeyPair.generate(),
+  };
+}
+
+/** The recipient publishes a one-time prekey bundle (PQXDH). */
+export async function publishBundle(party) {
+  const signedSig = party.idKeyPair.privateKey.sign(party._signedPreKey.getPublicKey().serialize());
+  const kyberSig = party.idKeyPair.privateKey.sign(party._kyberPreKey.getPublicKey().serialize());
+  await party.preKeys.savePreKey(1, PreKeyRecord.new(1, party._preKey.getPublicKey(), party._preKey));
+  await party.signedPreKeys.saveSignedPreKey(
+    1,
+    SignedPreKeyRecord.new(1, Date.now(), party._signedPreKey.getPublicKey(), party._signedPreKey, signedSig),
+  );
+  await party.kyberPreKeys.saveKyberPreKey(1, KyberPreKeyRecord.new(1, Date.now(), party._kyberPreKey, kyberSig));
+  return PreKeyBundle.new(
+    party.registrationId, party.address.deviceId(),
+    1, party._preKey.getPublicKey(),
+    1, party._signedPreKey.getPublicKey(), signedSig,
+    party.idKeyPair.publicKey,
+    1, party._kyberPreKey.getPublicKey(), kyberSig,
+  );
+}
+
+/** Sender establishes a session from the recipient's bundle. */
+export async function startSession(sender, recipientAddress, bundle) {
+  await processPreKeyBundle(bundle, recipientAddress, sender.address, sender.sessions, sender.identities);
+}
+
+/** Encrypt a message for a recipient. Returns { type, ciphertext } (bytes). */
+export async function encrypt(sender, recipientAddress, plaintext) {
+  const ct = await signalEncrypt(
+    new TextEncoder().encode(plaintext), recipientAddress, sender.address, sender.sessions, sender.identities,
+  );
+  return { type: ct.type(), ciphertext: new Uint8Array(ct.serialize()) };
+}
+
+/** Decrypt a message from a sender. */
+export async function decrypt(recipient, senderAddress, { type, ciphertext }) {
+  const buf = Buffer.from(ciphertext);
+  let plain;
+  if (type === sig.CiphertextMessageType.PreKey) {
+    plain = await signalDecryptPreKey(
+      PreKeySignalMessage.deserialize(buf), senderAddress, recipient.address,
+      recipient.sessions, recipient.identities, recipient.preKeys, recipient.signedPreKeys, recipient.kyberPreKeys,
+    );
+  } else {
+    plain = await signalDecrypt(
+      SignalMessage.deserialize(buf), senderAddress, recipient.address, recipient.sessions, recipient.identities,
+    );
+  }
+  return new TextDecoder().decode(plain);
+}

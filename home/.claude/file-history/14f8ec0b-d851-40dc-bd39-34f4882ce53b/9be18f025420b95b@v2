@@ -1,0 +1,23 @@
+Include /Users/taha/.colima/ssh_config
+
+
+Host github.com-taha
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/github_taha
+
+Host github.com-wafa
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/github_wafa
+
+Host github.com-sadeqi
+    HostName github.com
+    User git
+    IdentityFile ~/.ssh/github_sadeqi
+
+Host lucifers-vps
+    HostName 147.93.138.77
+    User root
+    IdentityFile ~/.ssh/claude-code
+    IdentitiesOnly yes

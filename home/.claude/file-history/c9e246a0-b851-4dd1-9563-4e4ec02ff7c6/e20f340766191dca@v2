@@ -1,0 +1,38 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { notify } from "@/lib/notify";
+
+export type FollowResult =
+  | { following: boolean; followerCount: number }
+  | { error: string };
+
+export async function toggleFollow(targetId: string): Promise<FollowResult> {
+  const session = await auth();
+  if (!session?.user) return { error: "You are not signed in." };
+  const followerId = session.user.id;
+  if (followerId === targetId) return { error: "You cannot follow yourself." };
+
+  const existing = await prisma.follow.findUnique({
+    where: {
+      followerId_followingId: { followerId, followingId: targetId },
+    },
+  });
+  if (existing) {
+    await prisma.follow.delete({ where: { id: existing.id } });
+  } else {
+    await prisma.follow.create({
+      data: { followerId, followingId: targetId },
+    });
+    await notify({ userId: targetId, actorId: followerId, type: "FOLLOW" });
+  }
+
+  const followerCount = await prisma.follow.count({
+    where: { followingId: targetId },
+  });
+  revalidatePath(`/app/u/${targetId}`);
+  revalidatePath("/app");
+  return { following: !existing, followerCount };
+}

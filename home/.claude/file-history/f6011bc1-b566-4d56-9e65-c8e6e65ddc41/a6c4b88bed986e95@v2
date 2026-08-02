@@ -1,0 +1,117 @@
+import type { CSSProperties } from 'react';
+import Link from 'next/link';
+import RichText from '@/components/RichText';
+import CmsIcon from '@/components/CmsIcon';
+import { ArrowLeft, Heart } from '@/components/icons';
+import { isSafeImageUrl } from '@/lib/utils';
+
+/*
+ * Renders a single project's detail view. Shape expected:
+ *   { title, desc, icon, tag, slug, status, statusLabel,
+ *     what, how, why, usage, future, image }
+ *
+ * Long-form sections are passed through RichText so CMS editors can
+ * include <em>/<strong>/<br> without escaping. `image` is optional —
+ * most projects render icon-only; a photo is a bonus layer, not a
+ * requirement (spec: "photos … until real imagery lands, sections use
+ * ripple/braille motifs").
+ */
+
+const SECTIONS = [
+  { key: 'what',   eyebrow: 'What it is',     label: 'What is it?' },
+  { key: 'how',    eyebrow: 'How it works',   label: 'How does it work?' },
+  { key: 'why',    eyebrow: 'The reason',     label: 'Why we built it' },
+  { key: 'usage',  eyebrow: 'In practice',    label: 'How is it used?' },
+  { key: 'future', eyebrow: 'What’s next', label: 'What’s the future of it?' },
+];
+
+export interface ProjectDetailData {
+  title?: string;
+  desc?: string;
+  icon?: string;
+  tag?: string;
+  status?: string;
+  statusLabel?: string;
+  what?: string;
+  how?: string;
+  why?: string;
+  usage?: string;
+  future?: string;
+  image?: string;
+  [key: string]: unknown;
+}
+
+export default function ProjectDetail({ project }: { project: ProjectDetailData }) {
+  const { title, desc, icon, tag, status, statusLabel, image } = project || {};
+  const safeImage = isSafeImageUrl(image) ? image : '';
+
+  return (
+    <article className="project-detail">
+      <header className={`pd-hero${safeImage ? ' pd-hero--photo' : ''}`}>
+        {safeImage ? (
+          <div
+            className="pd-hero-photo"
+            aria-hidden="true"
+            style={{ '--hero-image': `url('${safeImage}')` } as CSSProperties}
+          />
+        ) : null}
+        <div className="pd-hero-inner">
+          <Link href="/projects" className="pd-back">
+            <ArrowLeft size="1em" aria-hidden="true" />
+            Back to projects
+          </Link>
+          <div className="pd-hero-icon" aria-hidden="true">
+            <CmsIcon name={icon || 'star'} />
+          </div>
+          <h1 className="pd-title">{title}</h1>
+          {desc ? <p className="pd-standfirst">{desc}</p> : null}
+
+          {(statusLabel || tag) ? (
+            <dl className="pd-meta">
+              {statusLabel ? (
+                <div className={`pd-meta-row pd-status-${status || 'info'}`}>
+                  <dt>Status</dt>
+                  <dd>
+                    <span className="pd-status-dot" aria-hidden="true"></span>
+                    {statusLabel}
+                  </dd>
+                </div>
+              ) : null}
+              {tag ? (
+                <div className="pd-meta-row">
+                  <dt>Focus</dt>
+                  <dd>{tag}</dd>
+                </div>
+              ) : null}
+            </dl>
+          ) : null}
+        </div>
+      </header>
+
+      <div className="pd-body">
+        {SECTIONS.map(({ key, eyebrow, label }) => (
+          project[key] ? (
+            <section key={key} className="pd-section" aria-labelledby={`pd-s-${key}`}>
+              <div className="pd-section-eyebrow">{eyebrow}</div>
+              <h2 id={`pd-s-${key}`} className="pd-section-title">{label}</h2>
+              <RichText as="div" className="pd-section-body" html={project[key] as string} />
+            </section>
+          ) : null
+        ))}
+      </div>
+
+      <section className="pd-cta">
+        <h2>Support projects like this.</h2>
+        <p>Every dollar funds open-source tools that are free at point of use — and stay that way.</p>
+        <div className="pd-cta-actions">
+          <Link href="/donate" className="btn-accent">
+            <Heart weight="fill" size="1em" aria-hidden="true" /> Donate
+          </Link>
+          <Link href="/volunteers" className="btn-secondary">
+            Volunteer
+          </Link>
+        </div>
+      </section>
+    </article>
+  );
+}

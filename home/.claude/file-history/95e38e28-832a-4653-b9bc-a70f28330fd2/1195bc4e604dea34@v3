@@ -1,0 +1,25 @@
+import { describe, expect, it } from 'vitest';
+import { render } from '@testing-library/react';
+import DocCard from '@/components/documents/DocCard';
+
+describe('DocCard', () => {
+  it('links to /blog-detail?slug=<id> for a research entry', () => {
+    const { container } = render(<DocCard doc={{ id: 'third-eye-kit', title: 'Third Eye Kit' }} />);
+    const link = container.querySelector('a');
+    expect(link?.getAttribute('href')).toBe('/blog-detail?slug=third-eye-kit');
+  });
+
+  it('links to /story-detail?slug=<id> for a story entry', () => {
+    const { container } = render(
+      <DocCard doc={{ id: 's-open-call', title: 'Tell us your story', tagClass: 'story' }} />
+    );
+    const link = container.querySelector('a');
+    expect(link?.getAttribute('href')).toBe('/story-detail?slug=s-open-call');
+  });
+
+  it('falls back to the bare route when a doc has no id', () => {
+    const { container } = render(<DocCard doc={{ title: 'Untitled' }} />);
+    const link = container.querySelector('a');
+    expect(link?.getAttribute('href')).toBe('/blog-detail');
+  });
+});

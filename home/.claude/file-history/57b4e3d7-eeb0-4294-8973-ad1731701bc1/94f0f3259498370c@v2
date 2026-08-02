@@ -1,0 +1,221 @@
+<!doctype html>
+<!-- forged-with: portfolio.me -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Said Mohaddes Sadeqi — assistive technology</title>
+<meta name="description" content="I build for people who don't see the screen, from inside that rather than next to it. Third Eye Kit, field-tested with blind users in Herat. Third Eye World, in rebuild.">
+<link rel="preload" href="assets/fonts/AtkinsonHyperlegible-700.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/css/tokens.css">
+<link rel="stylesheet" href="assets/css/base.css">
+<link rel="stylesheet" href="assets/css/home.css">
+</head>
+<body>
+
+<!-- duotone filters. river = the present, amber = the 2022 archive. -->
+<svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+  <filter id="p-duo-river" color-interpolation-filters="sRGB">
+    <feColorMatrix type="matrix" values="0.33 0.5 0.17 0 0
+                                         0.33 0.5 0.17 0 0
+                                         0.33 0.5 0.17 0 0
+                                         0    0   0    1 0"/>
+    <feComponentTransfer>
+      <feFuncR type="table" tableValues="0.043 0.624"/>
+      <feFuncG type="table" tableValues="0.059 0.706"/>
+      <feFuncB type="table" tableValues="0.051 0.678"/>
+    </feComponentTransfer>
+  </filter>
+  <filter id="p-duo-amber" color-interpolation-filters="sRGB">
+    <feColorMatrix type="matrix" values="0.33 0.5 0.17 0 0
+                                         0.33 0.5 0.17 0 0
+                                         0.33 0.5 0.17 0 0
+                                         0    0   0    1 0"/>
+    <feComponentTransfer>
+      <feFuncR type="table" tableValues="0.043 0.788"/>
+      <feFuncG type="table" tableValues="0.059 0.604"/>
+      <feFuncB type="table" tableValues="0.051 0.337"/>
+    </feComponentTransfer>
+  </filter>
+</svg>
+
+<div class="p-shell">
+  <a class="p-skip" href="#slate">Skip to the work</a>
+
+  <main id="main">
+
+    <section class="hero" id="claim" aria-labelledby="h-claim">
+      <span class="p-landmark p-mono">Said Mohaddes Sadeqi · assistive technology</span>
+      <h1 id="h-claim">it is ok if eyes are not at 100%</h1>
+
+      <div class="hero-foot p-flex" data-listen data-idle-label="Listen · 6 seconds">
+        <div>
+          <button type="button" aria-pressed="false">
+            <span class="glyph" aria-hidden="true"></span>
+            <span data-label>Listen · 6 seconds</span>
+          </button>
+          <div class="progress" aria-hidden="true"><i data-progress></i></div>
+          <!-- Recording pending from the subject. Until the file exists the control
+               reports unavailable and the transcript carries the content. -->
+          <audio preload="none" src="assets/audio/welcome.m4a"></audio>
+          <p role="status" aria-live="polite" class="p-mono status" data-status></p>
+        </div>
+        <blockquote class="transcript">
+          <p>“Welcome. You are not alone.”</p>
+          <cite class="p-mono">Said's own voice. It does not play by itself, and it
+          never talks over a screen reader.</cite>
+        </blockquote>
+      </div>
+    </section>
+
+    <div class="body-grid p-grid">
+
+      <nav class="p-outline" aria-label="Page outline">
+        <details open>
+        <summary class="p-mono">Outline</summary>
+        <ol>
+          <li><a href="#claim">The claim</a></li>
+          <li><a href="#stands">What he stands for</a></li>
+          <li><a href="#proof">The proof</a></li>
+          <li><a href="#active">The active work</a></li>
+          <li><a href="#slate">The slate</a></li>
+          <li><a href="#who">Who he is</a></li>
+          <li><a href="#ask">The ask</a></li>
+        </ol>
+        </details>
+      </nav>
+
+      <div class="body-main">
+
+        <section id="stands" aria-labelledby="h-stands">
+          <span class="p-landmark p-mono">Region · what he stands for</span>
+          <h2 id="h-stands">What he stands for</h2>
+          <div class="lede">
+            <p>I build for people who don't see the screen, and I build from inside
+            that, not next to it.</p>
+            <p>A field test with blind users tells me more than a demo that looks
+            finished.</p>
+            <p>I would rather show the range of what I can actually build than claim
+            one narrow expertise I don't have.</p>
+          </div>
+        </section>
+
+        <section id="proof" aria-labelledby="h-proof">
+          <span class="p-landmark p-mono">Region · the proof</span>
+          <h2 id="h-proof">The proof</h2>
+          <article class="feature">
+            <h3><a href="work/third-eye-kit.html">Third Eye Kit</a>
+              <span class="p-tag p-mono">Shipped 2022</span></h3>
+            <p>Glasses that listened for obstacles, shoes that buzzed, a GPS module.
+            About $112. Built at seventeen in Herat and tested with blind users at a
+            support centre there, then taken to TEKNOFEST in Turkey, where it won
+            Best Presentation.</p>
+            <p class="more"><a href="work/third-eye-kit.html">Read the case study</a></p>
+          </article>
+        </section>
+
+        <section id="active" aria-labelledby="h-active">
+          <span class="p-landmark p-mono">Region · the active work</span>
+          <h2 id="h-active">The active work</h2>
+          <article class="feature">
+            <h3><a href="work/third-eye-world.html">Third Eye World</a>
+              <span class="p-tag p-mono">Rebuilding</span></h3>
+            <p>An accessibility-first social network for blind and low-vision users.
+            The first beta leaned on sight more than we wanted. The gestures were
+            generic and it took several of them to do one thing. Testers told us, we
+            closed the beta, and the MVP is being rebuilt.</p>
+            <p class="more"><a href="work/third-eye-world.html">Read the case study</a></p>
+          </article>
+        </section>
+
+        <section id="slate" aria-labelledby="h-slate">
+          <span class="p-landmark p-mono">Region · the work</span>
+          <h2 id="h-slate">Everything, and what state it is actually in</h2>
+          <ol class="slate">
+            <li><a class="p-row row" href="work/third-eye-world.html">
+              <span><span class="name">Third Eye World</span>
+                <span class="desc">Accessibility-first social network. Closed beta tested, then torn down.</span></span>
+              <span class="p-tag p-mono">Rebuilding</span></a></li>
+            <li><a class="p-row row" href="work/third-eye-kit.html">
+              <span><span class="name">Third Eye Kit</span>
+                <span class="desc">Wearable navigation aid. Built, field-tested, Best Presentation at TEKNOFEST.</span></span>
+              <span class="p-tag p-mono">Shipped 2022</span></a></li>
+            <li><a class="p-row row" href="work/heard.html">
+              <span><span class="name">Heard</span>
+                <span class="desc">A phone line for blind and low-vision callers. I founded it. I did not write the code.</span></span>
+              <span class="p-tag p-mono">Founder, not builder</span></a></li>
+            <li><a class="p-row row" href="work/third-eye-kit-v2.html">
+              <span><span class="name">Third Eye Kit v2</span>
+                <span class="desc">Full-body haptic wearable. Four schematics exist. Nothing has been built.</span></span>
+              <span class="p-tag p-mono">Specification</span></a></li>
+            <li><a class="p-row row" href="work/third-eye-ai.html">
+              <span><span class="name">Third Eye AI</span>
+                <span class="desc">A conversational layer for navigating without a screen. A document.</span></span>
+              <span class="p-tag p-mono">Specification</span></a></li>
+          </ol>
+          <p class="note">Every status above is the real one. Two of these are
+          documents, and saying so is what makes the first two worth reading.</p>
+        </section>
+
+        <section id="who" aria-labelledby="h-who">
+          <span class="p-landmark p-mono">Region · who he is</span>
+          <h2 id="h-who">Who he is</h2>
+          <div class="who">
+            <picture>
+              <source type="image/webp" srcset="assets/img/said-400.webp 400w, assets/img/said-640.webp 640w, assets/img/said-960.webp 960w" sizes="(min-width: 60rem) 22rem, 60vw">
+              <img class="p-duo-river" src="assets/img/said-640.jpg"
+                   srcset="assets/img/said-400.jpg 400w, assets/img/said-640.jpg 640w, assets/img/said-960.jpg 960w"
+                   sizes="(min-width: 60rem) 22rem, 60vw"
+                   width="960" height="960" loading="lazy" decoding="async"
+                   alt="Said Mohaddes Sadeqi, photographed outdoors at golden hour with trees behind him, tinted in the site's river-green.">
+            </picture>
+            <div class="who-text">
+              <p>I'm Said Mohaddes Sadeqi. I lost sight in one eye during the war in
+              Afghanistan.</p>
+              <p>At seventeen, in Herat, I built a wearable to help blind people move
+              around a city that was not built for them. It cost about $112. We tested
+              it with blind users at a support centre in Herat, and took it to
+              TEKNOFEST in Turkey, where it won Best Presentation.</p>
+              <p>I've been building for the same people ever since. I'm a developer at
+              PIIIX, and I founded Third Eye Worldwide.</p>
+              <p>Most sites treat access as something you add at the end. I treat it
+              as the thing being designed. This one is the argument: everything here
+              works without sight, and if that is true then the rest of what I say
+              about my work is worth reading.</p>
+            </div>
+          </div>
+        </section>
+
+        <section id="ask" aria-labelledby="h-ask">
+          <span class="p-landmark p-mono">Region · the ask</span>
+          <h2 id="h-ask">The ask</h2>
+          <p class="lede">If you're building something people use without looking at
+          it, I want to work on it.</p>
+          <p class="contact">
+            <a href="mailto:sadeqisaidmohaddes@gmail.com">sadeqisaidmohaddes@gmail.com</a>
+          </p>
+          <p class="more">
+            <a href="https://github.com/sadeqisaidmohaddes-star">GitHub</a> ·
+            <a href="https://teww.org">Third Eye Worldwide</a>
+          </p>
+        </section>
+
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <span class="p-landmark p-mono">Contentinfo</span>
+    <p>Built by Said Mohaddes Sadeqi in 2026. Type is Atkinson Hyperlegible, drawn by
+    the Braille Institute for readers with low vision. The green is sampled from the
+    Hari Rud, the river at Herat.</p>
+    <p>This site is built to WCAG AAA. If any part of it fails you, tell me and I will
+    fix it: <a href="mailto:sadeqisaidmohaddes@gmail.com">sadeqisaidmohaddes@gmail.com</a></p>
+    <p class="credit"><a href="https://github.com/PIIIX-org/portfolio.me">Built with
+    portfolio.me</a></p>
+  </footer>
+</div>
+
+<script src="assets/js/site.js" defer></script>
+</body>
+</html>

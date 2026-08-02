@@ -1,0 +1,79 @@
+import type { RewardStore } from "./rewards";
+
+// Stardust customization (per the design: a conquered galaxy earns a
+// customizable visual signature). Signatures recolor a black hole's
+// cloud and accretion ring; bought once with stardust, applied per
+// project, persisted locally until the real backend owns this.
+
+export interface Signature {
+  id: string;
+  name: string;
+  price: number;
+  core: number;
+  rim: number;
+  accretion: number;
+}
+
+export const SIGNATURES: Signature[] = [
+  { id: "ember", name: "Ember", price: 0, core: 0x191008, rim: 0xff9d5c, accretion: 0xff9d5c },
+  { id: "azure", name: "Azure Crown", price: 150, core: 0x0a1020, rim: 0x7fb0ff, accretion: 0x9cc4ff },
+  { id: "violet", name: "Violet Veil", price: 150, core: 0x140b1e, rim: 0xb98aff, accretion: 0xcda6ff },
+  { id: "emerald", name: "Emerald Wake", price: 300, core: 0x081810, rim: 0x6fd8a8, accretion: 0x8ff0c0 },
+  { id: "aurora", name: "Silver Aurora", price: 500, core: 0x10141c, rim: 0xd8e4f0, accretion: 0xffffff },
+];
+
+interface StorageLike {
+  getItem(k: string): string | null;
+  setItem(k: string, v: string): void;
+}
+
+const KEY = "yz-signatures-v1";
+
+export class SignatureStore {
+  private owned = new Set<string>(["ember"]);
+  private applied = new Map<string, string>(); // projectId -> signatureId
+  private storage: StorageLike;
+
+  constructor(storage: StorageLike = localStorage) {
+    this.storage = storage;
+    try {
+      const raw = storage.getItem(KEY);
+      if (raw) {
+        const data = JSON.parse(raw) as { owned: string[]; applied: [string, string][] };
+        this.owned = new Set(["ember", ...data.owned]);
+        this.applied = new Map(data.applied);
+      }
+    } catch {
+      /* fresh start */
+    }
+  }
+
+  has(id: string): boolean {
+    return this.owned.has(id);
+  }
+
+  appliedTo(projectId: string): Signature {
+    const id = this.applied.get(projectId) ?? "ember";
+    return SIGNATURES.find((s) => s.id === id) ?? SIGNATURES[0];
+  }
+
+  /** Buy if needed (spending from the reward store), then apply. */
+  buyAndApply(id: string, projectId: string, rewards: RewardStore): boolean {
+    const sig = SIGNATURES.find((s) => s.id === id);
+    if (!sig) return false;
+    if (!this.owned.has(id)) {
+      if (!rewards.spend(sig.price)) return false;
+      this.owned.add(id);
+    }
+    this.applied.set(projectId, id);
+    this.persist();
+    return true;
+  }
+
+  private persist(): void {
+    this.storage.setItem(
+      KEY,
+      JSON.stringify({ owned: [...this.owned], applied: [...this.applied] }),
+    );
+  }
+}

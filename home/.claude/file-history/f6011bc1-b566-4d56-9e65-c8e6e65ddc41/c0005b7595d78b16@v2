@@ -1,0 +1,42 @@
+import * as React from "react";
+
+const TONE = {
+  page: "bg-bg",
+  surface: "bg-surface",
+  tint: "bg-primary-tint",
+  /** Full-bleed teal band — cream/white text inside (stats, availability). */
+  band: "bg-primary text-surface",
+  /** Full-bleed warm-ink band — footer, call stage. */
+  ink: "bg-ink text-surface",
+} as const;
+
+/**
+ * Full-width page section with a background tone and consistent vertical
+ * rhythm. Put a <Container> inside for the centred column. Tonal bands (teal,
+ * ink) create the page's scroll rhythm — DESIGN_SPEC_V2 §4/§6.
+ */
+export function Section({
+  children,
+  className = "",
+  tone = "page",
+  id,
+  label,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  tone?: keyof typeof TONE;
+  id?: string;
+  label?: string;
+}) {
+  return (
+    <section
+      id={id}
+      aria-label={label}
+      className={["w-full py-24 max-md:py-14", TONE[tone], className]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {children}
+    </section>
+  );
+}

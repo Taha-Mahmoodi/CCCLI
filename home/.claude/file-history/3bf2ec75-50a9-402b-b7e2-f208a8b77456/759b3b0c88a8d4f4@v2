@@ -1,0 +1,34 @@
+"""One-off: provision demo tenant + admin on the fresh SQLite DB via the app's own service."""
+
+import asyncio
+
+import app.main  # noqa: F401  — imports every module so all permission keys are declared
+from app.core.db import session_factory
+from app.core.events import run_in_uow
+from app.core.rbac import sync_permission_catalog
+from app.modules.industry import onboarding
+
+
+async def main() -> None:
+    async with session_factory() as session:
+        n = await sync_permission_catalog(session)
+        await session.commit()
+        print(f"permissions synced: {n}")
+        result: onboarding.OnboardingResult | None = None
+
+        async def _work() -> None:
+            nonlocal result
+            result = await onboarding.onboard_tenant(
+                session,
+                company_name="Demo Manufacturing Co",
+                slug="demo",
+                template_name="manufacturing",
+                admin_email="admin@demo.local",
+                admin_password="admin12345",
+            )
+
+        await run_in_uow(session, _work)
+        print(f"tenant={result.tenant_id} admin={result.admin_user_id} template={result.template_applied}")
+
+
+asyncio.run(main())

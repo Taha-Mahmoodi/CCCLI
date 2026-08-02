@@ -1,0 +1,118 @@
+/* base.css — conductor-owned: reset, fonts, shared primitives, the focus ring.
+ * Sections consume these. A section that needs a new primitive reports it. */
+
+/* ---- fonts: self-hosted, latin subset, no CDN (§9) ---- */
+@font-face{font-family:"Atkinson Hyperlegible";font-style:normal;font-weight:400;
+  font-display:swap;src:url(../fonts/AtkinsonHyperlegible-400.woff2) format("woff2")}
+@font-face{font-family:"Atkinson Hyperlegible";font-style:normal;font-weight:700;
+  font-display:swap;src:url(../fonts/AtkinsonHyperlegible-700.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Mono";font-style:normal;font-weight:400;
+  font-display:swap;src:url(../fonts/IBMPlexMono-400.woff2) format("woff2")}
+@font-face{font-family:"IBM Plex Mono";font-style:normal;font-weight:500;
+  font-display:swap;src:url(../fonts/IBMPlexMono-500.woff2) format("woff2")}
+
+/* ---- reset ---- */
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}}
+body,h1,h2,h3,p,ol,ul,figure,blockquote{margin:0}
+ol[class],ul[class]{list-style:none;padding:0}
+img,picture,svg{display:block;max-width:100%}
+button,input,textarea{font:inherit;color:inherit}
+
+/* Base link colour. Without this, any link a component forgets to style falls
+   through to the UA default (#0000EE), which is about 2:1 on this substrate and
+   fails the AAA this site claims. The default has to be safe, not the exception. */
+a{color:var(--p-accent);text-underline-offset:0.18em}
+a:hover{color:var(--p-state-hover)}
+
+body{
+  background:var(--p-surface-0);
+  color:var(--p-text-1);
+  font-family:var(--p-font-body);
+  font-size:var(--p-text-base);
+  line-height:var(--p-leading-body);
+  text-wrap:pretty;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ---- the focus ring: this run's signature state (DIRECTION.md §2b) ----
+ * Designed, not a default someone forgot to remove. It is the most deliberate
+ * interaction state on the site because the keyboard path IS the designed path. */
+:where(a,button,summary,[tabindex]):focus-visible{
+  outline:var(--p-focus-width) solid var(--p-state-focus);
+  outline-offset:var(--p-focus-offset);
+  border-radius:var(--p-radius-sm);
+  background:var(--p-scrim);
+  transition:outline-offset var(--p-dur-base) var(--p-ease-out),
+             background var(--p-dur-base) linear;
+}
+@media (prefers-reduced-motion: reduce){
+  :where(a,button,summary,[tabindex]):focus-visible{transition:none}
+}
+
+/* ---- shared primitives ---- */
+.p-mono{
+  font-family:var(--p-font-mono);
+  font-size:var(--p-text-xs);
+  letter-spacing:var(--p-track-mono);
+  text-transform:uppercase;
+}
+.p-shell{
+  max-width:96rem;margin-inline:auto;
+  padding:clamp(1.2rem,3vw,2.6rem) var(--p-gutter) clamp(3rem,8vw,7rem);
+}
+/* grid and flex children default to min-width:auto, which lets a long mono
+   string blow out the viewport. this is the fix, not a workaround. */
+.p-grid>*,.p-row>*,.p-flex>*{min-width:0}
+
+/* the skip link is deliberately visible and large — it is not hidden, because
+   hiding it would contradict the entire argument of this site. */
+.p-skip{
+  display:inline-block;margin-bottom:calc(var(--p-space-5)*1.1);
+  font-family:var(--p-font-mono);font-size:var(--p-text-base);
+  letter-spacing:0.06em;text-transform:uppercase;text-decoration:none;
+  color:var(--p-accent-ink);background:var(--p-accent);
+  padding:0.7em 1.1em;
+}
+.p-skip:hover{background:var(--p-state-hover)}
+
+.p-landmark{
+  display:block;color:var(--p-accent);
+  border-top:1px solid var(--p-rule);
+  padding-top:var(--p-space-2);
+  margin-bottom:var(--p-space-5);
+  overflow-wrap:anywhere;
+}
+
+/* ---- outline nav: built from the live DOM heading tree by outline.js ---- */
+.p-outline{position:sticky;top:clamp(1.5rem,4vw,4rem);align-self:start}
+.p-outline summary{
+  display:block;margin-bottom:var(--p-space-3);cursor:pointer;color:var(--p-text-1);
+}
+.p-outline summary::marker,.p-outline summary::-webkit-details-marker{content:""}
+.p-outline summary:hover{color:var(--p-accent)}
+.p-outline ol{margin:0;padding:0;list-style:none;border-left:1px solid var(--p-rule)}
+.p-outline a{
+  display:block;padding:0.42rem 0 0.42rem var(--p-space-3);
+  color:var(--p-text-2);text-decoration:none;
+  font-family:var(--p-font-mono);font-size:var(--p-text-xs);
+  letter-spacing:0.06em;
+}
+.p-outline a:hover{color:var(--p-text-1)}
+.p-outline a[aria-current="true"]{
+  color:var(--p-accent);box-shadow:inset 2px 0 0 var(--p-accent);font-weight:500;
+}
+.p-outline .lvl-3 a{padding-left:var(--p-space-6)}
+
+/* ---- status tag: the honest label, which is the design system here ---- */
+.p-tag{color:var(--p-accent);white-space:nowrap}
+
+/* ---- duotone: river = present, amber = 2022 archive (DIRECTION.md §2b) ----
+ * If SVG filters are unsupported or blocked, the untreated photograph shows.
+ * Never a blank box. */
+.p-duo-river{filter:url(#p-duo-river)}
+.p-duo-amber{filter:url(#p-duo-amber)}
+@supports not (filter: url(#p-duo-river)){
+  .p-duo-river,.p-duo-amber{filter:none}
+}

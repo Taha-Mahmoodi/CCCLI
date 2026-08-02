@@ -1,0 +1,8 @@
+{
+  "id": "2",
+  "subject": "Blog comments decision",
+  "description": "ARCHITECTURE.md extras section: give blog comments an explicit ruling (default no with reasoning, or ask-pattern like newsletter/CV) — currently the only blog extra with zero doctrine either way.",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

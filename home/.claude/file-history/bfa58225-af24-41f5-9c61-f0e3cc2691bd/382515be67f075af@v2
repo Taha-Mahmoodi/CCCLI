@@ -1,0 +1,17 @@
+// Leaflet dispatches a 'wheel' zoom or we can just click zoom-in many times via the map's own zoom control at the NYC point.
+// Simplest: dispatch double-click at approximate NYC screen position to zoom in there, repeated.
+const container = document.querySelector('.leaflet-container');
+const rect = container.getBoundingClientRect();
+function dblClickAt(x, y) {
+  const cx = rect.left + x, cy = rect.top + y;
+  const opts = { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy };
+  container.dispatchEvent(new MouseEvent('dblclick', opts));
+}
+// NYC is roughly at screen x=170,y=90 in the current world view (from the earlier screenshot).
+dblClickAt(170, 90);
+dblClickAt(170, 90);
+dblClickAt(170, 90);
+dblClickAt(170, 90);
+dblClickAt(170, 90);
+dblClickAt(170, 90);
+'zoomed';

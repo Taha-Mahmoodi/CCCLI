@@ -1,0 +1,9 @@
+{
+  "id": "52",
+  "subject": "SDD 2b3 Task 3: Wire PropertyPanel into NoteView",
+  "description": "Replace the read-only dl with PropertyPanel; update NoteView tests.",
+  "activeForm": "Implementing SDD 2b3 Task 3",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

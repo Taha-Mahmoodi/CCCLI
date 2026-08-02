@@ -1,0 +1,18 @@
+import Foundation
+
+/// "0:07", "1:32" — milliseconds → m:ss.
+public func formatDuration(_ ms: Int) -> String {
+  let total = max(0, Int((Double(ms) / 1000).rounded()))
+  return "\(total / 60):" + String(format: "%02d", total % 60)
+}
+
+/// Screen-reader-friendly: "7 seconds", "1 minute 32 seconds".
+public func spokenDuration(_ ms: Int) -> String {
+  let total = max(0, Int((Double(ms) / 1000).rounded()))
+  let m = total / 60
+  let s = total % 60
+  var parts: [String] = []
+  if m > 0 { parts.append("\(m) minute" + (m == 1 ? "" : "s")) }
+  parts.append("\(s) second" + (s == 1 ? "" : "s"))
+  return parts.joined(separator: " ")
+}

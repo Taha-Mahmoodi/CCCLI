@@ -1,0 +1,114 @@
+"use client";
+
+import * as React from "react";
+import { CircleCheck, CircleAlert, Info, X } from "lucide-react";
+import { t } from "@/lib/i18n";
+
+type ToastTone = "success" | "alert" | "info";
+
+interface ToastItem {
+  id: number;
+  message: string;
+  tone: ToastTone;
+}
+
+interface ToastApi {
+  /** Show a dismissible visual toast (also announced to screen readers). */
+  toast: (message: string, tone?: ToastTone) => void;
+  /** Announce a state change to screen readers only (no visual chrome). */
+  announce: (message: string, assertive?: boolean) => void;
+}
+
+const ToastContext = React.createContext<ToastApi | null>(null);
+
+const TONE: Record<ToastTone, { icon: typeof Info; className: string }> = {
+  success: { icon: CircleCheck, className: "border-success text-success" },
+  alert: { icon: CircleAlert, className: "border-alert text-alert" },
+  info: { icon: Info, className: "border-primary text-primary" },
+};
+
+export function ToastProvider({ children }: { children: React.ReactNode }) {
+  const [toasts, setToasts] = React.useState<ToastItem[]>([]);
+  const [politeMsg, setPoliteMsg] = React.useState("");
+  const [assertiveMsg, setAssertiveMsg] = React.useState("");
+  const nextId = React.useRef(0);
+
+  const remove = React.useCallback((id: number) => {
+    setToasts((prev) => prev.filter((tItem) => tItem.id !== id));
+  }, []);
+
+  const api = React.useMemo<ToastApi>(
+    () => ({
+      toast: (message, tone = "info") => {
+        const id = nextId.current++;
+        setToasts((prev) => [...prev, { id, message, tone }]);
+        setPoliteMsg(message);
+        window.setTimeout(() => remove(id), 6000);
+      },
+      announce: (message, assertive = false) => {
+        // Reset first so identical consecutive messages still announce.
+        if (assertive) {
+          setAssertiveMsg("");
+          window.requestAnimationFrame(() => setAssertiveMsg(message));
+        } else {
+          setPoliteMsg("");
+          window.requestAnimationFrame(() => setPoliteMsg(message));
+        }
+      },
+    }),
+    [remove],
+  );
+
+  return (
+    <ToastContext.Provider value={api}>
+      {children}
+
+      {/* Visible toast stack */}
+      <div
+        className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex flex-col items-center gap-2 px-4"
+        // Each toast carries its own role=status; this wrapper is just layout.
+      >
+        {toasts.map(({ id, message, tone }) => {
+          const { icon: Icon, className } = TONE[tone];
+          return (
+            <div
+              key={id}
+              role="status"
+              className={[
+                "pointer-events-auto flex w-full max-w-md items-start gap-2.5 rounded-card border-l-4 bg-surface px-4 py-3 shadow-md",
+                className,
+              ].join(" ")}
+            >
+              <Icon size={20} strokeWidth={2} aria-hidden="true" className="mt-0.5" />
+              <p className="flex-1 text-base text-ink">{message}</p>
+              <button
+                type="button"
+                onClick={() => remove(id)}
+                aria-label={t("safety.close")}
+                className="-m-1 rounded-sm p-1 text-ink-soft hover:text-ink"
+              >
+                <X size={18} strokeWidth={2} aria-hidden="true" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Screen-reader live regions (visually hidden) */}
+      <div className="sr-only" aria-live="polite" aria-atomic="true">
+        {politeMsg}
+      </div>
+      <div className="sr-only" aria-live="assertive" aria-atomic="true">
+        {assertiveMsg}
+      </div>
+    </ToastContext.Provider>
+  );
+}
+
+export function useToast(): ToastApi {
+  const ctx = React.useContext(ToastContext);
+  if (!ctx) {
+    throw new Error("useToast must be used within a ToastProvider");
+  }
+  return ctx;
+}

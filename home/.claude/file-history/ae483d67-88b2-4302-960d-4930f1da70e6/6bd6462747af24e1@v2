@@ -1,0 +1,155 @@
+package com.thirdeyeworld.core
+
+// The Android app's shared LOGIC — a faithful Kotlin port of the web/iOS player
+// engine, so all three behave identically. The Jetpack Compose UI (which needs
+// the Android SDK) drives this. Verified with kotlinc + a JVM self-check.
+
+const val ALL_CHANNELS = "all"
+
+data class Memo(
+    val id: String,
+    val createdAt: Long,
+    val durationMs: Int,
+    val mime: String,
+    val liked: Boolean = false,
+    val channelId: String,
+    val machineTranscript: String = "",
+    val correctedTranscript: String? = null,
+) {
+    val displayTranscript: String
+        get() = (correctedTranscript ?: machineTranscript).trim()
+}
+
+data class Channel(val id: String, val name: String)
+
+enum class PlayerStatus { IDLE, PLAYING, PAUSED, ENDED }
+
+/** "0:07", "1:32" — milliseconds → m:ss. Matches web/iOS. */
+fun formatDuration(ms: Int): String {
+    val total = maxOf(0, Math.round(ms / 1000.0).toInt())
+    return "${total / 60}:" + (total % 60).toString().padStart(2, '0')
+}
+
+fun channelQueue(memos: List<Memo>, activeChannel: String): List<Memo> =
+    if (activeChannel == ALL_CHANNELS) memos else memos.filter { it.channelId == activeChannel }
+
+fun orderedQueue(memos: List<Memo>, activeChannel: String, shuffleOrder: List<String>?): List<Memo> {
+    val base = channelQueue(memos, activeChannel)
+    if (shuffleOrder == null) return base
+    val byId = base.associateBy { it.id }
+    val out = ArrayList<Memo>()
+    val seen = HashSet<String>()
+    for (id in shuffleOrder) byId[id]?.let { out.add(it); seen.add(id) }
+    for (m in base) if (m.id !in seen) out.add(m)
+    return out
+}
+
+fun slugify(name: String): String {
+    val sb = StringBuilder()
+    var lastDash = false
+    for (ch in name.lowercase()) {
+        if (ch.isLetterOrDigit()) {
+            sb.append(ch); lastDash = false
+        } else if (sb.isNotEmpty() && !lastDash) {
+            sb.append('-'); lastDash = true
+        }
+    }
+    val s = sb.toString().trimEnd('-')
+    return s.ifEmpty { "channel" }
+}
+
+fun uniqueChannelId(name: String, existing: List<Channel>): String {
+    val taken = existing.map { it.id }.toHashSet()
+    val base = slugify(name)
+    if (base !in taken) return base
+    var n = 2
+    while ("$base-$n" in taken) n++
+    return "$base-$n"
+}
+
+/** Value-semantics-ish state machine (mirrors the web Zustand store). */
+class RadioEngine {
+    var memos: List<Memo> = emptyList(); private set
+    var channels: List<Channel> = listOf(Channel("main", "Main")); private set
+    var activeChannel: String = ALL_CHANNELS; private set
+    var shuffle: Boolean = false; private set
+    var shuffleOrder: List<String> = emptyList(); private set
+    var currentIndex: Int = 0; private set
+    var isPlaying: Boolean = false; private set
+    var status: PlayerStatus = PlayerStatus.IDLE; private set
+    var playbackRate: Double = 1.0; private set
+
+    val queue: List<Memo> get() = orderedQueue(memos, activeChannel, if (shuffle) shuffleOrder else null)
+    val current: Memo? get() = queue.getOrNull(currentIndex)
+
+    fun addMemo(memo: Memo) {
+        val channelId = if (activeChannel == ALL_CHANNELS) "main" else activeChannel
+        val m = memo.copy(channelId = channelId)
+        val wasEnded = status == PlayerStatus.ENDED
+        val inActive = activeChannel == ALL_CHANNELS || channelId == activeChannel
+        memos = memos + m
+        if (shuffle && inActive) shuffleOrder = shuffleOrder + m.id
+        if (wasEnded && inActive) {
+            currentIndex = maxOf(0, queue.size - 1)
+            status = PlayerStatus.PAUSED
+        }
+    }
+
+    fun play() {
+        if (queue.isNotEmpty()) { isPlaying = true; status = PlayerStatus.PLAYING }
+    }
+
+    fun pause() {
+        if (status == PlayerStatus.PLAYING) { isPlaying = false; status = PlayerStatus.PAUSED }
+    }
+
+    fun next() {
+        if (currentIndex < queue.size - 1) currentIndex++
+        else { isPlaying = false; status = PlayerStatus.ENDED }  // the stream ends (#3)
+    }
+
+    fun previous() {
+        currentIndex = maxOf(0, currentIndex - 1)
+        if (status == PlayerStatus.ENDED) status = PlayerStatus.PAUSED
+    }
+
+    fun playFrom(i: Int) {
+        if (i in queue.indices) { currentIndex = i; isPlaying = true; status = PlayerStatus.PLAYING }
+    }
+
+    fun toggleLike(id: String) {
+        memos = memos.map { if (it.id == id) it.copy(liked = !it.liked) else it }
+    }
+
+    fun correctTranscript(id: String, text: String) {
+        // never overwrite the machine transcript (§8.3)
+        memos = memos.map { if (it.id == id) it.copy(correctedTranscript = text.trim()) else it }
+    }
+
+    fun setActiveChannel(id: String) {
+        activeChannel = id
+        shuffleOrder = if (shuffle) channelQueue(memos, id).map { it.id } else emptyList()
+        currentIndex = 0; isPlaying = false; status = PlayerStatus.IDLE
+    }
+
+    fun createChannel(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty()) return
+        val id = uniqueChannelId(trimmed, channels)
+        channels = channels + Channel(id, trimmed)
+        activeChannel = id; shuffleOrder = emptyList(); currentIndex = 0; isPlaying = false; status = PlayerStatus.IDLE
+    }
+
+    fun setShuffleOrder(order: List<String>) {
+        shuffle = true; shuffleOrder = order; currentIndex = 0; isPlaying = false; status = PlayerStatus.IDLE
+    }
+
+    fun disableShuffle() {
+        shuffle = false; shuffleOrder = emptyList(); currentIndex = 0; isPlaying = false; status = PlayerStatus.IDLE
+    }
+
+    fun cyclePlaybackRate() {
+        val rates = listOf(1.0, 1.25, 1.5, 2.0)
+        playbackRate = rates[(rates.indexOf(playbackRate) + 1) % rates.size]
+    }
+}

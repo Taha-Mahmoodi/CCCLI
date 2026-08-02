@@ -1,0 +1,8 @@
+Structural requirements: structure it the way you think is correct.
+
+let's build these files:
+1. brife.md 
+2. Implementation.md (the prompt for claudecode.) which should include, a hard coded performance optimization rule, project structure, and tech stack which is what is in the repo
+3. Handaling protocols.md (how to handle different situations) which must include the file and folder handling, how the files and folders should be structured, and labeled and named. context handling how it should handle context, if the sections is lost. failure and interruption, to resume protocol, (cause there is a lot of electricity outage here) multi tasking protocols: how to spaune and handle multiple agents phases and tasks. sand box test protocol. visual test protocol (it can open the browser and check everything). token optimization protocol: with the least amount of tokens the best performance of a mlion tokens.
+4. Github work flow.md make a new private repo, make two branches one Dev and one prod, every thing that you write, you should open a pr push commit it, review it in the git hub, if there is a problem commit on the pr and open an issue and than fix it mark the issue as solved, commit it and mearge it, than promote it in to the prod if it works. (i might have described it a little bit non organized but you get what i mean.)
+5. Use the MCP servers that we have to access GSSAP animation library, and Shadcn for components and install anime.js library as a dependency too.

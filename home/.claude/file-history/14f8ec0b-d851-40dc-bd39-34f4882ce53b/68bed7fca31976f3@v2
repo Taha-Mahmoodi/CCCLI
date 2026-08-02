@@ -1,0 +1,323 @@
+# Build, Flash & Configure Guide
+
+**Step-by-step instructions for assembling, programming, and testing the Third Eye Kit.**
+
+---
+
+## Prerequisites
+
+- **Arduino IDE 1.8+** or `arduino-cli`
+- **AVR board support** — install via Board Manager in Arduino IDE
+- **Microcontroller drivers** — CP2102 / CH340 USB-to-serial (for your specific board)
+- **Hardware** — see [Bill of Materials](BOM.md)
+- **Test setup** — bench space, USB power, soldering iron (for permanent builds)
+
+---
+
+## Step 1: Select Your Node
+
+Each of the four nodes flashes to its own independent microcontroller. **There is no combined build** — the physical isolation boundary (see [Technical Spec, §2.2](TECHNICAL_SPEC.md#22-the-real-time-isolation-boundary)) means ranging and telemetry run on separate processors.
+
+### Choose One:
+- **Node A** — Upper Ranging (glasses / headwear)
+- **Node B** — Lower Ranging (shoes, left + right)
+- **Node C** — Manual/Tactile (gloves) — [IN DEV]
+- **Node D** — Location Telemetry (belt/pack GPS + GSM) — [IMPLEMENTED]
+
+---
+
+## Step 2: Verify Pinout & Wiring
+
+Before flashing, confirm your microcontroller's pin assignments against the node you're building.
+
+### Node A (Upper Ranging — HC-SR04 + Audio)
+```
+HC-SR04 Ultrasonic:
+  VCC → +5V
+  GND → GND
+  TRIG → D9
+  ECHO → D10
+
+Headphone Jack (3.5 mm):
+  Left/Right → D11 (PWM)
+  GND → GND
+
+Vibration Motor (optional):
+  Signal → D6
+  GND → GND
+```
+
+### Node B (Lower Ranging — Dual HC-SR04 + Haptic + LED)
+```
+HC-SR04 Left Shoe:
+  TRIG → D9
+  ECHO → D10
+
+HC-SR04 Right Shoe:
+  TRIG → D3
+  ECHO → D4
+
+Vibration Motors (left + right):
+  Left → D5 (PWM)
+  Right → D6 (PWM)
+
+LDR + LED (passive visibility):
+  LDR → A0 (analog)
+  LED → D7
+  GND → GND
+```
+
+### Node C (Manual/Tactile — HC-SR04 + Light Haptic)
+```
+HC-SR04 Ultrasonic (hand-held):
+  TRIG → D9
+  ECHO → D10
+
+Vibration Motor (low intensity):
+  Signal → D5
+  GND → GND
+```
+
+### Node D (Location Telemetry — GPS + GSM)
+```
+GPS Module (NEO-6M):
+  RX → D0 (Serial RX) — or SoftwareSerial pin
+  TX → D1 (Serial TX) — or SoftwareSerial pin
+  VCC → +3.3V
+  GND → GND
+
+GSM Module (SIM800):
+  RX → SoftwareSerial RX (e.g., D2)
+  TX → SoftwareSerial TX (e.g., D3)
+  VCC → +4.2V (regulated)
+  GND → GND
+  Key → D8 (power control)
+```
+
+---
+
+## Step 3: Tune the Threshold
+
+**`ALERT_CM` is the single most safety-relevant configuration value.**
+
+Edit the threshold constant in the firmware before flashing:
+
+```c
+// Upper ranging (Node A) — head/torso hazards
+#define ALERT_CM 70  // cm; adjust per environment and user gait
+
+// Lower ranging (Node B) — ground-plane hazards
+#define ALERT_CM_LEFT  60   // left shoe; tune to user's stride
+#define ALERT_CM_RIGHT 60   // right shoe
+```
+
+### Tuning Guide
+- **Start:** 70 cm for upper ranging, 50–60 cm for lower
+- **Field-test:** obstacle sweep at walking speed; note feedback distance
+- **User feedback:** ask wearer to adjust threshold until they can react comfortably
+- **Document:** record final ALERT_CM per node and per user
+
+---
+
+## Step 4: Flash the Microcontroller
+
+### Via Arduino IDE
+
+1. **Open** `firmware/node-X/node_X.ino`
+2. **Select Board** — Tools → Board → (your AVR board, e.g., Arduino Mini)
+3. **Select Port** — Tools → Port → /dev/tty.usbserial-... (or COM port on Windows)
+4. **Upload** — Sketch → Upload (or Ctrl+U)
+
+Watch the **RX/TX LEDs blink**. If the upload succeeds, you'll see:
+```
+Sketch uses 2,948 bytes of program storage space.
+Maximum is 30,720 bytes; program space (xxx %).
+
+avrdude done. Thank you.
+```
+
+### Via Arduino CLI
+
+```bash
+arduino-cli compile --fqbn arduino:avr:mini firmware/node-a-glasses/
+arduino-cli upload -p /dev/tty.usbserial-123456 --fqbn arduino:avr:mini firmware/node-a-glasses/
+```
+
+---
+
+## Step 5: Provision Node D (Telemetry Only)
+
+If you're flashing **Node D**, do this before deployment:
+
+### 5.1 Verify 2G Coverage
+```
+AT+CREG?  # Query registration status
++CREG: 0,1  # 0 = unsolicited, 1 = registered on home network
+```
+
+### 5.2 Set Authorized Number(s)
+Edit the firmware allowlist:
+
+```c
+// Authorized phone numbers that can request location
+const char* AUTHORIZED[] = {
+  "+93799123456",  // Family member 1
+  "+93799654321"   // Family member 2
+};
+const int AUTH_COUNT = 2;
+```
+
+### 5.3 Verify SIM Activation
+Before field use, confirm the SIM is **pre-activated** on a 2G network:
+- Contact regional telecom provider
+- Verify account balance and 2G coverage in deployment area
+- Test with a basic 2G phone first (if possible)
+
+---
+
+## Step 6: Bench-Test Each Node
+
+### 6.1 Ranging Verification (Nodes A, B, C)
+1. **Power on** the node
+2. **Sweep an obstacle** (hand, book, wall) slowly across the sensor cone
+3. **Observe feedback:**
+   - Haptic motor vibrates when distance < ALERT_CM
+   - Audio tone / buzzer activates simultaneously
+4. **Adjust ALERT_CM** if feedback distance feels too close or too far
+5. **Repeat** with different obstacles (soft fabric, hard surface, angled) — note any dead zones
+
+### 6.2 Power Verification
+- Measure battery voltage before and after 10 minutes of continuous operation
+- Confirm no voltage sag below the sensor operating range (typically 5V ±0.5V)
+- **If voltage drops below 4.5V, replace cells**
+
+### 6.3 Telemetry Verification (Node D)
+1. **Open Serial Monitor** — Tools → Serial Monitor (9600 baud)
+2. **Power on** Node D with SIM inserted
+3. Watch for:
+   ```
+   GPS: waiting for fix...
+   GPS: fixed (lat, lon)
+   GSM: registered on 2G
+   Ready for location requests.
+   ```
+4. **Trigger a location request** by calling/SMSing the device from an authorized number
+5. **Expect reply** within 30 seconds with GPS coordinates
+
+---
+
+## Step 7: Pre-Deployment Safety Gate
+
+### Checklist Before Field Use
+
+- [ ] **Every sensor bench-verified** — obstacle sweep triggers feedback at configured distance
+- [ ] **Battery fully charged/fresh cells** — voltage measured and logged
+- [ ] **Audio/haptic feedback audible and distinct** — tested in field-like noise level
+- [ ] **Wiring secured** — no loose breadboard connections or dangling jumpers
+- [ ] **Node D SIM verified** — 2G coverage confirmed in deployment area
+- [ ] **Authorized numbers provisioned** — allowlist set and tested
+- [ ] **Documentation printed/accessible** — pinout, ALERT_CM values, troubleshooting guide
+- [ ] **Spare sensors packed** — HC-SR04 and backup microcontroller on hand
+
+### Known Limitations (Do Not Deploy Into)
+
+- **Crowd/traffic scenarios** — single-threshold ultrasonic logic not designed for dense, dynamic obstacles
+- **Heavy rain or saltwater spray** — ultrasonic sensors degrade in moisture (waterproofing [IN DEV])
+- **Reflective or sound-absorbing surfaces** — soft fabrics and some glass confuse ultrasonic cone
+- **Extended high heat** — battery fade not characterized above 50°C
+
+---
+
+## Troubleshooting
+
+### Symptom: Sensor Reads Nothing (Always 0 cm)
+
+**Possible causes:**
+1. Wiring error — confirm TRIG/ECHO pins against node pinout
+2. Power starved — sensor may need 5V, not 3.3V; check microcontroller supply
+3. Sensor damaged — replace with spare HC-SR04
+
+**Diagnostic:**
+```c
+void setup() {
+  Serial.begin(9600);
+  pinMode(9, OUTPUT);  // TRIG
+  pinMode(10, INPUT);  // ECHO
+}
+void loop() {
+  digitalWrite(9, LOW);
+  delayMicroseconds(2);
+  digitalWrite(9, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(9, LOW);
+  long duration = pulseIn(10, HIGH, 30000);  // 30 ms timeout
+  Serial.println(duration);
+  delay(100);
+}
+```
+If `duration` is always 0, the echo pin is not receiving a signal.
+
+### Symptom: Feedback Fires Constantly
+
+**Possible causes:**
+1. ALERT_CM set too high (e.g., 200 cm) — adjust downward
+2. Sensor is miscalibrated — may be reading ghosts from reflections
+3. Power sag — sensor readings become erratic as voltage drops
+
+**Diagnostic:**
+- Print distance readings to Serial Monitor
+- Look for stable readings with obstacle at known distance
+- If readings are scattered, suspect power or wiring
+
+### Symptom: Audio Output Distorted or Missing
+
+**Possible causes:**
+1. Headphone jack not fully inserted
+2. PWM pin (D11 for Node A) not capable of audio-rate modulation
+3. Volume too loud — clipping the signal
+
+**Diagnostic:**
+- Test with different headphones
+- Reduce PWM duty cycle (lower volume)
+- Verify D11 is a PWM-capable pin on your board
+
+---
+
+## Configuration Best Practices
+
+### Document Your Builds
+
+Create a **build log** for each node:
+```
+Node A (Glasses) — Build Date: 2026-07-04
+────────────────────────────────────────────
+Microcontroller: Arduino Mini Pro 3.3V
+Ultrasonic: HC-SR04 (spare from Batch 3)
+TRIG pin: D9, ECHO pin: D10
+ALERT_CM: 65 cm (tuned for 6-ft wearer)
+Feedback: Audio (left ear) + haptic N/A
+Status: ✓ Bench-verified
+Deployed: [TBD]
+```
+
+### Version Control
+
+Keep firmware in git with version tags:
+```bash
+git tag -a v2.0-node-a -m "Upper ranging, field-tested"
+git push origin v2.0-node-a
+```
+
+---
+
+## Next Steps
+
+- **Deploy** — carry one node in a real environment and collect user feedback
+- **Log issues** — any unexpected behavior goes in [GitHub Issues](https://github.com/sadeqisaidmohaddes-star/third-eye-kit/issues)
+- **Iterate** — tune ALERT_CM, fix wiring, document what you learned
+- **Contribute** — share your pinout or improvements back to the project
+
+---
+
+**Last Updated:** 2026  
+**Maintained by:** Said Mohaddes Sadeqi

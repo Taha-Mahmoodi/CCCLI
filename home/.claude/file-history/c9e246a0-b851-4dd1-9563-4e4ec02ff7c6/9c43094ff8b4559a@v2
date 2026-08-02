@@ -1,0 +1,23 @@
+import type { NotifType } from "@prisma/client";
+import { prisma } from "@/lib/db";
+
+/**
+ * Record a notification for `userId`, triggered by `actorId`. Never notify
+ * yourself about your own action (liking your own post, etc.).
+ */
+export async function notify(params: {
+  userId: string;
+  actorId: string;
+  type: NotifType;
+  postId?: string;
+}) {
+  if (params.userId === params.actorId) return;
+  await prisma.notification.create({
+    data: {
+      userId: params.userId,
+      actorId: params.actorId,
+      type: params.type,
+      postId: params.postId ?? null,
+    },
+  });
+}

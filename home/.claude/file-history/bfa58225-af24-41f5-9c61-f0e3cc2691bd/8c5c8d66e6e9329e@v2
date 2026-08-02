@@ -1,0 +1,1004 @@
+# Manager Dashboard 7b — Zone Drawing, Task/Goal Admin, Violations Feed, Push Opt-In
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Second half of PLAN.md 7.1-7.4 — zone drawing (leaflet-draw), task/goal admin, a violations feed, and push-subscription opt-in. Completes Phase 7 (manager web dashboard) in full. Builds on `feat/dashboard-7a` (merged): scaffold, auth, typed API client (all six resource modules already exist — `zones.ts`, `tasks.ts`, `goals.ts`, `violations.ts`, `pushSubscriptions.ts`, `pings.ts`, `users.ts` — this plan wires UI to them, it does not add new API client functions except where noted), live map.
+
+**Verification model — same calibration as 7a, not the backend's:** `docs/design.md`'s CI bar for the dashboard is "typecheck+build," not exhaustive tests. Per-task gates are `npm run typecheck` (the REAL one — `tsc -b`, not bare `tsc --noEmit`, which 7a's final review proved silently checks zero files against this repo's solution-style root tsconfig) + `npm run build` + `npx vitest run`. No component snapshot tests. The controller (not a subagent) does a real browser check at the end of this plan, exactly as 7a's did — that step is what actually proved the map/markers/popup worked last time, and separately caught a CORS bug nothing else could see. Expect the same discipline here: compiling is not the same as working, especially for `leaflet-draw`, whose CSS and toolbar-icon assets have the exact same class of Vite-bundler gotcha `leaflet` itself did in 7a.
+
+## Global Constraints
+
+- **Backend role gating, verified against the real router files, not assumed — this shapes what buttons exist:**
+  - Tasks: `create` and `update`/PATCH and `cancel` are **manager-only** (`require_manager`). `complete` is **rep-only** (`require_rep`) — the dashboard is a manager tool, so there is **no "Complete" button anywhere in this UI**. A task's `status` field is shown read-only; it becomes `COMPLETED` only when a rep completes it from the tablet app (not built yet, out of scope). Building a Complete button here would just 403 on every click.
+  - Goals: `create` is **manager-only**. `log-value` (the only way to record a `SALES_VALUE` goal's progress) is **rep-only** (`require_rep`) — there is **no "Log Value" button anywhere in this UI** either, for the same reason. Progress is still viewable (`GET /{id}/progress`, open to both roles) — managers can see where a goal stands, they just can't drive it themselves for `SALES_VALUE` goals (`VISIT_COUNT`/`TASK_COUNT` goals compute automatically and need no manual input from anyone).
+  - `list`/`get` on both tasks and goals are open to both roles (manager sees all, filtered server-side).
+- **`leaflet-draw`'s real TypeScript surface, verified by installing `leaflet-draw`+`@types/leaflet-draw` and reading the actual `.d.ts` file (not guessed):**
+  - `import 'leaflet-draw'` is a side-effect-only import that must come after `import L from 'leaflet'` — it patches the same `L` object with `L.Control.Draw`, `L.Draw.Event`, etc. Both must resolve to the SAME `leaflet` package instance (a single `leaflet` entry in `package.json` — do not let a duplicate get installed).
+  - `L.Control.Draw`'s constructor takes `{ draw: {...}, edit: {...} }`. To restrict drawing to polygons only: `draw: { polygon: {}, marker: false, circle: false, circlemarker: false, polyline: false, rectangle: false }` (each non-polygon key must be explicitly `false` — leaving a key `undefined` means "enabled with defaults", not "disabled").
+  - The created-shape event is `L.Draw.Event.CREATED` (a string constant `"draw:created"`), and the event object's `.layer` field is a real `L.Polygon` instance (from core Leaflet, not a `Draw.*` namespace class) — call `.toGeoJSON()` on it to get a GeoJSON `Feature`, then take `.geometry` to get the boundary object. The exact TS type of `.geometry` traces through `@types/geojson` (a transitive dependency of `@types/leaflet`); rather than fight for exact structural typing against two loosely-typed community packages, cast through `unknown` to this codebase's own `GeoJSONPolygon` type at this one FFI boundary — a controlled, documented escape hatch, not a type-safety hole that spreads anywhere else.
+  - `leaflet-draw` has its own CSS (`leaflet-draw/dist/leaflet.draw.css`) that must be imported or the toolbar renders unstyled/broken — same class of gotcha as `leaflet/dist/leaflet.css` in 7a, get it right the first time.
+- **Zone-drawing name prompt uses `window.prompt(...)`, deliberately** — a full modal component is real UI work beyond what a v1 "draw a zone, give it a name" flow needs; matches 7a's login page precedent of picking the smallest reasonable UI for a first pass. `docs/design.md`'s own scope-cut rule explicitly says cut dashboard polish before backend correctness — this is exactly that kind of cut, made deliberately and named as such, not an oversight.
+- **`ZonesPage`'s rep-assignment picker has no "unassign" action** — the backend has no `DELETE` endpoint for a `ZoneAssignment` (checked: `zones/router.py` only has `POST /{zone_id}/assignments` and `GET /{zone_id}/assignments`, no delete). Assign-only is the full backend surface; don't build a frontend action with no endpoint behind it.
+- Pagination: `tasks.ts`/`goals.ts`/`violations.ts`'s `get*` functions already accept `limit`/`offset` (built in 7a). This plan's list pages use the defaults (50/0) — no pagination UI (page-forward/back controls) is being built, since none of this data is expected to exceed 50 rows in a v1 demo/small-tenant scenario. Note this as a known v1 limitation, not a bug.
+- Routing: all new pages are added as children of the existing `<ProtectedRoute><Layout /></ProtectedRoute>` parent route (Task 1 introduces `Layout`), so they inherit auth protection automatically — no page adds its own auth check.
+- No new test files beyond what's already established unless a task introduces genuinely new logic worth one (per 7a's calibration) — most of this plan is UI composition over already-tested API client functions, which is exactly the kind of code the plan's own testing philosophy says `build` + the controller's browser check cover, not unit tests.
+
+---
+
+## File Structure
+
+```
+dashboard/
+  src/
+    Layout.tsx                    # NEW: nav bar + <Outlet/>
+    App.tsx                     # MODIFY: nested routes under Layout
+    zones/
+      ZonesPage.tsx                # NEW
+    tasks/
+      TasksPage.tsx                # NEW
+    goals/
+      GoalsPage.tsx                # NEW
+    violations/
+      ViolationsPage.tsx            # NEW
+    push/
+      subscribeToPush.ts             # NEW: service worker registration + subscribe flow
+      PushOptInButton.tsx             # NEW
+    sw.ts (or public/sw.js)      # NEW: minimal push service worker
+```
+
+**Interfaces summary:**
+- `src/Layout.tsx` — `Layout` component, renders nav (links to `/`, `/zones`, `/tasks`, `/goals`, `/violations`) + `<Outlet />` + a slot for `PushOptInButton`.
+- `src/push/subscribeToPush.ts` — `subscribeToPushNotifications(): Promise<void>` — registers the service worker, fetches the VAPID public key, calls `pushManager.subscribe`, POSTs the subscription via the existing `createPushSubscription` API function.
+
+---
+
+### Task 1: Shared layout + navigation shell
+
+**Files:**
+- Create: `dashboard/src/Layout.tsx`
+- Create: `dashboard/src/zones/ZonesPage.tsx` (placeholder), `dashboard/src/tasks/TasksPage.tsx` (placeholder), `dashboard/src/goals/GoalsPage.tsx` (placeholder), `dashboard/src/violations/ViolationsPage.tsx` (placeholder)
+- Modify: `dashboard/src/App.tsx`
+
+**Interfaces:**
+- Consumes: `useAuth()` (from 7a's `AuthContext`).
+- Produces: `Layout`, four placeholder page components (replaced by Tasks 2-5).
+
+- [ ] **Step 1: Read the current `dashboard/src/App.tsx` in full** before editing — it currently renders `<ProtectedRoute><MapView /></ProtectedRoute>` directly at `/`, with no nested routing. This task restructures that into a layout route with `MapView` as one of several children.
+
+- [ ] **Step 2: Write `dashboard/src/Layout.tsx`**
+
+```tsx
+// dashboard/src/Layout.tsx
+import { NavLink, Outlet } from 'react-router-dom'
+import { useAuth } from './auth/AuthContext'
+
+function navLinkClass({ isActive }: { isActive: boolean }): string {
+  return isActive ? 'text-blue-600 font-medium text-sm' : 'text-gray-600 hover:text-gray-900 text-sm'
+}
+
+export function Layout() {
+  const { user, logout } = useAuth()
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <nav className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <span className="font-semibold text-gray-900">Atlas Field Force</span>
+          <NavLink to="/" end className={navLinkClass}>Map</NavLink>
+          <NavLink to="/zones" className={navLinkClass}>Zones</NavLink>
+          <NavLink to="/tasks" className={navLinkClass}>Tasks</NavLink>
+          <NavLink to="/goals" className={navLinkClass}>Goals</NavLink>
+          <NavLink to="/violations" className={navLinkClass}>Violations</NavLink>
+        </div>
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-gray-500">{user?.email}</span>
+          <button onClick={logout} className="text-sm text-gray-600 hover:text-gray-900">
+            Sign out
+          </button>
+        </div>
+      </nav>
+      <main>
+        <Outlet />
+      </main>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 3: Write four placeholder pages**
+
+```tsx
+// dashboard/src/zones/ZonesPage.tsx
+export function ZonesPage() {
+  return <div className="p-8 text-gray-500">Zones — coming soon.</div>
+}
+```
+
+Write `dashboard/src/tasks/TasksPage.tsx`, `dashboard/src/goals/GoalsPage.tsx`, `dashboard/src/violations/ViolationsPage.tsx` identically in shape (swap the component name and placeholder text).
+
+- [ ] **Step 4: Restructure `dashboard/src/App.tsx`**
+
+```tsx
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { AuthProvider } from './auth/AuthContext'
+import { LoginPage } from './auth/LoginPage'
+import { ProtectedRoute } from './auth/ProtectedRoute'
+import { Layout } from './Layout'
+import { MapView } from './map/MapView'
+import { ZonesPage } from './zones/ZonesPage'
+import { TasksPage } from './tasks/TasksPage'
+import { GoalsPage } from './goals/GoalsPage'
+import { ViolationsPage } from './violations/ViolationsPage'
+
+function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/" element={<MapView />} />
+            <Route path="/zones" element={<ZonesPage />} />
+            <Route path="/tasks" element={<TasksPage />} />
+            <Route path="/goals" element={<GoalsPage />} />
+            <Route path="/violations" element={<ViolationsPage />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  )
+}
+
+export default App
+```
+
+Note: `ProtectedRoute`'s existing `children: ReactNode` contract (from 7a, already reviewed) is unchanged — `Layout` is just its child now instead of `MapView` directly, and `Layout` itself renders `<Outlet />` for the nested routes. Do not modify `ProtectedRoute.tsx` in this task.
+
+- [ ] **Step 5: Verify**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/dashboard
+npm run typecheck
+npm run build
+npx vitest run
+```
+
+Expected: all succeed, 5/5 tests still passing (nothing in this task touches tested code).
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add dashboard/
+git commit -m "feat(dashboard): shared layout, navigation, placeholder pages for zones/tasks/goals/violations
+
+Refs PLAN 7.3, 7.4"
+```
+
+---
+
+### Task 2: Zones page — draw + list + rep assignment
+
+**Files:**
+- Modify: `dashboard/src/zones/ZonesPage.tsx` (replace placeholder)
+- Modify: `dashboard/package.json` (add `leaflet-draw`, `@types/leaflet-draw`)
+
+**Interfaces:**
+- Consumes: `getZones`, `createZone`, `getZoneAssignments`, `assignRepToZone` (from `api/zones.ts`, already exist), `getUsers` (from `api/users.ts`, already exists), `GeoJSONPolygon`/`Zone`/`ZoneAssignment`/`User` types (already exist).
+
+- [ ] **Step 1: Install `leaflet-draw`**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/dashboard
+npm install leaflet-draw
+npm install -D @types/leaflet-draw
+```
+
+- [ ] **Step 2: Write `dashboard/src/zones/ZonesPage.tsx`**
+
+```tsx
+// dashboard/src/zones/ZonesPage.tsx
+import { MapContainer, TileLayer, Polygon, useMap } from 'react-leaflet'
+import { useCallback, useEffect, useState } from 'react'
+import L from 'leaflet'
+import 'leaflet-draw'
+import 'leaflet-draw/dist/leaflet.draw.css'
+import { assignRepToZone, createZone, getZoneAssignments, getZones } from '../api/zones'
+import { getUsers } from '../api/users'
+import type { GeoJSONPolygon, User, Zone, ZoneAssignment } from '../api/types'
+
+const DEFAULT_CENTER: [number, number] = [0, 0]
+const DEFAULT_ZOOM = 3
+
+function DrawControl({ onCreated }: { onCreated: (boundary: GeoJSONPolygon) => void }) {
+  const map = useMap()
+
+  useEffect(() => {
+    const drawnItems = new L.FeatureGroup()
+    map.addLayer(drawnItems)
+
+    const drawControl = new L.Control.Draw({
+      draw: {
+        polygon: {},
+        marker: false,
+        circle: false,
+        circlemarker: false,
+        polyline: false,
+        rectangle: false,
+      },
+      edit: { featureGroup: drawnItems },
+    })
+    map.addControl(drawControl)
+
+    function handleCreated(event: L.LeafletEvent) {
+      const layer = (event as L.DrawEvents.Created).layer as L.Polygon
+      drawnItems.addLayer(layer)
+      const feature = layer.toGeoJSON()
+      onCreated(feature.geometry as unknown as GeoJSONPolygon)
+      drawnItems.removeLayer(layer)
+    }
+
+    map.on(L.Draw.Event.CREATED, handleCreated)
+    return () => {
+      map.off(L.Draw.Event.CREATED, handleCreated)
+      map.removeControl(drawControl)
+      map.removeLayer(drawnItems)
+    }
+  }, [map, onCreated])
+
+  return null
+}
+
+export function ZonesPage() {
+  const [zones, setZones] = useState<Zone[]>([])
+  const [reps, setReps] = useState<User[]>([])
+  const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null)
+  const [assignments, setAssignments] = useState<ZoneAssignment[]>([])
+  const [selectedRepId, setSelectedRepId] = useState('')
+
+  const refreshZones = useCallback(() => {
+    getZones().then(setZones).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    refreshZones()
+    getUsers('rep').then(setReps).catch(() => {})
+  }, [refreshZones])
+
+  useEffect(() => {
+    if (!selectedZoneId) {
+      setAssignments([])
+      return
+    }
+    getZoneAssignments(selectedZoneId).then(setAssignments).catch(() => {})
+  }, [selectedZoneId])
+
+  const repEmailById = new Map(reps.map((rep) => [rep.id, rep.email]))
+
+  async function handleCreated(boundary: GeoJSONPolygon) {
+    const name = window.prompt('Zone name:')
+    if (!name) return
+    await createZone(name, boundary)
+    refreshZones()
+  }
+
+  async function handleAssign() {
+    if (!selectedZoneId || !selectedRepId) return
+    await assignRepToZone(selectedZoneId, selectedRepId)
+    const updated = await getZoneAssignments(selectedZoneId)
+    setAssignments(updated)
+    setSelectedRepId('')
+  }
+
+  return (
+    <div className="flex h-[calc(100vh-57px)]">
+      <div className="flex-1">
+        <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="h-full w-full">
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution="&copy; OpenStreetMap contributors"
+          />
+          {zones.map((zone) => (
+            <Polygon
+              key={zone.id}
+              positions={zone.boundary.coordinates[0].map(([lng, lat]) => [lat, lng] as [number, number])}
+              eventHandlers={{ click: () => setSelectedZoneId(zone.id) }}
+            />
+          ))}
+          <DrawControl onCreated={handleCreated} />
+        </MapContainer>
+      </div>
+      <div className="w-80 bg-white border-l border-gray-200 p-4 overflow-y-auto">
+        <h2 className="font-semibold text-gray-900 mb-2">Zones</h2>
+        <ul className="mb-4">
+          {zones.map((zone) => (
+            <li key={zone.id}>
+              <button
+                onClick={() => setSelectedZoneId(zone.id)}
+                className={`block w-full text-left px-2 py-1 rounded ${
+                  selectedZoneId === zone.id ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                {zone.name}
+              </button>
+            </li>
+          ))}
+        </ul>
+        {selectedZoneId ? (
+          <div>
+            <h3 className="font-medium text-gray-900 mb-2">Assignments</h3>
+            <ul className="mb-2 text-sm text-gray-600">
+              {assignments.map((assignment) => (
+                <li key={assignment.id}>{repEmailById.get(assignment.rep_id) ?? assignment.rep_id}</li>
+              ))}
+              {assignments.length === 0 && <li className="text-gray-400">No reps assigned</li>}
+            </ul>
+            <div className="flex gap-2">
+              <select
+                value={selectedRepId}
+                onChange={(event) => setSelectedRepId(event.target.value)}
+                className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
+              >
+                <option value="">Select a rep…</option>
+                {reps.map((rep) => (
+                  <option key={rep.id} value={rep.id}>
+                    {rep.email}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={handleAssign}
+                disabled={!selectedRepId}
+                className="px-3 py-1 bg-blue-600 text-white rounded text-sm disabled:opacity-50"
+              >
+                Assign
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400">Select a zone to manage assignments, or draw a new one on the map.</p>
+        )}
+      </div>
+    </div>
+  )
+}
+```
+
+Note the `positions` prop's coordinate-order flip: `zone.boundary.coordinates[0]` is `[lng, lat]` pairs (GeoJSON order, matching the backend's stored `Zone.boundary` and everything this codebase's backend geofencing logic already does), but `react-leaflet`'s `Polygon` `positions` prop wants `[lat, lng]` — this is a THIRD place in this project (after `app/core/geo.py` and `visits/service.py::check_in` on the backend) where getting this order backwards silently produces a wrong-shaped-but-still-rendering polygon. The `.map(([lng, lat]) => [lat, lng])` line is the fix; if a reviewer or the controller's browser check sees a zone polygon rendered in the wrong place/shape (e.g. rotated 90°, or off in the ocean when it should be on land), check this line first.
+
+- [ ] **Step 3: Verify**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/dashboard
+npm run typecheck
+npm run build
+npx vitest run
+```
+
+Expected: all succeed. If `npm run typecheck` reports a type mismatch on `L.Control.Draw`, `L.Draw.Event`, or `L.DrawEvents.Created` that isn't resolvable by a small, well-reasoned adjustment, read `node_modules/@types/leaflet-draw/index.d.ts` directly (it's a real, verified-installable package — do not guess at its shape, read it) — the shapes in this task's code were verified against that file's actual contents at plan-writing time, but package versions can drift.
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add dashboard/
+git commit -m "feat(dashboard): zone drawing (leaflet-draw) + rep-assignment UI
+
+Refs PLAN 7.3"
+```
+
+---
+
+### Task 3: Tasks admin
+
+**Files:**
+- Modify: `dashboard/src/tasks/TasksPage.tsx` (replace placeholder)
+
+**Interfaces:**
+- Consumes: `getTasks`, `createTask`, `updateTask`, `cancelTask` (from `api/tasks.ts`, already exist — note `completeTask` exists in the client but is deliberately NOT used here, per the Global Constraints rep-only note), `getUsers`.
+
+- [ ] **Step 1: Write `dashboard/src/tasks/TasksPage.tsx`**
+
+```tsx
+// dashboard/src/tasks/TasksPage.tsx
+import { useEffect, useState } from 'react'
+import { cancelTask, createTask, getTasks } from '../api/tasks'
+import { getUsers } from '../api/users'
+import type { Task, TaskPriority, User } from '../api/types'
+
+const PRIORITIES: TaskPriority[] = ['LOW', 'MEDIUM', 'HIGH']
+
+export function TasksPage() {
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [reps, setReps] = useState<User[]>([])
+  const [assignedTo, setAssignedTo] = useState('')
+  const [title, setTitle] = useState('')
+  const [dueDate, setDueDate] = useState('')
+  const [priority, setPriority] = useState<TaskPriority>('MEDIUM')
+
+  function refreshTasks() {
+    getTasks().then(setTasks).catch(() => {})
+  }
+
+  useEffect(() => {
+    refreshTasks()
+    getUsers('rep').then(setReps).catch(() => {})
+  }, [])
+
+  const repEmailById = new Map(reps.map((rep) => [rep.id, rep.email]))
+
+  async function handleCreate(event: React.FormEvent) {
+    event.preventDefault()
+    if (!assignedTo || !title) return
+    await createTask({ assigned_to: assignedTo, title, due_date: dueDate || null, priority })
+    setTitle('')
+    setDueDate('')
+    setPriority('MEDIUM')
+    refreshTasks()
+  }
+
+  async function handleCancel(taskId: string) {
+    await cancelTask(taskId)
+    refreshTasks()
+  }
+
+  return (
+    <div className="p-8 max-w-4xl mx-auto">
+      <h1 className="text-xl font-semibold text-gray-900 mb-4">Tasks</h1>
+
+      <form onSubmit={handleCreate} className="flex flex-wrap gap-2 mb-6 bg-white p-4 rounded border border-gray-200">
+        <select
+          value={assignedTo}
+          onChange={(event) => setAssignedTo(event.target.value)}
+          className="border border-gray-300 rounded px-2 py-1 text-sm"
+          required
+        >
+          <option value="">Assign to…</option>
+          {reps.map((rep) => (
+            <option key={rep.id} value={rep.id}>
+              {rep.email}
+            </option>
+          ))}
+        </select>
+        <input
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder="Title"
+          className="border border-gray-300 rounded px-2 py-1 text-sm flex-1 min-w-[150px]"
+          required
+        />
+        <input
+          type="date"
+          value={dueDate}
+          onChange={(event) => setDueDate(event.target.value)}
+          className="border border-gray-300 rounded px-2 py-1 text-sm"
+        />
+        <select
+          value={priority}
+          onChange={(event) => setPriority(event.target.value as TaskPriority)}
+          className="border border-gray-300 rounded px-2 py-1 text-sm"
+        >
+          {PRIORITIES.map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+        <button type="submit" className="px-3 py-1 bg-blue-600 text-white rounded text-sm">
+          Create
+        </button>
+      </form>
+
+      <table className="w-full text-sm bg-white border border-gray-200 rounded">
+        <thead>
+          <tr className="text-left border-b border-gray-200">
+            <th className="p-2">Title</th>
+            <th className="p-2">Assignee</th>
+            <th className="p-2">Due</th>
+            <th className="p-2">Priority</th>
+            <th className="p-2">Status</th>
+            <th className="p-2"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {tasks.map((task) => (
+            <tr key={task.id} className="border-b border-gray-100">
+              <td className="p-2">{task.title}</td>
+              <td className="p-2">{repEmailById.get(task.assigned_to) ?? task.assigned_to}</td>
+              <td className="p-2">{task.due_date ?? '—'}</td>
+              <td className="p-2">{task.priority}</td>
+              <td className="p-2">{task.status}</td>
+              <td className="p-2">
+                {task.status === 'OPEN' && (
+                  <button onClick={() => handleCancel(task.id)} className="text-red-600 hover:underline">
+                    Cancel
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 2: Verify**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/dashboard
+npm run typecheck
+npm run build
+npx vitest run
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add dashboard/
+git commit -m "feat(dashboard): task admin (list, create, cancel — no Complete button, rep-only endpoint)
+
+Refs PLAN 7.4"
+```
+
+---
+
+### Task 4: Goals admin
+
+**Files:**
+- Modify: `dashboard/src/goals/GoalsPage.tsx` (replace placeholder)
+
+**Interfaces:**
+- Consumes: `getGoals`, `createGoal`, `getGoalProgress` (from `api/goals.ts`, already exist — `logGoalValue` deliberately NOT used, per Global Constraints), `getUsers`.
+
+- [ ] **Step 1: Write `dashboard/src/goals/GoalsPage.tsx`**
+
+```tsx
+// dashboard/src/goals/GoalsPage.tsx
+import { useEffect, useState } from 'react'
+import { createGoal, getGoalProgress, getGoals } from '../api/goals'
+import { getUsers } from '../api/users'
+import type { Goal, GoalMetricType, GoalProgress, User } from '../api/types'
+
+const METRIC_TYPES: GoalMetricType[] = ['VISIT_COUNT', 'TASK_COUNT', 'SALES_VALUE']
+
+export function GoalsPage() {
+  const [goals, setGoals] = useState<Goal[]>([])
+  const [reps, setReps] = useState<User[]>([])
+  const [progressByGoalId, setProgressByGoalId] = useState<Record<string, GoalProgress>>({})
+  const [repId, setRepId] = useState('')
+  const [metricType, setMetricType] = useState<GoalMetricType>('VISIT_COUNT')
+  const [target, setTarget] = useState('')
+  const [periodStart, setPeriodStart] = useState('')
+  const [periodEnd, setPeriodEnd] = useState('')
+
+  function refreshGoals() {
+    getGoals().then(setGoals).catch(() => {})
+  }
+
+  useEffect(() => {
+    refreshGoals()
+    getUsers('rep').then(setReps).catch(() => {})
+  }, [])
+
+  const repEmailById = new Map(reps.map((rep) => [rep.id, rep.email]))
+
+  async function handleCreate(event: React.FormEvent) {
+    event.preventDefault()
+    if (!repId || !target || !periodStart || !periodEnd) return
+    await createGoal({
+      rep_id: repId,
+      metric_type: metricType,
+      target: Number(target),
+      period_start: periodStart,
+      period_end: periodEnd,
+    })
+    setTarget('')
+    setPeriodStart('')
+    setPeriodEnd('')
+    refreshGoals()
+  }
+
+  async function handleViewProgress(goalId: string) {
+    const progress = await getGoalProgress(goalId)
+    setProgressByGoalId((current) => ({ ...current, [goalId]: progress }))
+  }
+
+  return (
+    <div className="p-8 max-w-4xl mx-auto">
+      <h1 className="text-xl font-semibold text-gray-900 mb-4">Goals</h1>
+
+      <form onSubmit={handleCreate} className="flex flex-wrap gap-2 mb-6 bg-white p-4 rounded border border-gray-200">
+        <select
+          value={repId}
+          onChange={(event) => setRepId(event.target.value)}
+          className="border border-gray-300 rounded px-2 py-1 text-sm"
+          required
+        >
+          <option value="">Rep…</option>
+          {reps.map((rep) => (
+            <option key={rep.id} value={rep.id}>
+              {rep.email}
+            </option>
+          ))}
+        </select>
+        <select
+          value={metricType}
+          onChange={(event) => setMetricType(event.target.value as GoalMetricType)}
+          className="border border-gray-300 rounded px-2 py-1 text-sm"
+        >
+          {METRIC_TYPES.map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+        <input
+          type="number"
+          value={target}
+          onChange={(event) => setTarget(event.target.value)}
+          placeholder="Target"
+          className="border border-gray-300 rounded px-2 py-1 text-sm w-24"
+          required
+        />
+        <input
+          type="date"
+          value={periodStart}
+          onChange={(event) => setPeriodStart(event.target.value)}
+          className="border border-gray-300 rounded px-2 py-1 text-sm"
+          required
+        />
+        <input
+          type="date"
+          value={periodEnd}
+          onChange={(event) => setPeriodEnd(event.target.value)}
+          className="border border-gray-300 rounded px-2 py-1 text-sm"
+          required
+        />
+        <button type="submit" className="px-3 py-1 bg-blue-600 text-white rounded text-sm">
+          Create
+        </button>
+      </form>
+
+      <table className="w-full text-sm bg-white border border-gray-200 rounded">
+        <thead>
+          <tr className="text-left border-b border-gray-200">
+            <th className="p-2">Rep</th>
+            <th className="p-2">Metric</th>
+            <th className="p-2">Target</th>
+            <th className="p-2">Period</th>
+            <th className="p-2">Progress</th>
+          </tr>
+        </thead>
+        <tbody>
+          {goals.map((goal) => {
+            const progress = progressByGoalId[goal.id]
+            return (
+              <tr key={goal.id} className="border-b border-gray-100">
+                <td className="p-2">{repEmailById.get(goal.rep_id) ?? goal.rep_id}</td>
+                <td className="p-2">{goal.metric_type}</td>
+                <td className="p-2">{goal.target}</td>
+                <td className="p-2">
+                  {goal.period_start} – {goal.period_end}
+                </td>
+                <td className="p-2">
+                  {progress ? (
+                    `${progress.achieved} / ${progress.target}`
+                  ) : (
+                    <button onClick={() => handleViewProgress(goal.id)} className="text-blue-600 hover:underline">
+                      View
+                    </button>
+                  )}
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 2: Verify**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/dashboard
+npm run typecheck
+npm run build
+npx vitest run
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add dashboard/
+git commit -m "feat(dashboard): goal admin (list, create, view progress — no Log Value button, rep-only endpoint)
+
+Refs PLAN 7.4"
+```
+
+---
+
+### Task 5: Violations feed
+
+**Files:**
+- Modify: `dashboard/src/violations/ViolationsPage.tsx` (replace placeholder)
+
+**Interfaces:**
+- Consumes: `getViolations` (from `api/violations.ts`, already exists), `getUsers`, `getZones`.
+
+- [ ] **Step 1: Write `dashboard/src/violations/ViolationsPage.tsx`**
+
+```tsx
+// dashboard/src/violations/ViolationsPage.tsx
+import { useEffect, useState } from 'react'
+import { getViolations } from '../api/violations'
+import { getUsers } from '../api/users'
+import { getZones } from '../api/zones'
+import type { User, Zone, ZoneViolation } from '../api/types'
+
+export function ViolationsPage() {
+  const [violations, setViolations] = useState<ZoneViolation[]>([])
+  const [reps, setReps] = useState<User[]>([])
+  const [zones, setZones] = useState<Zone[]>([])
+
+  function refresh() {
+    getViolations().then(setViolations).catch(() => {})
+  }
+
+  useEffect(() => {
+    refresh()
+    getUsers('rep').then(setReps).catch(() => {})
+    getZones().then(setZones).catch(() => {})
+  }, [])
+
+  const repEmailById = new Map(reps.map((rep) => [rep.id, rep.email]))
+  const zoneNameById = new Map(zones.map((zone) => [zone.id, zone.name]))
+
+  return (
+    <div className="p-8 max-w-4xl mx-auto">
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-semibold text-gray-900">Zone Violations</h1>
+        <button onClick={refresh} className="text-sm text-blue-600 hover:underline">
+          Refresh
+        </button>
+      </div>
+
+      <table className="w-full text-sm bg-white border border-gray-200 rounded">
+        <thead>
+          <tr className="text-left border-b border-gray-200">
+            <th className="p-2">Rep</th>
+            <th className="p-2">Zone</th>
+            <th className="p-2">Detected</th>
+            <th className="p-2">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {violations.map((violation) => (
+            <tr key={violation.id} className="border-b border-gray-100">
+              <td className="p-2">{repEmailById.get(violation.rep_id) ?? violation.rep_id}</td>
+              <td className="p-2">{zoneNameById.get(violation.zone_id) ?? violation.zone_id}</td>
+              <td className="p-2">{new Date(violation.detected_at).toLocaleString()}</td>
+              <td className="p-2">
+                {violation.resolved_at ? (
+                  <span className="text-green-700">Resolved</span>
+                ) : (
+                  <span className="text-red-700">Open</span>
+                )}
+              </td>
+            </tr>
+          ))}
+          {violations.length === 0 && (
+            <tr>
+              <td colSpan={4} className="p-4 text-center text-gray-400">
+                No violations recorded.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 2: Verify**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/dashboard
+npm run typecheck
+npm run build
+npx vitest run
+```
+
+- [ ] **Step 3: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add dashboard/
+git commit -m "feat(dashboard): violations feed (read-only list)
+
+Refs PLAN 7.4"
+```
+
+---
+
+### Task 6: Push-subscription opt-in
+
+**Files:**
+- Create: `dashboard/public/sw.js`
+- Create: `dashboard/src/push/subscribeToPush.ts`
+- Create: `dashboard/src/push/PushOptInButton.tsx`
+- Modify: `dashboard/src/Layout.tsx` (add the button to the nav bar)
+
+**Interfaces:**
+- Produces: `subscribeToPushNotifications(): Promise<void>`, `PushOptInButton`.
+- Consumes: `getVapidPublicKey`, `createPushSubscription` (from `api/pushSubscriptions.ts`, already exist).
+
+Per `docs/design.md`'s own words: "browser web push is not self-contained — it routes through Google's FCM, needs HTTPS and a registered service worker, and can't be fully exercised end-to-end without real deployment infrastructure." This task builds the SUBSCRIBE step correctly (service worker registration + `pushManager.subscribe()` + POSTing the subscription to the backend) — that part IS verifiable locally, since browsers exempt `localhost` from the HTTPS requirement for service workers. Actually RECEIVING a push (the backend calling `pywebpush` and it arriving in the browser) is the part that needs real infra and is out of scope for local verification, consistent with every prior phase's treatment of this same caveat.
+
+- [ ] **Step 1: Write the service worker**
+
+```js
+// dashboard/public/sw.js
+self.addEventListener('push', (event) => {
+  const data = event.data ? event.data.json() : {}
+  const title = data.type === 'ZoneViolationDetected' ? 'Zone violation detected' : 'Atlas Field Force'
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: data.rep_id ? `Rep ${data.rep_id} left their assigned zone` : 'A new alert was received.',
+    }),
+  )
+})
+```
+
+This matches the payload shape `notify_managers_of_violation` sends (`backend/app/violations/service.py`) — read that function if you want to confirm the exact keys (`type`, `rep_id`, `zone_id`, `violation_id`, `detected_at`) before writing this.
+
+- [ ] **Step 2: Write `dashboard/src/push/subscribeToPush.ts`**
+
+```ts
+// dashboard/src/push/subscribeToPush.ts
+import { createPushSubscription, getVapidPublicKey } from '../api/pushSubscriptions'
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const rawData = window.atob(base64)
+  return Uint8Array.from([...rawData].map((char) => char.charCodeAt(0)))
+}
+
+export async function subscribeToPushNotifications(): Promise<void> {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    throw new Error('Push notifications are not supported in this browser.')
+  }
+
+  const registration = await navigator.serviceWorker.register('/sw.js')
+  const { vapid_public_key: vapidPublicKey } = await getVapidPublicKey()
+  if (!vapidPublicKey) {
+    throw new Error('Push is not configured on the server yet.')
+  }
+
+  const subscription = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+  })
+
+  const raw = subscription.toJSON()
+  if (!raw.endpoint || !raw.keys?.p256dh || !raw.keys?.auth) {
+    throw new Error('Browser did not return a complete push subscription.')
+  }
+
+  await createPushSubscription({
+    endpoint: raw.endpoint,
+    p256dh: raw.keys.p256dh,
+    auth: raw.keys.auth,
+  })
+}
+```
+
+`urlBase64ToUint8Array` exists because VAPID public keys are transmitted as URL-safe base64 strings but `PushManager.subscribe`'s `applicationServerKey` option needs raw bytes (a `Uint8Array`/`BufferSource`) — this is the standard, well-known conversion every Web Push tutorial uses; it is not custom cryptography, just base64 decoding with the URL-safe alphabet normalized back to standard base64 first.
+
+- [ ] **Step 3: Write `dashboard/src/push/PushOptInButton.tsx`**
+
+```tsx
+// dashboard/src/push/PushOptInButton.tsx
+import { useState } from 'react'
+import { subscribeToPushNotifications } from './subscribeToPush'
+
+export function PushOptInButton() {
+  const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
+  const [errorMessage, setErrorMessage] = useState('')
+
+  async function handleClick() {
+    setStatus('loading')
+    try {
+      await subscribeToPushNotifications()
+      setStatus('done')
+    } catch (error) {
+      setStatus('error')
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to enable alerts.')
+    }
+  }
+
+  if (status === 'done') {
+    return <span className="text-sm text-green-700">Alerts enabled</span>
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={handleClick}
+        disabled={status === 'loading'}
+        className="text-sm text-gray-600 hover:text-gray-900 disabled:opacity-50"
+      >
+        {status === 'loading' ? 'Enabling…' : 'Enable violation alerts'}
+      </button>
+      {status === 'error' && <span className="text-xs text-red-600">{errorMessage}</span>}
+    </div>
+  )
+}
+```
+
+- [ ] **Step 4: Wire `PushOptInButton` into `dashboard/src/Layout.tsx`**
+
+Read the current file first (from Task 1). Add the import and place `<PushOptInButton />` in the right-hand nav group, alongside the user email and sign-out button:
+
+```tsx
+import { PushOptInButton } from './push/PushOptInButton'
+```
+
+```tsx
+<div className="flex items-center gap-4">
+  <PushOptInButton />
+  <span className="text-sm text-gray-500">{user?.email}</span>
+  <button onClick={logout} className="text-sm text-gray-600 hover:text-gray-900">
+    Sign out
+  </button>
+</div>
+```
+
+- [ ] **Step 5: Verify**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/dashboard
+npm run typecheck
+npm run build
+npx vitest run
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add dashboard/
+git commit -m "feat(dashboard): push-subscription opt-in (service worker + VAPID subscribe flow)
+
+Refs PLAN 7.4"
+```
+
+---
+
+## After this plan — controller browser verification (not a task, not delegated)
+
+Same discipline as 7a — compiling is not the same as working, and this plan has three new areas a text-only reviewer cannot confirm: a rendered+styled leaflet-draw toolbar, a drawn polygon actually posting to the backend and reappearing on reload, and a service-worker registration actually succeeding in a real browser.
+
+1. Start the backend (`cd backend && uv run uvicorn app.main:app --reload`) and dashboard (`cd dashboard && npm run dev`) dev servers. Ensure `dev.db` is migrated to head (`cd backend && uv run alembic upgrade head`) — check this every time, it silently lagged behind once already in this project's history.
+2. Via `/browse`: log in as a manager (reuse or recreate a test tenant/manager/rep the same way the 7a verification did).
+3. **Zones**: navigate to `/zones`. Confirm the leaflet-draw toolbar appears (a polygon-draw icon in the top-left, styled — not a raw unstyled list of buttons, which is exactly the failure mode a missing `leaflet-draw/dist/leaflet.draw.css` import produces). Draw a polygon, confirm the name prompt appears, name it, confirm it now appears both as a polygon on the map AND in the right-hand zone list. Click it, assign a rep, confirm the assignment appears in the panel. Reload the page and confirm the zone and assignment persisted (proves the boundary round-tripped through the backend correctly, including the coordinate-order flip).
+4. **Tasks**: navigate to `/tasks`, create a task assigned to the test rep, confirm it appears in the table with the rep's email (not a raw UUID) and status `OPEN`. Confirm there is no Complete button anywhere. Cancel it, confirm status updates to `CANCELLED`.
+5. **Goals**: navigate to `/goals`, create a goal for the test rep, confirm it appears with the rep's email. Click "View" on its progress, confirm a value appears (0/target for a fresh goal). Confirm there is no Log Value button anywhere.
+6. **Violations**: navigate to `/violations`. If Phase 6's violation-triggering flow is easy to reproduce quickly (a rep ping outside an assigned zone during 08:00-18:00 UTC), do it and confirm the violation appears with the resolved rep/zone names; otherwise confirm the empty state renders cleanly.
+7. **Push opt-in**: click "Enable violation alerts" in the nav bar. Confirm the browser's native permission prompt appears (or, if browser automation auto-grants/denies notification permissions silently, confirm via `$B console`/`$B network` that `navigator.serviceWorker.register('/sw.js')` succeeded and a `POST /api/v1/push-subscriptions` call fired with a 201). Confirm the button changes to "Alerts enabled" on success.
+8. If any of these fail, fix before merging — do not report this phase complete on the strength of `typecheck`/`build`/`vitest` alone, per this plan's own framing (and 7a's, which caught a real CORS bug this exact way).
+
+Then update `PROGRESS.md`, tick PLAN.md 7.1-7.4 (all of Phase 7 complete), a final whole-branch review, merge, verify the dashboard CI job (already exists from 7a) stays green, and plan Phase 8 (tablet app) fresh against the actual code.

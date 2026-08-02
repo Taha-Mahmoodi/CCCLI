@@ -1,0 +1,272 @@
+// The radio player store — single source of truth for the timeline and
+// playback. Kept pure (persistence + object URLs are guarded side-effects) so
+// its state transitions are unit-testable without a DOM.
+//
+// Playback follows the ACTIVE CHANNEL and the shuffle setting: the queue is
+// memos filtered by channel, chronological or shuffled. currentIndex indexes
+// into that queue, not the raw memos.
+//
+// Non-negotiables enforced here:
+//  #3 the stream ends — next() past the last memo yields status "ended".
+//  #4 no engagement machinery — likes are per-user state only, never counted.
+
+import { create } from "zustand";
+import type { Channel, Memo, StoredMemo } from "@/lib/types";
+import {
+  getAllMemos,
+  putMemo,
+  setLiked as persistLiked,
+  setCorrectedTranscript as persistCorrection,
+} from "@/lib/idb";
+import {
+  ALL,
+  DEFAULT_CHANNEL,
+  channelQueue,
+  loadChannels,
+  orderedQueue,
+  saveChannels,
+  shuffleIds,
+  uniqueChannelId,
+} from "@/lib/channels";
+
+const TRANSCRIPTS_KEY = "tew:showTranscripts";
+
+function loadShowTranscripts(): boolean {
+  if (typeof localStorage === "undefined") return true;
+  try {
+    return localStorage.getItem(TRANSCRIPTS_KEY) !== "false"; // default on
+  } catch {
+    return true;
+  }
+}
+function saveShowTranscripts(v: boolean): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(TRANSCRIPTS_KEY, String(v));
+  } catch {
+    /* ignore quota/private-mode */
+  }
+}
+
+export type PlayerStatus = "idle" | "playing" | "paused" | "ended";
+
+type PlayerState = {
+  memos: Memo[];
+  urls: Record<string, string>; // memo id -> object URL
+  channels: Channel[];
+  activeChannel: string; // "all" or a channel id — drives the queue
+  shuffle: boolean;
+  shuffleOrder: string[]; // memo ids, when shuffle is on
+  currentIndex: number; // index into the ACTIVE queue (channel + order)
+  isPlaying: boolean;
+  status: PlayerStatus;
+  hydrated: boolean;
+  replayNonce: number; // bumped to ask the player to seek current back to 0
+  showTranscripts: boolean;
+  playbackRate: number; // spoken-audio users often listen faster
+
+  hydrate: () => Promise<void>;
+  addMemo: (
+    blob: Blob,
+    durationMs: number,
+    mime: string,
+    machineTranscript?: string,
+  ) => Promise<Memo>;
+  play: () => void;
+  pause: () => void;
+  togglePlay: () => void;
+  next: () => void;
+  previous: () => void;
+  replay: () => void;
+  playFrom: (queueIndex: number) => void;
+  toggleLike: (id: string) => void;
+  correctTranscript: (id: string, text: string) => void;
+  toggleTranscripts: () => void;
+  setActiveChannel: (id: string) => void;
+  createChannel: (name: string) => void;
+  toggleShuffle: () => void;
+  cyclePlaybackRate: () => void;
+  reset: () => void; // back to the start of the current queue
+};
+
+export const PLAYBACK_RATES = [1, 1.25, 1.5, 2] as const;
+
+function makeId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return `memo_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+}
+
+function objectUrl(blob: Blob): string {
+  if (typeof URL !== "undefined" && "createObjectURL" in URL) return URL.createObjectURL(blob);
+  return "";
+}
+
+// The active play-queue, honoring channel + shuffle.
+function queueOf(s: {
+  memos: Memo[];
+  activeChannel: string;
+  shuffle: boolean;
+  shuffleOrder: string[];
+}): Memo[] {
+  return orderedQueue(s.memos, s.activeChannel, s.shuffle ? s.shuffleOrder : null);
+}
+
+export const usePlayer = create<PlayerState>((set, get) => ({
+  memos: [],
+  urls: {},
+  channels: [DEFAULT_CHANNEL],
+  activeChannel: ALL,
+  shuffle: false,
+  shuffleOrder: [],
+  currentIndex: 0,
+  isPlaying: false,
+  status: "idle",
+  hydrated: false,
+  replayNonce: 0,
+  showTranscripts: true,
+  playbackRate: 1,
+
+  hydrate: async () => {
+    if (get().hydrated) return;
+    const stored = await getAllMemos();
+    const urls: Record<string, string> = {};
+    const memos: Memo[] = stored.map((m) => {
+      urls[m.id] = objectUrl(m.blob);
+      const { blob: _blob, ...meta } = m;
+      void _blob;
+      // old memos (pre-Slice-1) lack transcript/channel fields
+      return {
+        ...meta,
+        machineTranscript: meta.machineTranscript ?? "",
+        channelId: meta.channelId ?? DEFAULT_CHANNEL.id,
+      };
+    });
+    set({
+      memos,
+      urls,
+      hydrated: true,
+      currentIndex: 0,
+      showTranscripts: loadShowTranscripts(),
+      channels: loadChannels(),
+    });
+  },
+
+  addMemo: async (blob, durationMs, mime, machineTranscript = "") => {
+    const active = get().activeChannel;
+    const channelId = active === ALL ? DEFAULT_CHANNEL.id : active;
+    const memo: Memo = {
+      id: makeId(),
+      createdAt: Date.now(),
+      durationMs,
+      mime,
+      liked: false,
+      channelId,
+      machineTranscript,
+    };
+    void putMemo({ ...memo, blob } satisfies StoredMemo); // fire-and-forget persistence
+    const url = objectUrl(blob);
+    set((s) => {
+      const memos = [...s.memos, memo];
+      const inActive = s.activeChannel === ALL || channelId === s.activeChannel;
+      // if shuffling, the new memo joins the shuffle order (at the end)
+      const shuffleOrder = s.shuffle && inActive ? [...s.shuffleOrder, memo.id] : s.shuffleOrder;
+      const wasEnded = s.status === "ended";
+      const newLen = queueOf({ ...s, memos, shuffleOrder }).length;
+      return {
+        memos,
+        shuffleOrder,
+        urls: { ...s.urls, [memo.id]: url },
+        currentIndex: wasEnded && inActive ? newLen - 1 : s.currentIndex,
+        status: wasEnded && inActive ? "paused" : s.status,
+      };
+    });
+    return memo;
+  },
+
+  play: () => {
+    if (queueOf(get()).length === 0) return;
+    set({ isPlaying: true, status: "playing" });
+  },
+  pause: () => set((s) => (s.status === "playing" ? { isPlaying: false, status: "paused" } : {})),
+  togglePlay: () => (get().isPlaying ? get().pause() : get().play()),
+
+  next: () => {
+    const s = get();
+    if (s.currentIndex < queueOf(s).length - 1) {
+      set({ currentIndex: s.currentIndex + 1 });
+    } else {
+      set({ isPlaying: false, status: "ended" }); // the stream ends (#3)
+    }
+  },
+
+  previous: () =>
+    set((s) => ({
+      currentIndex: Math.max(0, s.currentIndex - 1),
+      status: s.status === "ended" ? "paused" : s.status,
+    })),
+
+  replay: () =>
+    set((s) => ({ replayNonce: s.replayNonce + 1, isPlaying: true, status: "playing" })),
+
+  playFrom: (queueIndex) => {
+    if (queueIndex < 0 || queueIndex >= queueOf(get()).length) return;
+    set({ currentIndex: queueIndex, isPlaying: true, status: "playing" });
+  },
+
+  toggleLike: (id) => {
+    set((s) => ({ memos: s.memos.map((m) => (m.id === id ? { ...m, liked: !m.liked } : m)) }));
+    const m = get().memos.find((x) => x.id === id);
+    if (m) void persistLiked(id, m.liked);
+  },
+
+  correctTranscript: (id, text) => {
+    const corrected = text.trim();
+    set((s) => ({
+      memos: s.memos.map((m) => (m.id === id ? { ...m, correctedTranscript: corrected } : m)),
+    }));
+    void persistCorrection(id, corrected);
+  },
+
+  toggleTranscripts: () => {
+    const next = !get().showTranscripts;
+    set({ showTranscripts: next });
+    saveShowTranscripts(next);
+  },
+
+  setActiveChannel: (id) => {
+    const s = get();
+    const shuffleOrder = s.shuffle ? shuffleIds(channelQueue(s.memos, id).map((m) => m.id)) : [];
+    set({ activeChannel: id, shuffleOrder, currentIndex: 0, isPlaying: false, status: "idle" });
+  },
+
+  createChannel: (name) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const id = uniqueChannelId(trimmed, get().channels);
+    const channels = [...get().channels, { id, name: trimmed }];
+    saveChannels(channels);
+    // new channel is empty → empty shuffle order
+    set({
+      channels,
+      activeChannel: id,
+      shuffleOrder: [],
+      currentIndex: 0,
+      isPlaying: false,
+      status: "idle",
+    });
+  },
+
+  toggleShuffle: () => {
+    const s = get();
+    const shuffle = !s.shuffle;
+    const shuffleOrder = shuffle ? shuffleIds(channelQueue(s.memos, s.activeChannel).map((m) => m.id)) : [];
+    set({ shuffle, shuffleOrder, currentIndex: 0, isPlaying: false, status: "idle" });
+  },
+
+  cyclePlaybackRate: () => {
+    const i = PLAYBACK_RATES.indexOf(get().playbackRate as (typeof PLAYBACK_RATES)[number]);
+    set({ playbackRate: PLAYBACK_RATES[(i + 1) % PLAYBACK_RATES.length] });
+  },
+
+  reset: () => set({ currentIndex: 0, status: "idle", isPlaying: false }),
+}));

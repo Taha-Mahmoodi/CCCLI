@@ -1,0 +1,92 @@
+# How to run it
+
+## Claude Code
+
+Install as a plugin, then:
+
+```
+/webcrab <company name or domain>
+```
+
+Or point at the skill directly: "read `skills/webcrab/SKILL.md` and run the pipeline
+for \<client\>."
+
+## Any other capable agent
+
+Point it at this repo and say:
+
+> Read `PRINCIPLES.md`, then `skills/webcrab/SKILL.md`. Execute the loops in `loops/`
+> in order for \<client\>. Stop at every gate and wait for my decision.
+
+There is no program to install. The pipeline is markdown; the agent is the runtime.
+
+## Before you start, get these
+
+The run goes much better if the client brings them. Ask on day zero:
+
+| Thing | Why | If they can't |
+|---|---|---|
+| **The goal in numbers** | `§0`. Everything is accountable to it | Loop 1 derives one with them, and Loop 8 sets a baseline instead of beating one |
+| **Analytics access** | The baseline, and where the leads currently come from | Record the gap; Loop 5 installs measurement from zero |
+| **Search Console access** | The authoritative list of what ranks (`§13`) | Crawl instead, and accept that orphan pages will be missed |
+| **Who can say yes** | One name (`§1`) | Gate A stalls in committee. Get the name |
+| **Brand assets** | Logo files, type licenses, a brand book if one exists | Loop 1 audits what is on the current site and extends from there |
+| **Customer material** | Reviews, support tickets, sales-call notes, churn reasons | VOC falls back to public review sites only, which is thinner |
+| **Claims they want to make** | Every number, with where it came from (`§6`) | Anything unsourced gets cut or hedged, and they find out at Gate A rather than at launch |
+| **Permissions** | Customer logo consents, testimonial approvals (`§25`) | Class instead of instance: "a national grocery chain" |
+| **CRM / inbox destination** | Where leads go, and who reads them (`§18`) | Handoff mode for the capture layer, flagged in the report |
+| **Deploy access** | Host, DNS, repository — on their accounts (`§23`) | Handoff mode for deploy |
+
+Drop documents into `runs/<slug>/inbox/` before Loop 1.
+
+## What it will ask you
+
+**Loop 0** — nothing. It checks its own capabilities and makes a run folder.
+
+**Loop 1** — the intake. One question at a time, open-ended. This is the part that
+decides whether the output is a marketing site or a brochure with a gradient. Budget
+real time for it. It will also want to talk to sales and support, not just the
+founder, and it will ask where the site deploys and who edits it afterward.
+
+**Gate A** — you approve the strategy: the goal in numbers, ICP, positioning, the
+offer, the objections that rank, which pages exist, the site shape, and the redirect
+map.
+
+**Gate B1** — you pick the concept from rendered design images.
+
+**Gate B2** — you approve the techniques, motion, performance budget, and the list of
+third-party tags with a named owner for each.
+
+**Gate C** — you see the finished site before it goes public and before DNS moves.
+This gate is not skippable.
+
+**Loop 8** — a few weeks after launch, it comes back with the numbers and the next
+three things to change.
+
+## Checking it yourself
+
+Any point after Loop 4, against the build or the live URL:
+
+```bash
+python3 scripts/preflight.py <dir | file | url> --evidence runs/<slug>/EVIDENCE.md
+```
+
+Stdlib Python, no install. It reports the mechanical failures — the ones that are
+silent and expensive — and says plainly what it cannot check.
+
+## Skipping
+
+Say so. Any step except six is optional. The agent states the cost once, records it,
+and moves on. See [`SKIPPING.md`](./SKIPPING.md).
+
+In a hurry: ask for **express mode**. Building one page for a campaign: ask for
+**landing-page mode**.
+
+## What you get
+
+A live site on the infrastructure you picked, its source in your own repository, a
+tested path for your own team to change it, and `runs/<slug>/REPORT.md` with an honest
+confidence grade, the funnel proof, the rollback command, and the redirect map.
+
+Then, after real traffic, `MEASURE.md`'s Loop 8 read: what moved, what didn't, what
+confounded it, and the next three things worth doing.

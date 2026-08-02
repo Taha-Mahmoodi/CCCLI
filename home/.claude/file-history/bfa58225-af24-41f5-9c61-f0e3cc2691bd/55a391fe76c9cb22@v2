@@ -1,0 +1,96 @@
+# Atlas Field Force
+
+Real-time tracking for field marketers/sales reps: live location, geofenced zones, task and goal assignment, visit logging. Built as a standalone product for fast delivery; designed to merge into [atlas-erp](https://github.com/Taha-Mahmoodi/atlas-erp) as a module once Atlas reaches v1.0.0.
+
+Private repo — proprietary, not for public distribution.
+
+## Stack
+
+- **Backend:** Python 3.12, FastAPI, SQLAlchemy 2.0 (typed, async), PostgreSQL-first (SQLite-compatible for tests), Alembic, Pydantic v2. Dependency manager: `uv`.
+- **Manager web dashboard:** React 18 + TypeScript + Vite, Tailwind, Leaflet (map + zone drawing).
+- **Tablet app (Android):** Capacitor + React + TypeScript + Tailwind.
+
+## Docs
+
+- [`docs/design.md`](docs/design.md) — the approved design spec
+- [`PLAN.md`](PLAN.md) — build order
+- [`PROGRESS.md`](PROGRESS.md) — session-by-session log; **read this first when resuming work**
+- [`docs/research/field-force-market-scan.md`](docs/research/field-force-market-scan.md) — competitor feature research this design is grounded in
+
+## Session protocol
+
+Read `PROGRESS.md` and `PLAN.md` before writing any code. Verify the last `PROGRESS.md` entry against actual code and `git log`, then resume from the next unchecked `PLAN.md` task. Commit and update `PROGRESS.md` after every working slice — this repo will be built across many separate sessions.
+
+## Deploying (Docker)
+
+The full stack (Postgres + backend + dashboard) runs locally via Docker Compose:
+
+```bash
+docker compose up -d --build
+```
+
+- Backend: http://localhost:8000
+- Dashboard: http://localhost:8080
+
+The backend container runs `alembic upgrade head` before starting (see
+`backend/docker-entrypoint.sh`) — migrations apply automatically on every
+`docker compose up`, no separate step needed.
+
+Override `JWT_SECRET` (required outside development — see
+`backend/app/config.py`'s validator) via a `.env` file at the repo root or
+an exported environment variable before running `docker compose up`; Compose
+picks up `JWT_SECRET` from the shell/`.env` automatically (see the
+`${JWT_SECRET:-...}` default in `docker-compose.yml`).
+
+The tablet app has no server component — it's a standalone APK. Build it via
+`tablet/README.md`'s documented sequence; there's nothing to containerize.
+
+### Deploying to a real VPS (HTTPS, a real domain)
+
+The compose file above is for local dev only (no TLS, no domain).
+[`docs/deploy-vps.md`](docs/deploy-vps.md) covers a real deployment: a
+separate `docker-compose.prod.yml` + Caddy for automatic Let's Encrypt TLS
+on one domain, path-based routing (`/api/*` → backend, everything else →
+dashboard, no subdomains needed), verified end-to-end locally before that
+doc was written.
+
+## What's not included — needs a decision before going live
+
+This repo is **deployable**, not **deployed** — per `docs/design.md`'s own
+scope line, going further needs explicit sign-off (cost, domain,
+credentials), not more code:
+
+- **Domain + TLS.** Nothing here is deployed to a real domain. TLS is also a
+  hard requirement for the dashboard's web-push service worker to function
+  at all (browser push APIs refuse to register a service worker over plain
+  HTTP except on `localhost`).
+- **Real VAPID keypair.** `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY` default to
+  empty strings (`backend/app/config.py`) — push notifications are wired but
+  inert until a real keypair is generated and set.
+- **An actual VPS + domain.** [`docs/deploy-vps.md`](docs/deploy-vps.md) now
+  covers the deployment mechanics for any Dockerized VPS (DigitalOcean,
+  Hetzner, Linode, AWS Lightsail, etc.) — what's still needed is a real
+  provider account, a real domain pointed at it, and someone to actually run
+  the deploy.
+- **A non-default `JWT_SECRET`.** Already enforced at startup outside
+  `development` (`Settings.validate_jwt_secret_not_default_outside_development`)
+  — this is a hard requirement, not a suggestion, and the app will refuse to
+  boot without it once `ENVIRONMENT` is set to anything else.
+- **Real-device GPS / background-location testing.** The tablet app has only
+  ever been build-verified (a real `.apk` compiles and installs) — it has
+  never run on a physical device or emulator, since none exists in this
+  development environment. The open-source background-location plugin
+  (`@capacitor-community/background-geolocation`, chosen over the paid
+  Transistorsoft plugin per `docs/design.md`) should specifically be
+  field-tested for reliability before depending on it in production; revisit
+  the paid plugin if it proves too unreliable.
+- **Photo upload storage.** `visits.photo_path` is a schema-ready column with
+  no storage backend chosen yet (S3-compatible object storage, a local disk
+  volume, etc.) — photos are not actually uploadable in v1.
+- **Everything `docs/design.md` already scoped to the eventual Atlas merge**,
+  restated here since it's still "what's left": real CRM/Sales linking (a
+  live foreign key instead of the current free-text `external_reference`),
+  reading real Sales order values for `SALES_VALUE` goals (currently
+  rep-logged manually), folding `reps` into Atlas's HR `employees` table,
+  Atlas's full RBAC/permission catalog, and genuine multi-tenant UX (tenant
+  provisioning today is just a raw UUID typed into the login form).

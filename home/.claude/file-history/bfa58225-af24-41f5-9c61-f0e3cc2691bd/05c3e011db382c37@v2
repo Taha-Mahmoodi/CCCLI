@@ -1,0 +1,59 @@
+from app.core.jobs import job_runner
+from app.main import create_app
+
+
+def test_create_app_registers_the_retention_job():
+    create_app()
+    assert "prune_old_pings" in job_runner._jobs
+
+
+async def test_cors_preflight_allows_the_dashboard_origin(client):
+    # The dashboard (Vite dev server) runs on a different origin than the
+    # API -- without CORS configured, every browser request the dashboard
+    # makes fails at the network layer before FastAPI ever sees it, even
+    # though the exact same request works fine from httpx/pytest (which
+    # doesn't enforce CORS at all). Only a real browser check catches this.
+    response = await client.options(
+        "/api/v1/auth/login",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+    assert response.headers.get("access-control-allow-origin") == "http://localhost:5173"
+
+
+async def test_cors_header_present_on_an_actual_response_not_just_preflight(client):
+    response = await client.get("/health", headers={"Origin": "http://localhost:5173"})
+    assert response.headers.get("access-control-allow-origin") == "http://localhost:5173"
+
+
+async def test_cors_rejects_an_unlisted_origin(client):
+    response = await client.get("/health", headers={"Origin": "http://evil.example.com"})
+    assert "access-control-allow-origin" not in response.headers
+
+
+async def test_cors_allowed_origins_strips_whitespace_after_split(monkeypatch, db_engine):
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+    from httpx import ASGITransport, AsyncClient
+
+    from app.config import Settings
+    from app.db import get_db
+
+    monkeypatch.setattr(
+        "app.main.get_settings",
+        lambda: Settings(cors_allowed_origins="http://localhost:5173, https://dashboard.example.com"),
+    )
+    app = create_app()
+    session_maker = async_sessionmaker(db_engine, expire_on_commit=False)
+
+    async def override_get_db():
+        async with session_maker() as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_get_db
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        response = await ac.get("/health", headers={"Origin": "https://dashboard.example.com"})
+
+    assert response.headers.get("access-control-allow-origin") == "https://dashboard.example.com"

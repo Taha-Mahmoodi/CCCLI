@@ -1,0 +1,56 @@
+package com.thirdeyeworld.android
+
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.session.MediaSession
+import androidx.media3.session.MediaSessionService
+
+/**
+ * Media3 MediaSessionService — auto-creates the media notification and exposes
+ * the hardware / lock-screen / headphone transport route (spec §6.3). The
+ * foreground service type is `mediaPlayback` (AndroidManifest).
+ *
+ * Audio ducking (§6.4) is the setting this file exists to get right. Spec §13.1
+ * lists it as one of two traps with "total consequences": if TalkBack talks over
+ * a memo, two voices play at once and the app becomes unusable for the people it
+ * is for. The player is therefore tagged CONTENT_TYPE_SPEECH and told to manage
+ * audio focus. ExoPlayer's focus handling pauses instead of ducking when the
+ * content type is speech — which is what the spec's
+ * `AudioFocusRequest.setWillPauseWhenDucked(true)` buys you, obtained here
+ * through the Media3 API rather than by managing focus by hand.
+ */
+class PlaybackService : MediaSessionService() {
+  private var session: MediaSession? = null
+
+  override fun onCreate() {
+    super.onCreate()
+
+    val speech = AudioAttributes.Builder()
+      .setUsage(C.USAGE_MEDIA)
+      .setContentType(C.AUDIO_CONTENT_TYPE_SPEECH)
+      .build()
+
+    val player = ExoPlayer.Builder(this)
+      // handleAudioFocus = true: ExoPlayer requests/abandons focus for us, and
+      // pauses rather than ducks because the content type above is speech.
+      .setAudioAttributes(speech, /* handleAudioFocus= */ true)
+      // Headphones are the true eyes-free surface (§4) — unplugging must pause,
+      // not blast a memo out of the phone speaker.
+      .setHandleAudioBecomingNoisy(true)
+      .build()
+
+    session = MediaSession.Builder(this, player).build()
+  }
+
+  override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
+
+  override fun onDestroy() {
+    session?.let {
+      it.player.release()
+      it.release()
+    }
+    session = null
+    super.onDestroy()
+  }
+}

@@ -1,0 +1,120 @@
+/**
+ * Third Eye Kit — Node A: Upper Ranging (Glasses/Headwear)
+ *
+ * Detects obstacles at/above chest height.
+ * Feedback: Local audio cue through headphone jack.
+ * Status: [IMPLEMENTED]
+ *
+ * Platform: Arduino Mini Pro (3.3V or 5V variant)
+ * Sensor: HC-SR04 Ultrasonic
+ * Power: Lithium cell (1.5V × 1) or AA battery
+ */
+
+// Pin Configuration
+#define TRIG_PIN  9   // Trigger pin for HC-SR04
+#define ECHO_PIN  10  // Echo pin for HC-SR04
+#define AUDIO_PIN 11  // Audio feedback (PWM-capable)
+
+// Configuration (tunable per user and environment)
+#define ALERT_CM  70  // Alert distance in centimeters (~70 cm for head-height obstacle)
+
+// Sensor timeout (prevent infinite waits)
+#define SENSOR_TIMEOUT 30000  // 30 ms in microseconds
+
+// Audio feedback configuration
+#define AUDIO_FREQ    440  // Hz (A4 note)
+#define AUDIO_DURATION 200  // ms
+
+// Forward declarations
+float getDistance(int trigPin, int echoPin);
+void playAudio(int pin, int freq, int duration);
+
+void setup() {
+  Serial.begin(9600);
+
+  pinMode(TRIG_PIN, OUTPUT);
+  pinMode(ECHO_PIN, INPUT);
+  pinMode(AUDIO_PIN, OUTPUT);
+
+  // Optional: indicator LED to show power-on
+  digitalWrite(AUDIO_PIN, LOW);
+
+  Serial.println("Node A: Upper Ranging System");
+  Serial.print("Alert distance: ");
+  Serial.print(ALERT_CM);
+  Serial.println(" cm");
+  Serial.println("Waiting for obstacles...");
+}
+
+void loop() {
+  // Get distance from ultrasonic sensor
+  float distance = getDistance(TRIG_PIN, ECHO_PIN);
+
+  // Check if obstacle is within alert range
+  if (distance > 0 && distance < ALERT_CM) {
+    // Obstacle detected — play audio alert
+    playAudio(AUDIO_PIN, AUDIO_FREQ, AUDIO_DURATION);
+    Serial.print("ALERT: Obstacle at ");
+    Serial.print(distance);
+    Serial.println(" cm");
+  } else if (distance > 0) {
+    // Optional: log distance periodically for diagnostics
+    // Serial.print("Distance: "); Serial.println(distance);
+  }
+
+  delay(100);  // Sampling interval (10 Hz)
+}
+
+/**
+ * getDistance() — Measure distance using ultrasonic time-of-flight
+ *
+ * Round-trip formula: distance (cm) = pulseWidth (µs) / 58
+ * (Speed of sound: ~343 m/s = 0.0343 cm/µs = 1 cm per 29 µs round-trip)
+ */
+float getDistance(int trigPin, int echoPin) {
+  // Send 10 µs trigger pulse
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  // Measure echo pulse width
+  long pulseDuration = pulseIn(echoPin, HIGH, SENSOR_TIMEOUT);
+
+  // Invalid measurement (sensor not responding or timeout)
+  if (pulseDuration == 0) {
+    return -1;  // Return negative to indicate error
+  }
+
+  // Convert pulse duration to distance
+  float distance = pulseDuration / 58.0;
+
+  // Clamp to reasonable range (2 cm to 400 cm)
+  if (distance < 2 || distance > 400) {
+    return -1;
+  }
+
+  return distance;
+}
+
+/**
+ * playAudio() — Generate audio tone feedback via PWM
+ *
+ * Note: Simple square-wave tone. For better audio quality,
+ * use hardware-based tone generation or pre-recorded samples.
+ */
+void playAudio(int pin, int freq, int duration) {
+  int period = 1000000 / freq;  // Period in microseconds
+  int halfPeriod = period / 2;
+  long endTime = millis() + duration;
+
+  while (millis() < endTime) {
+    digitalWrite(pin, HIGH);
+    delayMicroseconds(halfPeriod);
+    digitalWrite(pin, LOW);
+    delayMicroseconds(halfPeriod);
+  }
+
+  digitalWrite(pin, LOW);  // Ensure pin is low after audio stops
+}

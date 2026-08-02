@@ -1,0 +1,113 @@
+/* site.js — progressive enhancement only. With JS disabled the outline nav is
+ * still a working list of anchor links and the transcript is still the content;
+ * nothing here is load-bearing for reading the page.
+ *
+ * 1. marks the reader's position in the outline nav
+ * 2. drives the Listen control, including every failure state
+ */
+(() => {
+  'use strict';
+
+  /* ---------- 0. the outline starts collapsed on a phone ----------
+   * Authored open, so with JS off it stays open and nothing is lost. On a narrow
+   * screen seven entries push the first section ~450px down the page, and the
+   * outline is duplicating what scrolling already does there. */
+  const disclosure = document.querySelector('.p-outline details');
+  if (disclosure && window.matchMedia('(max-width: 60rem)').matches) {
+    disclosure.open = false;
+  }
+
+  /* ---------- 1. position in the outline ---------- */
+  const links = [...document.querySelectorAll('.p-outline a[href^="#"]')];
+  const targets = links
+    .map(a => ({ a, el: document.getElementById(decodeURIComponent(a.hash.slice(1))) }))
+    .filter(t => t.el);
+
+  if (targets.length) {
+    let current = null;
+    const mark = el => {
+      if (el === current) return;
+      current = el;
+      for (const t of targets) {
+        const on = t.el === el;
+        // aria-current is the announcement; the class is only paint.
+        if (on) t.a.setAttribute('aria-current', 'true');
+        else t.a.removeAttribute('aria-current');
+      }
+    };
+    const io = new IntersectionObserver(entries => {
+      // topmost intersecting section wins, so scrolling up marks correctly too
+      const visible = entries.filter(e => e.isIntersecting)
+        .sort((x, y) => x.boundingClientRect.top - y.boundingClientRect.top);
+      if (visible.length) mark(visible[0].target);
+    }, { rootMargin: '-10% 0px -70% 0px', threshold: 0 });
+    targets.forEach(t => io.observe(t.el));
+  }
+
+  /* ---------- 2. the Listen control ---------- */
+  const listen = document.querySelector('[data-listen]');
+  if (!listen) return;
+
+  const audio  = listen.querySelector('audio');
+  const button = listen.querySelector('button');
+  const label  = button.querySelector('[data-label]');
+  const status = listen.querySelector('[data-status]');
+  const bar    = listen.querySelector('[data-progress]');
+  if (!audio || !button || !label || !status) return;
+
+  let pending = false;   // guards the rapid double-press race
+  let failed  = false;
+
+  const say = msg => { if (status.textContent !== msg) status.textContent = msg; };
+
+  const set = state => {
+    listen.dataset.state = state;
+    button.setAttribute('aria-pressed', String(state === 'playing'));
+    if (state === 'error') { label.textContent = 'Audio unavailable'; button.disabled = true; }
+    else if (state === 'playing') label.textContent = 'Pause';
+    else if (state === 'paused')  label.textContent = 'Resume';
+    else label.textContent = listen.dataset.idleLabel || 'Listen';
+  };
+
+  const fail = () => {
+    if (failed) return;
+    failed = true;
+    set('error');
+    say('The audio could not play. The transcript below says the same thing.');
+  };
+
+  audio.addEventListener('error', fail);
+  audio.addEventListener('stalled', () => { if (!audio.duration) fail(); });
+  audio.addEventListener('ended', () => { set('idle'); say('Finished.'); if (bar) bar.style.inlineSize = '0%'; });
+  audio.addEventListener('timeupdate', () => {
+    // paint only — deliberately never announced, or a screen reader would be
+    // interrupted several times a second.
+    if (bar && audio.duration) bar.style.inlineSize = (audio.currentTime / audio.duration * 100) + '%';
+  });
+
+  button.addEventListener('click', async () => {
+    if (pending || failed) return;
+    pending = true;
+    try {
+      if (audio.paused) {
+        await audio.play();
+        set('playing'); say('Playing.');
+      } else {
+        audio.pause();
+        set('paused'); say('Paused.');
+      }
+    } catch (err) {
+      // NotAllowedError: autoplay policy. Recover to idle rather than lying
+      // about a playing state that never started.
+      if (err && err.name === 'NotAllowedError') {
+        set('idle'); say('Press Listen to play.');
+      } else {
+        fail();
+      }
+    } finally {
+      pending = false;
+    }
+  });
+
+  set('idle');
+})();

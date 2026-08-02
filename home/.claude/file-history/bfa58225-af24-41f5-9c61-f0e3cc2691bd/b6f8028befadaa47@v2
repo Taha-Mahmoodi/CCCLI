@@ -1,0 +1,832 @@
+# Manager Dashboard 7a — Scaffold, Auth, API Client, Live Map
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** First half of PLAN.md 7.1/7.2 — a Vite+React+TS+Tailwind app with login, a typed API client, and a live map of rep positions polling `GET /api/v1/pings/latest`. Second half (zone drawing, task/goal admin, violations feed, push opt-in — PLAN.md 7.3/7.4) is a separate plan, `2026-07-20-dashboard-7b-*.md`, written after this one is verified working, mirroring the visits/tasks (4a/4b) split for size.
+
+**Why this phase is verified differently than every backend phase so far:** `docs/design.md`'s own CI bar for the dashboard is "typecheck+build," not "test" (PLAN.md 9.2) — a lower bar than the backend's, deliberately. `tsc --noEmit` and `vite build` prove the code compiles; they do not prove a Leaflet map actually renders tiles, a marker actually appears, or a login form actually logs in. A text-only subagent reviewer reading a diff cannot see a rendered map either. So: implementer + reviewer pairs still run per task (spec compliance + code quality, same rigor as every backend phase), but the pass/fail gate per task is **typecheck + build succeeds**, plus a small number of **targeted unit tests for the pieces that have real logic** (the auth-refresh-retry interceptor, the polling hook) — not exhaustive component tests, which the design's own stated bar doesn't ask for and which would be gold-plating. At the end of this plan, the controller (not a subagent) runs the app in a real browser via the `/browse` skill and visually confirms: login works, the map renders tiles, at least one rep marker appears. This is the step that actually proves the feature works, and it happens once, after all tasks, not per-task.
+
+**Architecture:** New `dashboard/` directory at the repo root, sibling to `backend/`. Vite + React 18 + TypeScript (strict) + Tailwind CSS v4 (via `@tailwindcss/vite`, no separate PostCSS config needed). `react-router-dom` for routing. `react-leaflet` + raw `leaflet` for the map (no `react-leaflet-draw`-style wrapper package — that's Phase 7b's problem and gets decided there). No ESLint/Prettier added — `tsc --noEmit` is the correctness gate this repo's own plan calls for; adding a second linting tool isn't requested and isn't free (config, CI time, another thing to keep green).
+
+## Global Constraints
+
+- **Auth contract, verified against the real backend before writing this plan**: `X-Tenant-Id` header is required ONLY on `POST /api/v1/auth/login` (and `/register`, unused by this dashboard) — every other authenticated request uses `Authorization: Bearer <access_token>` alone; the backend derives `tenant_id` server-side from the token's subject. Do not send `X-Tenant-Id` on any call except login. Getting this backwards (e.g. sending it everywhere, or never sending it) breaks either login or every other call.
+- **Login is the only auth flow this dashboard needs.** No self-serve registration UI — nothing in this codebase has a tenant-creation/onboarding concept yet (tenant IDs are provisioned out-of-band), and PLAN.md 7.1 only asks for "auth," not "sign up." The login form takes a raw tenant ID (UUID) as a text field — clunky, but it's the actual backend contract as built; resolving a company name to a tenant ID is a real feature nothing has asked for. Note this as a known v1 limitation, not a bug to silently "improve" by inventing a backend endpoint.
+- **Token storage**: `refresh_token` in `localStorage` (survives reloads); `access_token` in memory only (React context state, lost on reload, re-obtained via `/auth/refresh` on app mount if a refresh token exists). This is a deliberate simplification given the backend's existing bearer-token-in-JSON-body contract (not httpOnly cookies) — acceptable for an internal manager tool, not a public consumer app. Don't invent a cookie-based flow; that would require backend changes out of scope here.
+- **After login, reject non-manager accounts at the UI layer** — if `/auth/me` returns `role !== "manager"`, show an error ("this dashboard is for managers") and don't persist the session, even though the backend would technically issue the rep a valid token. Nearly everything this dashboard calls is manager-only anyway; failing fast with one clear message beats a rep hitting silent 403s on every screen.
+- **The API client's 401 handling**: on any 401 response, attempt exactly ONE `/auth/refresh` call using the stored refresh token, then retry the ORIGINAL request exactly once. If the refresh call itself fails (expired/invalid refresh token), clear storage and force a redirect to `/login` — do not loop, do not retry more than once.
+- **Leaflet has two classic bundler gotchas that compile clean and fail silently in the browser** — get both right the first time, since neither shows up in `tsc`/`vite build`, only in a real page load:
+  1. Leaflet's CSS (`leaflet/dist/leaflet.css`) must be imported somewhere in the app (e.g. `main.tsx`) or the map renders as a blank/broken grid of tile fragments with no layout.
+  2. Leaflet's default marker icon images resolve via relative paths that Vite's bundler breaks, so markers render as broken image icons unless you re-point them — the standard, minimal fix is deleting `L.Icon.Default.prototype._getIconUrl` and calling `L.Icon.Default.mergeOptions({...})` with explicit imported icon URLs. Do this once in a small `src/leafletIconFix.ts` module imported at app startup, not per-component.
+- **Polling interval: 20 seconds**, a concrete middle-of-the-road choice within design.md's "polls on an interval" (15-60s ping-posting cadence on the tablet side; the dashboard doesn't need to poll faster than reps report). Implement as a named constant (`MAP_POLL_INTERVAL_MS`), not a magic number.
+- **No component snapshot/render tests.** Two pieces of this phase have real logic worth a unit test: the API client's 401-refresh-retry-once behavior, and the polling hook's interval-fire-and-cleanup behavior. Everything else (JSX layout, form markup) is verified by `tsc --noEmit` + `vite build` + the controller's end-of-plan browser check — writing component tests for static markup would be gold-plating relative to what this phase's own stated bar asks for.
+- Directory/package naming: the app lives at `dashboard/`, uses `npm` (no reason to introduce pnpm/yarn as a second package manager alongside `uv` on the backend side).
+
+---
+
+## File Structure
+
+```
+dashboard/
+  index.html
+  package.json
+  tsconfig.json
+  vite.config.ts
+  .env.example                    # VITE_API_BASE_URL=http://localhost:8000
+  .gitignore                      # node_modules, dist, .env
+  src/
+    main.tsx                      # entry, imports leaflet.css + leafletIconFix
+    App.tsx                       # router setup
+    leafletIconFix.ts             # the marker-icon bundler fix
+    auth/
+      AuthContext.tsx             # AuthProvider, useAuth()
+      LoginPage.tsx
+      ProtectedRoute.tsx
+    api/
+      client.ts                    # apiFetch, 401-refresh-retry-once
+      client.test.ts                # vitest: the refresh-retry behavior
+      types.ts                      # shared TS interfaces mirroring backend schemas
+      zones.ts
+      tasks.ts
+      goals.ts
+      violations.ts
+      pushSubscriptions.ts
+      pings.ts
+      users.ts
+    map/
+      MapView.tsx
+      usePolling.ts
+      usePolling.test.ts             # vitest: fire + cleanup
+  vitest.config.ts (or merged into vite.config.ts)
+```
+
+**Interfaces summary:**
+- `src/api/client.ts` — `apiFetch<T>(path: string, options?: RequestInit): Promise<T>`, reads the access token from a module-level getter set by `AuthContext`, throws a typed `ApiError` on non-2xx after the one refresh-retry.
+- `src/auth/AuthContext.tsx` — `AuthProvider`, `useAuth() -> { user, login(tenantId, email, password), logout(), isLoading }`.
+- `src/map/usePolling.ts` — `usePolling<T>(fetchFn: () => Promise<T>, intervalMs: number): { data: T | null, error: unknown }`.
+- `src/api/pings.ts` — `getLatestPings(): Promise<LatestPing[]>`.
+- `src/api/users.ts` — `getUsers(role?: string): Promise<User[]>`.
+
+---
+
+### Task 1: Vite + React + TS + Tailwind scaffold
+
+**Files:** everything under `dashboard/` except `src/auth/`, `src/api/`, `src/map/` (those are later tasks).
+
+- [ ] **Step 1: Scaffold the project**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+npm create vite@latest dashboard -- --template react-ts
+cd dashboard
+npm install
+```
+
+- [ ] **Step 2: Add Tailwind CSS v4**
+
+```bash
+npm install tailwindcss @tailwindcss/vite
+```
+
+Edit `vite.config.ts` to add the Tailwind plugin alongside the existing React plugin:
+
+```ts
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+})
+```
+
+Replace the contents of `src/index.css` with just:
+
+```css
+@import "tailwindcss";
+```
+
+- [ ] **Step 3: Env var + gitignore**
+
+Create `dashboard/.env.example`:
+
+```
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+Create `dashboard/.env` (gitignored, for local dev) with the same content.
+
+Add to `dashboard/.gitignore` (Vite's template already creates most of this — check first, only add what's missing):
+
+```
+.env
+```
+
+- [ ] **Step 4: Minimal `App.tsx` placeholder**
+
+Replace `src/App.tsx` with a minimal placeholder (real routing comes in Task 2):
+
+```tsx
+function App() {
+  return (
+    <div className="min-h-screen bg-gray-50 p-8">
+      <h1 className="text-2xl font-semibold text-gray-900">Atlas Field Force — Manager Dashboard</h1>
+    </div>
+  )
+}
+
+export default App
+```
+
+- [ ] **Step 5: Verify typecheck and build**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/dashboard
+npx tsc --noEmit
+npm run build
+```
+
+Expected: both succeed with no errors.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add dashboard/
+git commit -m "feat(dashboard): Vite+React+TS+Tailwind scaffold
+
+Refs PLAN 7.1"
+```
+
+---
+
+### Task 2: Auth — login, token storage, protected routes
+
+**Files:**
+- Create: `dashboard/src/auth/AuthContext.tsx`, `dashboard/src/auth/LoginPage.tsx`, `dashboard/src/auth/ProtectedRoute.tsx`
+- Modify: `dashboard/src/App.tsx`, `dashboard/package.json` (add `react-router-dom`)
+
+**Interfaces:**
+- Produces: `AuthProvider`, `useAuth()`, `LoginPage`, `ProtectedRoute`.
+- Consumes: none yet (Task 2 talks to the backend directly via `fetch`, not through the API client — Task 3 builds the client `AuthContext` will be refactored to use once it exists. Keep this task's backend calls as plain `fetch` calls against `POST /api/v1/auth/login`, `POST /api/v1/auth/refresh`, `GET /api/v1/auth/me`, reading `import.meta.env.VITE_API_BASE_URL` directly).
+
+- [ ] **Step 1: Install the router**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/dashboard
+npm install react-router-dom
+```
+
+- [ ] **Step 2: Write `src/auth/AuthContext.tsx`**
+
+```tsx
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL as string
+const REFRESH_TOKEN_KEY = 'atlas_refresh_token'
+
+export interface AuthUser {
+  id: string
+  email: string
+  role: string
+}
+
+interface TokenPair {
+  access_token: string
+  refresh_token: string
+}
+
+interface AuthContextValue {
+  user: AuthUser | null
+  accessToken: string | null
+  isLoading: boolean
+  login: (tenantId: string, email: string, password: string) => Promise<void>
+  logout: () => void
+}
+
+const AuthContext = createContext<AuthContextValue | null>(null)
+
+async function fetchMe(accessToken: string): Promise<AuthUser> {
+  const response = await fetch(`${API_BASE}/api/v1/auth/me`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) throw new Error('failed to fetch current user')
+  return response.json()
+}
+
+async function refreshTokens(refreshToken: string): Promise<TokenPair> {
+  const response = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  })
+  if (!response.ok) throw new Error('refresh failed')
+  return response.json()
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<AuthUser | null>(null)
+  const [accessToken, setAccessToken] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const storedRefreshToken = localStorage.getItem(REFRESH_TOKEN_KEY)
+    if (!storedRefreshToken) {
+      setIsLoading(false)
+      return
+    }
+    refreshTokens(storedRefreshToken)
+      .then(async (tokens) => {
+        const me = await fetchMe(tokens.access_token)
+        if (me.role !== 'manager') {
+          localStorage.removeItem(REFRESH_TOKEN_KEY)
+          setIsLoading(false)
+          return
+        }
+        localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token)
+        setAccessToken(tokens.access_token)
+        setUser(me)
+        setIsLoading(false)
+      })
+      .catch(() => {
+        localStorage.removeItem(REFRESH_TOKEN_KEY)
+        setIsLoading(false)
+      })
+  }, [])
+
+  async function login(tenantId: string, email: string, password: string) {
+    const response = await fetch(`${API_BASE}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Tenant-Id': tenantId },
+      body: JSON.stringify({ email, password }),
+    })
+    if (!response.ok) throw new Error('invalid credentials')
+    const tokens: TokenPair = await response.json()
+    const me = await fetchMe(tokens.access_token)
+    if (me.role !== 'manager') {
+      throw new Error('this dashboard is for managers')
+    }
+    localStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh_token)
+    setAccessToken(tokens.access_token)
+    setUser(me)
+  }
+
+  function logout() {
+    localStorage.removeItem(REFRESH_TOKEN_KEY)
+    setAccessToken(null)
+    setUser(null)
+  }
+
+  return (
+    <AuthContext.Provider value={{ user, accessToken, isLoading, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  )
+}
+
+export function useAuth(): AuthContextValue {
+  const ctx = useContext(AuthContext)
+  if (!ctx) throw new Error('useAuth must be used within an AuthProvider')
+  return ctx
+}
+```
+
+- [ ] **Step 3: Write `src/auth/LoginPage.tsx`**
+
+A form with three fields (tenant ID, email, password), calling `useAuth().login(...)` on submit, showing the thrown error message on failure, and navigating to `/` on success. Implementer's discretion on exact markup/Tailwind classes — keep it simple, one column, centered card, matches the placeholder styling already in `App.tsx`. Note in the tenant-ID field's label or placeholder that it's a raw UUID (e.g. placeholder text `"Tenant ID (UUID)"`) so it's not mistaken for a company name field.
+
+- [ ] **Step 4: Write `src/auth/ProtectedRoute.tsx`**
+
+```tsx
+import { Navigate } from 'react-router-dom'
+import type { ReactNode } from 'react'
+import { useAuth } from './AuthContext'
+
+export function ProtectedRoute({ children }: { children: ReactNode }) {
+  const { user, isLoading } = useAuth()
+  if (isLoading) return <div className="p-8 text-gray-500">Loading…</div>
+  if (!user) return <Navigate to="/login" replace />
+  return <>{children}</>
+}
+```
+
+- [ ] **Step 5: Wire routing into `src/App.tsx`**
+
+```tsx
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { AuthProvider } from './auth/AuthContext'
+import { LoginPage } from './auth/LoginPage'
+import { ProtectedRoute } from './auth/ProtectedRoute'
+
+function Home() {
+  return (
+    <div className="min-h-screen bg-gray-50 p-8">
+      <h1 className="text-2xl font-semibold text-gray-900">Atlas Field Force — Manager Dashboard</h1>
+    </div>
+  )
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  )
+}
+
+export default App
+```
+
+(`Home` here is a placeholder — Task 4 replaces it with `MapView`.)
+
+- [ ] **Step 6: Verify typecheck and build**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/dashboard
+npx tsc --noEmit
+npm run build
+```
+
+Expected: both succeed.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add dashboard/
+git commit -m "feat(dashboard): auth (login, token storage, protected routes)
+
+Refs PLAN 7.1"
+```
+
+---
+
+### Task 3: Typed API client
+
+**Files:**
+- Create: `dashboard/src/api/client.ts`, `dashboard/src/api/client.test.ts`, `dashboard/src/api/types.ts`, `dashboard/src/api/{zones,tasks,goals,violations,pushSubscriptions,pings,users}.ts`
+- Modify: `dashboard/src/auth/AuthContext.tsx` (refactor its own three `fetch` calls to keep using plain `fetch`, since the client's auth header injection would be circular for login/refresh themselves — but expose `accessToken` in a way `client.ts` can read it)
+- Modify: `dashboard/package.json` (add `vitest`, `@testing-library/react` if needed for the two logic tests — check if plain vitest + `fetch` mocking is enough before reaching for RTL; it likely is, since neither test renders a component)
+
+**Interfaces:** per the plan header's Interfaces summary.
+
+- [ ] **Step 1: Install vitest**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/dashboard
+npm install -D vitest
+```
+
+Add a `test` script to `package.json`: `"test": "vitest run"`.
+
+- [ ] **Step 2: Decide how `client.ts` reads the current access token without a circular import on `AuthContext`**
+
+`AuthContext` needs `client.ts` (to make authenticated calls once the app is past login), but `client.ts` also needs to know the current access token, which lives in `AuthContext`'s React state — a plain module can't read React state directly. Resolve this with a tiny module-level mutable holder that `AuthContext` writes to on every token change and `client.ts` reads from — NOT a second source of truth, just a synchronous mirror of the same value:
+
+```ts
+// dashboard/src/auth/tokenStore.ts
+let currentAccessToken: string | null = null
+let currentRefreshToken: string | null = null
+
+export function setTokens(access: string | null, refresh: string | null) {
+  currentAccessToken = access
+  currentRefreshToken = refresh
+}
+
+export function getAccessToken(): string | null {
+  return currentAccessToken
+}
+
+export function getRefreshToken(): string | null {
+  return currentRefreshToken
+}
+```
+
+Update `AuthContext.tsx` to call `setTokens(...)` everywhere it currently calls `setAccessToken(...)` / touches `localStorage` for the refresh token, so `tokenStore` always mirrors the current session. This is a small refactor of Task 2's file, not a rewrite — read the current file first.
+
+- [ ] **Step 3: Write the failing test for the refresh-retry-once behavior**
+
+```ts
+// dashboard/src/api/client.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { setTokens } from '../auth/tokenStore'
+
+describe('apiFetch 401 handling', () => {
+  beforeEach(() => {
+    setTokens('old-access-token', 'a-refresh-token')
+    vi.restoreAllMocks()
+  })
+
+  it('refreshes once and retries once on a 401, then succeeds', async () => {
+    const responses = [
+      new Response(null, { status: 401 }),
+      new Response(JSON.stringify({ access_token: 'new-access-token', refresh_token: 'new-refresh-token' }), { status: 200 }),
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    ]
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(responses.shift()!))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { apiFetch } = await import('./client')
+    const result = await apiFetch<{ ok: boolean }>('/api/v1/zones')
+
+    expect(result).toEqual({ ok: true })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    // second call must be the refresh endpoint
+    expect(fetchMock.mock.calls[1][0]).toContain('/api/v1/auth/refresh')
+  })
+
+  it('does not loop -- a second consecutive 401 after refresh throws instead of retrying again', async () => {
+    const responses = [
+      new Response(null, { status: 401 }),
+      new Response(JSON.stringify({ access_token: 'new-access-token', refresh_token: 'new-refresh-token' }), { status: 200 }),
+      new Response(null, { status: 401 }),
+    ]
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(responses.shift()!))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { apiFetch } = await import('./client')
+
+    await expect(apiFetch('/api/v1/zones')).rejects.toThrow()
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('when the refresh call itself fails, clears tokens and throws without retrying the original request', async () => {
+    const responses = [
+      new Response(null, { status: 401 }),
+      new Response(null, { status: 401 }), // refresh itself fails
+    ]
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(responses.shift()!))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { apiFetch } = await import('./client')
+    const { getAccessToken } = await import('../auth/tokenStore')
+
+    await expect(apiFetch('/api/v1/zones')).rejects.toThrow()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(getAccessToken()).toBeNull()
+  })
+})
+```
+
+- [ ] **Step 4: Run test to verify it fails**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/dashboard
+npx vitest run src/api/client.test.ts
+```
+
+Expected: FAIL — module `./client` doesn't exist yet.
+
+- [ ] **Step 5: Write `src/api/client.ts`**
+
+```ts
+import { getAccessToken, getRefreshToken, setTokens } from '../auth/tokenStore'
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL as string
+
+export class ApiError extends Error {
+  constructor(public status: number, message: string) {
+    super(message)
+  }
+}
+
+async function doFetch(path: string, options: RequestInit, accessToken: string | null): Promise<Response> {
+  const headers = new Headers(options.headers)
+  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
+  if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  return fetch(`${API_BASE}${path}`, { ...options, headers })
+}
+
+async function refreshAccessToken(): Promise<string> {
+  const refreshToken = getRefreshToken()
+  if (!refreshToken) throw new ApiError(401, 'no refresh token available')
+
+  const response = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  })
+  if (!response.ok) {
+    setTokens(null, null)
+    throw new ApiError(401, 'refresh failed')
+  }
+  const tokens = await response.json()
+  setTokens(tokens.access_token, tokens.refresh_token)
+  return tokens.access_token
+}
+
+export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  let response = await doFetch(path, options, getAccessToken())
+
+  if (response.status === 401) {
+    const newAccessToken = await refreshAccessToken()
+    response = await doFetch(path, options, newAccessToken)
+  }
+
+  if (!response.ok) {
+    throw new ApiError(response.status, `request to ${path} failed with ${response.status}`)
+  }
+
+  if (response.status === 204) return undefined as T
+  return response.json()
+}
+```
+
+- [ ] **Step 6: Run test to verify it passes**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/dashboard
+npx vitest run src/api/client.test.ts
+```
+
+Expected: all 3 tests `PASSED`.
+
+- [ ] **Step 7: Write `src/api/types.ts`**
+
+Hand-written TS interfaces mirroring the backend's Pydantic response schemas. Read the actual backend schema files to get field names/types exactly right rather than guessing — `backend/app/zones/schemas.py`, `backend/app/tasks/schemas.py`, `backend/app/goals/schemas.py`, `backend/app/violations/schemas.py`, `backend/app/pings/schemas.py`, `backend/app/auth/schemas.py`. At minimum: `Zone`, `ZoneAssignment`, `Task`, `Goal`, `GoalProgress`, `ZoneViolation`, `PushSubscription`, `LatestPing`, `User`. Use `string` for UUID and ISO-datetime fields (no runtime validation library needed for this size — Pydantic already validated server-side; the frontend just needs the shape for the compiler).
+
+- [ ] **Step 8: Write the per-resource API modules**
+
+Each is a thin set of typed functions calling `apiFetch`. Example shape (`src/api/pings.ts`):
+
+```ts
+import { apiFetch } from './client'
+import type { LatestPing } from './types'
+
+export function getLatestPings(): Promise<LatestPing[]> {
+  return apiFetch<LatestPing[]>('/api/v1/pings/latest')
+}
+```
+
+```ts
+// src/api/users.ts
+import { apiFetch } from './client'
+import type { User } from './types'
+
+export function getUsers(role?: string): Promise<User[]> {
+  const query = role ? `?role=${encodeURIComponent(role)}` : ''
+  return apiFetch<User[]>(`/api/v1/users${query}`)
+}
+```
+
+Write `zones.ts`, `tasks.ts`, `goals.ts`, `violations.ts`, `pushSubscriptions.ts` analogously, covering every GET/POST/PATCH endpoint that exists today in the corresponding backend router (read each backend router file to get the exact paths/methods/request-bodies right — do not guess). This task only needs `pings.ts` and `users.ts` wired into anything (the map); the rest exist now so Phase 7b doesn't have to build the client from scratch, but aren't consumed by any component yet — that's expected, not dead code to remove.
+
+- [ ] **Step 9: Verify typecheck, build, and tests**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/dashboard
+npx tsc --noEmit
+npm run build
+npx vitest run
+```
+
+Expected: all succeed, all tests pass.
+
+- [ ] **Step 10: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add dashboard/
+git commit -m "feat(dashboard): typed API client with 401-refresh-retry-once
+
+Refs PLAN 7.1"
+```
+
+---
+
+### Task 4: Live map (Leaflet, polling)
+
+**Files:**
+- Create: `dashboard/src/map/MapView.tsx`, `dashboard/src/map/usePolling.ts`, `dashboard/src/map/usePolling.test.ts`, `dashboard/src/leafletIconFix.ts`
+- Modify: `dashboard/src/main.tsx` (import `leaflet/dist/leaflet.css` and `./leafletIconFix`)
+- Modify: `dashboard/src/App.tsx` (swap the placeholder `Home` for `MapView`)
+- Modify: `dashboard/package.json` (add `leaflet`, `react-leaflet`, `@types/leaflet`)
+
+**Interfaces:** per the plan header's Interfaces summary (`usePolling`).
+
+- [ ] **Step 1: Install Leaflet**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/dashboard
+npm install leaflet react-leaflet
+npm install -D @types/leaflet
+```
+
+- [ ] **Step 2: Write `src/leafletIconFix.ts`**
+
+```ts
+import L from 'leaflet'
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
+import markerIcon from 'leaflet/dist/images/marker-icon.png'
+import markerShadow from 'leaflet/dist/images/marker-shadow.png'
+
+// Leaflet's default marker icon paths break under Vite's bundler --
+// re-point them explicitly to the imported (hashed, bundler-resolved) URLs.
+delete (L.Icon.Default.prototype as { _getIconUrl?: unknown })._getIconUrl
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: markerIcon2x,
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow,
+})
+```
+
+- [ ] **Step 3: Import Leaflet's CSS and the icon fix in `src/main.tsx`**
+
+Read the current file first (it's Vite's default entry point). Add, near the top, before other imports that might render the app:
+
+```ts
+import 'leaflet/dist/leaflet.css'
+import './leafletIconFix'
+```
+
+- [ ] **Step 4: Write the failing test for `usePolling`**
+
+```ts
+// dashboard/src/map/usePolling.test.ts
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { renderHook, waitFor } from '@testing-library/react'
+import { usePolling } from './usePolling'
+
+describe('usePolling', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it('fetches immediately, then again after each interval', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(['a'])
+    renderHook(() => usePolling(fetchFn, 1000))
+
+    await waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1))
+
+    vi.advanceTimersByTime(1000)
+    await waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(2))
+
+    vi.advanceTimersByTime(1000)
+    await waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(3))
+  })
+
+  it('stops polling after unmount', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(['a'])
+    const { unmount } = renderHook(() => usePolling(fetchFn, 1000))
+
+    await waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1))
+    unmount()
+
+    vi.advanceTimersByTime(5000)
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+  })
+})
+```
+
+This test needs `@testing-library/react` for `renderHook` — install it:
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/dashboard
+npm install -D @testing-library/react
+```
+
+(This is the one place in this phase a testing-library dependency is justified — `renderHook` is the standard, minimal way to test a hook's timer/cleanup behavior in isolation without rendering a full component tree; it is not being used for component snapshot testing, which the Global Constraints explicitly rule out.)
+
+- [ ] **Step 5: Run test to verify it fails**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/dashboard
+npx vitest run src/map/usePolling.test.ts
+```
+
+Expected: FAIL — module `./usePolling` doesn't exist yet.
+
+- [ ] **Step 6: Write `src/map/usePolling.ts`**
+
+```ts
+import { useEffect, useRef, useState } from 'react'
+
+export function usePolling<T>(fetchFn: () => Promise<T>, intervalMs: number): { data: T | null; error: unknown } {
+  const [data, setData] = useState<T | null>(null)
+  const [error, setError] = useState<unknown>(null)
+  const fetchFnRef = useRef(fetchFn)
+  fetchFnRef.current = fetchFn
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function tick() {
+      try {
+        const result = await fetchFnRef.current()
+        if (!cancelled) setData(result)
+      } catch (err) {
+        if (!cancelled) setError(err)
+      }
+    }
+
+    tick()
+    const id = setInterval(tick, intervalMs)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [intervalMs])
+
+  return { data, error }
+}
+```
+
+- [ ] **Step 7: Run test to verify it passes**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/dashboard
+npx vitest run src/map/usePolling.test.ts
+```
+
+Expected: both tests `PASSED`.
+
+- [ ] **Step 8: Write `src/map/MapView.tsx`**
+
+```tsx
+import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet'
+import { useEffect, useState } from 'react'
+import { getLatestPings } from '../api/pings'
+import { getUsers } from '../api/users'
+import { usePolling } from './usePolling'
+import type { LatestPing, User } from '../api/types'
+
+const MAP_POLL_INTERVAL_MS = 20_000
+const DEFAULT_CENTER: [number, number] = [0, 0]
+const DEFAULT_ZOOM = 3
+
+export function MapView() {
+  const { data: pings, error } = usePolling<LatestPing[]>(getLatestPings, MAP_POLL_INTERVAL_MS)
+  const [reps, setReps] = useState<User[]>([])
+
+  useEffect(() => {
+    getUsers('rep').then(setReps).catch(() => {})
+  }, [])
+
+  const repEmailById = new Map(reps.map((rep) => [rep.id, rep.email]))
+
+  return (
+    <div className="h-screen w-screen">
+      {error && <div className="absolute z-10 bg-red-100 text-red-800 p-2">Failed to load positions</div>}
+      <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} className="h-full w-full">
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution="&copy; OpenStreetMap contributors"
+        />
+        {(pings ?? []).map((ping) => (
+          <Marker key={ping.rep_id} position={[ping.latitude, ping.longitude]}>
+            <Popup>
+              <div>{repEmailById.get(ping.rep_id) ?? ping.rep_id}</div>
+              <div className="text-xs text-gray-500">Last seen: {new Date(ping.recorded_at).toLocaleString()}</div>
+            </Popup>
+          </Marker>
+        ))}
+      </MapContainer>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 9: Wire `MapView` into `App.tsx`**
+
+Read the current file first. Replace the placeholder `Home` function/route with `MapView` from `./map/MapView`.
+
+- [ ] **Step 10: Verify typecheck, build, and tests**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/dashboard
+npx tsc --noEmit
+npm run build
+npx vitest run
+```
+
+Expected: all succeed, all tests pass (5 total: 3 from Task 3's client tests, 2 from this task's `usePolling` tests).
+
+- [ ] **Step 11: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add dashboard/
+git commit -m "feat(dashboard): live map (Leaflet, 20s polling of latest rep positions)
+
+Refs PLAN 7.2"
+```
+
+---
+
+## After this plan — controller browser verification (not a task, not delegated)
+
+This is the step that actually proves the feature works, per this plan's own framing at the top. After all 4 tasks are individually reviewed and merged to a feature branch:
+
+1. Start the backend: `cd backend && uv run uvicorn app.main:app --reload` (or however this repo's dev server is normally started — check `README.md`).
+2. Start the dashboard: `cd dashboard && npm run dev`.
+3. Via the `/browse` skill (per this session's standing instruction to use it for all web browsing): register a test manager and a test rep against the running backend (direct API calls, same pattern used throughout this whole project's manual verification), submit at least one ping for the rep so `/pings/latest` has something to return, then open the dashboard in the browser, log in as the manager, and visually confirm:
+   - Login succeeds and redirects to the map.
+   - The map renders actual OpenStreetMap tiles (not a blank grid — this is exactly the failure mode a missing `leaflet.css` import produces).
+   - At least one marker appears at the rep's submitted coordinates, with a working popup (not a broken-image icon — this is exactly the failure mode the marker-icon bundler issue produces).
+4. If any of these fail, fix before merging — do not report this phase complete on the strength of `tsc`/`vite build`/`vitest` alone, per this plan's own explicit framing.
+
+Then update `PROGRESS.md`, tick PLAN.md 7.1/7.2, a final whole-branch review (still useful for the auth/client logic even though it can't see the rendered map), merge, and write the Phase 7b plan (zone drawing, task/goal admin, violations feed, push opt-in) against this now-working foundation.

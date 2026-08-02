@@ -1,0 +1,92 @@
+// Client for @tew/api. Base URL from NEXT_PUBLIC_API_URL (default local dev).
+// Moderator auth is a bearer token held in sessionStorage (production swaps for
+// passkeys / magic link).
+
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+
+const TOKEN_KEY = "tew:moderatorToken";
+const tokenListeners = new Set<() => void>();
+
+export function getModeratorToken(): string {
+  if (typeof sessionStorage === "undefined") return "";
+  try {
+    return sessionStorage.getItem(TOKEN_KEY) || "";
+  } catch {
+    return "";
+  }
+}
+export function setModeratorToken(t: string): void {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    sessionStorage.setItem(TOKEN_KEY, t);
+  } catch {
+    /* ignore */
+  }
+  tokenListeners.forEach((l) => l());
+}
+
+// For useSyncExternalStore — reactive token presence without setState-in-effect.
+export function subscribeToken(cb: () => void): () => void {
+  tokenListeners.add(cb);
+  return () => tokenListeners.delete(cb);
+}
+export const tokenSnapshot = (): string => getModeratorToken();
+export const tokenServerSnapshot = (): string => "";
+
+export interface QueueItem {
+  id: string;
+  targetType: string;
+  targetId: string;
+  reason: string | null;
+  status: string;
+  slaDueAt: number | null;
+  createdAt: number;
+  target: {
+    id: string;
+    audioUrl: string;
+    durationMs: number;
+    transcript: { text: string; isMachine: boolean } | null;
+  } | null;
+}
+
+function authHeaders(hasBody = false): Record<string, string> {
+  const h: Record<string, string> = { authorization: `Bearer ${getModeratorToken()}` };
+  if (hasBody) h["content-type"] = "application/json";
+  return h;
+}
+
+export interface QueueResult {
+  ok: boolean;
+  status: number;
+  items: QueueItem[];
+}
+
+export async function fetchQueue(status = "open"): Promise<QueueResult> {
+  try {
+    const res = await fetch(`${API_BASE}/moderation/queue?status=${status}`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) return { ok: false, status: res.status, items: [] };
+    const body = (await res.json()) as { items: QueueItem[] };
+    return { ok: true, status: 200, items: body.items };
+  } catch {
+    return { ok: false, status: 0, items: [] }; // API unreachable
+  }
+}
+
+export async function submitDecision(
+  reportId: string,
+  action: string,
+  rationaleCode: string,
+): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/moderation/decisions`, {
+      method: "POST",
+      headers: authHeaders(true),
+      body: JSON.stringify({ reportId, action, rationaleCode }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}

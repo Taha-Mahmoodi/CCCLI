@@ -1,0 +1,177 @@
+import * as THREE from "three";
+import { curvePoint, mulberry32 } from "./data";
+import type { GalaxyNode } from "./galaxy";
+
+// Activity made visible (per the vision): data flowing between projects
+// renders as small warm shuttles; an AI search renders as a distinct
+// blue vessel hopping between galaxies with a scan pulse at each stop.
+
+const SHUTTLE_COLOR = 0xffd9a8;
+const AI_COLOR = 0xa8ccff;
+const TRAIL = 5;
+
+interface Craft {
+  head: THREE.Sprite;
+  trail: THREE.Sprite[];
+  from: THREE.Vector3;
+  ctrl: THREE.Vector3;
+  to: THREE.Vector3;
+  t: number;
+  duration: number;
+  ai: boolean;
+}
+
+interface Pulse {
+  mesh: THREE.Mesh;
+  age: number;
+}
+
+export class CraftLayer {
+  group = new THREE.Group();
+  private crafts: Craft[] = [];
+  private pulses: Pulse[] = [];
+  private rnd = mulberry32(97);
+  private nextShuttle = 2;
+  private nextAi = 14;
+  private aiPlan: THREE.Vector3[] = [];
+  private sprite: THREE.Texture;
+  private nodes: GalaxyNode[];
+
+  constructor(nodes: GalaxyNode[], sprite: THREE.Texture) {
+    this.nodes = nodes;
+    this.sprite = sprite;
+  }
+
+  get craftCount(): number {
+    return this.crafts.length;
+  }
+
+  private makeSprite(color: number, scale: number): THREE.Sprite {
+    const mat = new THREE.SpriteMaterial({
+      map: this.sprite,
+      color,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const s = new THREE.Sprite(mat);
+    s.scale.setScalar(scale);
+    this.group.add(s);
+    return s;
+  }
+
+  private launch(from: THREE.Vector3, to: THREE.Vector3, ai: boolean): void {
+    const mid = from
+      .clone()
+      .lerp(to, 0.5)
+      .add(new THREE.Vector3(0, 24 + this.rnd() * 22, 0));
+    const head = this.makeSprite(ai ? AI_COLOR : SHUTTLE_COLOR, ai ? 6.5 : 3.8);
+    const trail = Array.from({ length: TRAIL }, (_, k) =>
+      this.makeSprite(ai ? AI_COLOR : SHUTTLE_COLOR, (ai ? 4 : 2.4) * (1 - k / TRAIL)),
+    );
+    this.crafts.push({
+      head,
+      trail,
+      from: from.clone(),
+      ctrl: mid,
+      to: to.clone(),
+      t: 0,
+      duration: ai ? 7 : 4.5 + this.rnd() * 3,
+      ai,
+    });
+  }
+
+  private pulse(at: THREE.Vector3): void {
+    const geo = new THREE.RingGeometry(1, 1.18, 48);
+    const mat = new THREE.MeshBasicMaterial({
+      color: AI_COLOR,
+      transparent: true,
+      opacity: 0.85,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.copy(at);
+    mesh.rotation.x = Math.PI / 2;
+    this.group.add(mesh);
+    this.pulses.push({ mesh, age: 0 });
+  }
+
+  /** AI search: hop across 3 random galaxies, pulsing a scan at each. */
+  startAiSearch(): void {
+    const picks = [...this.nodes]
+      .sort(() => this.rnd() - 0.5)
+      .slice(0, 3)
+      .map((n) => n.group.position.clone());
+    const entry = picks[0]
+      .clone()
+      .add(new THREE.Vector3(320, 180, 320));
+    this.aiPlan = picks;
+    this.launch(entry, picks[0], true);
+  }
+
+  update(dt: number, active: GalaxyNode[]): void {
+    // ambient shuttles between active projects
+    this.nextShuttle -= dt;
+    if (this.nextShuttle <= 0 && active.length >= 2) {
+      const a = active[Math.floor(this.rnd() * active.length)];
+      let b = active[Math.floor(this.rnd() * active.length)];
+      if (b === a) b = active[(active.indexOf(a) + 1) % active.length];
+      this.launch(a.group.position, b.group.position, false);
+      this.nextShuttle = 3 + this.rnd() * 5;
+    }
+
+    // periodic ambient AI search (also triggerable via __yz.aiSearch)
+    this.nextAi -= dt;
+    if (this.nextAi <= 0) {
+      this.startAiSearch();
+      this.nextAi = 30 + this.rnd() * 20;
+    }
+
+    for (let i = this.crafts.length - 1; i >= 0; i--) {
+      const c = this.crafts[i];
+      c.t += dt / c.duration;
+      const t = Math.min(c.t, 1);
+      const p = curvePoint(c.from, c.ctrl, c.to, t);
+      c.head.position.set(p.x, p.y, p.z);
+      for (let k = 0; k < c.trail.length; k++) {
+        const tk = Math.max(t - (k + 1) * 0.018, 0);
+        const q = curvePoint(c.from, c.ctrl, c.to, tk);
+        c.trail[k].position.set(q.x, q.y, q.z);
+        (c.trail[k].material as THREE.SpriteMaterial).opacity =
+          (1 - k / TRAIL) * (1 - t * 0.4);
+      }
+      if (c.t >= 1) {
+        if (c.ai) {
+          this.pulse(c.to);
+          const next = this.aiPlan.indexOf(
+            this.aiPlan.find((v) => v.equals(c.to)) ?? this.aiPlan[0],
+          );
+          if (next >= 0 && next < this.aiPlan.length - 1) {
+            this.launch(c.to, this.aiPlan[next + 1], true);
+          }
+        }
+        [c.head, ...c.trail].forEach((s) => {
+          this.group.remove(s);
+          (s.material as THREE.Material).dispose();
+        });
+        this.crafts.splice(i, 1);
+      }
+    }
+
+    for (let i = this.pulses.length - 1; i >= 0; i--) {
+      const p = this.pulses[i];
+      p.age += dt;
+      const s = 1 + p.age * 26;
+      p.mesh.scale.setScalar(s);
+      (p.mesh.material as THREE.MeshBasicMaterial).opacity =
+        0.85 * Math.max(0, 1 - p.age / 1.4);
+      if (p.age > 1.4) {
+        this.group.remove(p.mesh);
+        (p.mesh.material as THREE.Material).dispose();
+        p.mesh.geometry.dispose();
+        this.pulses.splice(i, 1);
+      }
+    }
+  }
+}

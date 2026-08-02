@@ -1,0 +1,9 @@
+{
+  "id": "57",
+  "subject": "SDD 2b5: note rename + delete",
+  "description": "renameNote + deleteNote API + hooks (invalidate tree), per-note rename/delete affordances in FileTree gated by canEdit, navigate-away on delete/rename of the open note. PR → dev, self-merge.",
+  "activeForm": "Building Slice 2b-5 (rename + delete)",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

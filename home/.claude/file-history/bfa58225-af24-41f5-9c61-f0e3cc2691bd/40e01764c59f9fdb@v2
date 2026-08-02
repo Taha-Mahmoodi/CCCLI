@@ -1,0 +1,107 @@
+# Field Sales/Marketer Rep Tracking Apps — Feature Research
+
+Scoping reference for a tablet app that tracks marketers/sales reps in real time: location, activities, tasks, goals, and zones. Compiled from public product/feature pages of the leading players in the "field force management / field sales tracking / retail execution" category, July 2026.
+
+## Category names to search under
+This product category goes by several names depending on the vendor: **field force management**, **field sales tracking / sales force automation (SFA)**, **retail execution**, and **field employee GPS tracking**. All converge on the same core feature set.
+
+## Master feature list (consolidated across all products)
+
+### 1. Real-time location tracking
+- Live map view of all reps' current position ("Find My Team" / live dashboard)
+- GPS breadcrumbs / trails — full path traveled through the day, replayable
+- Location history and route-travelled visualization
+- Distance-traveled reports, battery/network status of the rep's device
+
+### 2. Geofencing & zone/territory management
+- Draw custom virtual boundaries (polygons, multi-coordinate) around stores, client sites, or whole territories
+- Geo-verified check-in/check-out — rep can only clock in or log a visit while physically inside the geofence
+- Geofence-violation tracking and real-time deviation alerts when a rep strays off-plan
+- Territory/zone assignment per rep, with territory-wise performance reporting
+- AI/route-optimized "beat plans" — auto-generated daily visit sequences within a zone
+
+### 3. Task & goal assignment
+- Assign one-off or recurring tasks to specific reps, with priority and due dates
+- Tasks can be auto-allocated by proximity, skill set, and availability
+- Individual and team goal/target-setting (visits, sales value, KPIs), with a "Target vs Achievement" report
+- Checklists and structured forms attached to tasks/visits
+- Automated follow-up/corrective-action tasks when something fails
+
+### 4. Visit & activity tracking
+- One-tap check-in/check-out per visit, time- and location-stamped
+- Activity logging beyond location: calls, meetings, notes, visit outcomes, competitor mentions
+- "Remote check-in" for off-site work (admin, training) that isn't tied to a geofence
+- Photo capture with annotation attached to a visit/task (proof of visit, shelf audits)
+- AI photo recognition for shelf-share/planogram/compliance audits (retail-specific)
+- Voice notes / speech-to-text for field data entry
+
+### 5. Route planning & optimization
+- Auto-optimized daily route across assigned visits (reduces drive time)
+- Manual route/territory drawing on a map, then optimize
+- Coverage-gap analysis — flags under-served parts of a territory
+
+### 6. Attendance
+- Automated or manual check-in/out tied to workday templates
+- Geo-verified attendance (can't mark present unless inside the zone)
+- Face-recognition attendance (anti-spoofing)
+- Leave management
+
+### 7. Order, expense & proof capture
+- In-app order booking / product catalog with custom pricing & discounts
+- Expense/mileage capture with receipt photo, multi-level approval workflows, role-based spend caps
+- Digital signature capture for agreements
+
+### 8. Reporting & manager dashboards
+- Real-time dashboard: task completion rates, visit compliance, cross-team performance
+- Rep and team leaderboards (activities, appointments, deals closed)
+- KPI framework typically 3 layers: **Activity** (visits/calls made), **Execution** (quality of the visit), **Outcome** (revenue/growth per territory)
+- Drill-down reports per store/district/rep
+
+### 9. Offline mode
+- Full form/checklist completion without connectivity; auto-sync when back online (varies — some vendors only cache recent data, others support full offline submission queues)
+
+### 10. Gamification & engagement (less universal, seen in a couple of products)
+- Leaderboards, digital "coins"/badges, rep-vs-rep competitions redeemable for rewards
+
+### 11. Integrations
+- CRM sync (Salesforce, HubSpot, Zoho, Dynamics 365) and ERP/payroll integration
+
+---
+
+## Per-product notes
+
+**Badger Maps** — route-planning-first. Route optimization (up to ~20% less drive time), map-based account/lead/territory visualization, time+location-stamped check-ins. CRM integrations (Salesforce, HubSpot, Zoho, Dynamics 365, NetSuite). Lighter on task/goal assignment than the others.
+
+**SPOTIO** — activity-and-accountability-first. One-tap activity logging with GPS/timestamp verification, Drop Pins, GPS Breadcrumbs, Visit Audit Log, geofenced check-in/out, sales leaderboards, real-time goal tracking, territory analytics for balanced workload, "DASH" AI co-pilot for auto-drafting visit notes.
+
+**Repsly** — retail-execution-first (CPG/merchandising). Scheduling + territory coverage + GPS check-in, remote check-in for off-site work, AI photo recognition for shelf audits, execution alerts against a visit cadence goal, digital audits and in-app order collection.
+
+**Zenput** — task/compliance-first, less about rep location and more about location (store) compliance. Central task assignment across many locations, photo-evidence checklists, real-time completion-rate dashboards, automated corrective-action follow-ups.
+
+**LeadSquared (Field Force Automation)** — attendance/geofencing-heavy. Workday templates with auto check-in if the rep is in the right place at the right time, strict geofencing to prevent fraudulent check-ins/meeting notes, geo-tracking with distance-traveled + location history.
+
+**BeatRoute** — enterprise FMCG/retail SFA + distributor management. Beat/territory planning with visit-frequency and store-hour constraints, AI route optimization, real-time deviation alerts, shelf-share/planogram AI audits, KPI scorecards, several "AI agent" copilots (order, scheduling, customer insights).
+
+**SalesRabbit** — door-to-door/canvassing-first. Rep-drawn custom territories assignable by managers, route optimization, plus a dedicated gamification module ("Amplify": battles, badges, redeemable coin rewards, leaderboards).
+
+**TrackoField** — full field-employee-tracking suite, India-market-oriented. Real-time GPS + route history playback, territory-wise performance, geofence-violation tracking, proximity/skill-based task auto-allocation, AI face-recognition attendance, expense capture with hierarchy-based approval, "Target vs Achievement" goal report, offline capture, voice notes.
+
+**Lystloc / Unolo** — similar India-market field-force suite. Custom multi-coordinate geofenced zones, live location + route/distance travelled, geo-fenced attendance, task status and total working hours tracking.
+
+**Others mentioned in search but not deep-dived**: AllGeo, FieldServicely, B2Field, TrackObit, Fieldproxy — same core feature set (live GPS map, geofenced client addresses, task assignment, visit notes/photos), positioned as lower-cost/SMB alternatives to the above.
+
+---
+
+## Scoping takeaway for the customer's tablet app
+
+The customer's ask ("track all their activities including but not limited to location, assign tasks, goals, and zones") maps directly onto this category's baseline feature set. A v1 that would be competitive needs at minimum:
+
+1. Live map + GPS breadcrumbs for every rep
+2. Geofenced zones/territories, drawable by a manager, with violation alerts
+3. Task assignment (one-off + recurring) with due dates and completion tracking
+4. Goal/KPI targets per rep with a "target vs. achievement" report
+5. Visit check-in/check-out tied to the geofence, with notes + photo capture
+6. Manager dashboard with leaderboards and drill-down reports
+7. Offline capture with sync-on-reconnect (tablets in the field will lose signal)
+
+Everything past that (AI photo/shelf recognition, gamification, AI copilots, distributor management) is differentiation, not table stakes — worth deferring to a later phase.

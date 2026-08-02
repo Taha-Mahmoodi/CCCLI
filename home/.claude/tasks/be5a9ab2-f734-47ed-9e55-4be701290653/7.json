@@ -1,0 +1,9 @@
+{
+  "id": "7",
+  "subject": "Phase 6: Decommission aaPanel",
+  "description": "Archive /www/server/pgsql/data first. Stop+disable BT-Panel, remove aaPanel/acme.sh/dbsync/backup crons. Remove /www/server/{panel,nginx,pgsql,php,mysql,phpmyadmin,pure-ftpd,nodejs} + /www/wwwroot after confirming no refs. PowerDNS: containerize or remove (recommend remove).",
+  "activeForm": "Decommissioning aaPanel",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

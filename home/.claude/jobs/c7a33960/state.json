@@ -1,0 +1,3747 @@
+{
+  "state": "blocked",
+  "detail": "API Error: 403 The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()",
+  "tempo": "blocked",
+  "inFlight": {
+    "tasks": 0,
+    "queued": 0,
+    "kinds": []
+  },
+  "fan": [
+    {
+      "id": "a2cb32db8e2b6831d",
+      "kind": "workflow",
+      "label": "scope",
+      "startedAt": 1785565980944,
+      "doneAt": 1785565980944,
+      "group": "Scope"
+    },
+    {
+      "id": "a558186b8a852a46d",
+      "kind": "workflow",
+      "label": "search:Apple primary — Liquid Glass & current HIG direction",
+      "startedAt": 1785565980953,
+      "doneAt": 1785565980953,
+      "group": "Search"
+    },
+    {
+      "id": "ad33c95c9e2b03c42",
+      "kind": "workflow",
+      "label": "search:Google primary — Material 3 Expressive status & research basis",
+      "startedAt": 1785565980953,
+      "doneAt": 1785565980953,
+      "group": "Search"
+    },
+    {
+      "id": "abd83fa3608a53032",
+      "kind": "workflow",
+      "label": "search:Navigation & gesture law — both platforms, including back-gesture conflicts",
+      "startedAt": 1785565980953,
+      "doneAt": 1785565980953,
+      "group": "Search"
+    },
+    {
+      "id": "a12c162655644df34",
+      "kind": "workflow",
+      "label": "search:Hard numbers — verify both platforms' specs from primary sources",
+      "startedAt": 1785565980953,
+      "doneAt": 1785565980953,
+      "group": "Search"
+    },
+    {
+      "id": "a229cd7d940cf6b69",
+      "kind": "workflow",
+      "label": "search:Safe areas, system regions & mandatory edge-to-edge",
+      "startedAt": 1785565980953,
+      "doneAt": 1785565980953,
+      "group": "Search"
+    },
+    {
+      "id": "a60ae56fe79d11f2e",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980960,
+      "doneAt": 1785565980960,
+      "group": "Fetch"
+    },
+    {
+      "id": "a351af55c27b7ba8f",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980960,
+      "doneAt": 1785565980960,
+      "group": "Fetch"
+    },
+    {
+      "id": "acbb512a47d509106",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980960,
+      "doneAt": 1785565980960,
+      "group": "Fetch"
+    },
+    {
+      "id": "ab84f1b5e59cb4549",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980960,
+      "doneAt": 1785565980960,
+      "group": "Fetch"
+    },
+    {
+      "id": "af728cb287e57042a",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980961,
+      "doneAt": 1785565980961,
+      "group": "Fetch"
+    },
+    {
+      "id": "a84eda908292825b9",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980961,
+      "doneAt": 1785565980961,
+      "group": "Fetch"
+    },
+    {
+      "id": "a276786f7ed2ed94b",
+      "kind": "workflow",
+      "label": "fetch:design.google",
+      "startedAt": 1785565980961,
+      "doneAt": 1785565980961,
+      "group": "Fetch"
+    },
+    {
+      "id": "a4b3567bbfc97fdbb",
+      "kind": "workflow",
+      "label": "fetch:m3.material.io",
+      "startedAt": 1785565980961,
+      "doneAt": 1785565980961,
+      "group": "Fetch"
+    },
+    {
+      "id": "aa4c3210e3faa9095",
+      "kind": "workflow",
+      "label": "fetch:m3.material.io",
+      "startedAt": 1785565980961,
+      "doneAt": 1785565980961,
+      "group": "Fetch"
+    },
+    {
+      "id": "a8cee2cd4d6b1aad7",
+      "kind": "workflow",
+      "label": "fetch:developer.android.com",
+      "startedAt": 1785565980961,
+      "doneAt": 1785565980961,
+      "group": "Fetch"
+    },
+    {
+      "id": "a42928cbfd137a7da",
+      "kind": "workflow",
+      "label": "fetch:m3.material.io",
+      "startedAt": 1785565980961,
+      "doneAt": 1785565980961,
+      "group": "Fetch"
+    },
+    {
+      "id": "a660f69fe07125900",
+      "kind": "workflow",
+      "label": "fetch:blog.google",
+      "startedAt": 1785565980961,
+      "doneAt": 1785565980961,
+      "group": "Fetch"
+    },
+    {
+      "id": "ae363a706022e4b62",
+      "kind": "workflow",
+      "label": "fetch:developer.android.com",
+      "startedAt": 1785565980961,
+      "doneAt": 1785565980961,
+      "group": "Fetch"
+    },
+    {
+      "id": "a238013bb9ecea26f",
+      "kind": "workflow",
+      "label": "fetch:developer.android.com",
+      "startedAt": 1785565980961,
+      "doneAt": 1785565980961,
+      "group": "Fetch"
+    },
+    {
+      "id": "a874b6b861fe85e79",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980961,
+      "doneAt": 1785565980961,
+      "group": "Fetch"
+    },
+    {
+      "id": "ae1c4c7c89c1367c1",
+      "kind": "workflow",
+      "label": "fetch:m3.material.io",
+      "startedAt": 1785565980961,
+      "doneAt": 1785565980961,
+      "group": "Fetch"
+    },
+    {
+      "id": "a9649ef138f64ef7b",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980961,
+      "doneAt": 1785565980961,
+      "group": "Fetch"
+    },
+    {
+      "id": "ad9f6d63ec6967ccd",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980961,
+      "doneAt": 1785565980961,
+      "group": "Fetch"
+    },
+    {
+      "id": "a0c35a02851f03798",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980962,
+      "doneAt": 1785565980962,
+      "group": "Fetch"
+    },
+    {
+      "id": "ae62765cb457a0f09",
+      "kind": "workflow",
+      "label": "fetch:developer.android.com",
+      "startedAt": 1785565980962,
+      "doneAt": 1785565980962,
+      "group": "Fetch"
+    },
+    {
+      "id": "aa69a5555b84cf7b4",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980962,
+      "doneAt": 1785565980962,
+      "group": "Fetch"
+    },
+    {
+      "id": "ac9a0048c636324fc",
+      "kind": "workflow",
+      "label": "fetch:m3.material.io",
+      "startedAt": 1785565980962,
+      "doneAt": 1785565980962,
+      "group": "Fetch"
+    },
+    {
+      "id": "a4228e55fddbeb743",
+      "kind": "workflow",
+      "label": "fetch:developer.android.com",
+      "startedAt": 1785565980962,
+      "doneAt": 1785565980962,
+      "group": "Fetch"
+    },
+    {
+      "id": "a6e9ff093f1f22b4c",
+      "kind": "workflow",
+      "label": "fetch:developer.android.com",
+      "startedAt": 1785565980962,
+      "doneAt": 1785565980962,
+      "group": "Fetch"
+    },
+    {
+      "id": "ad5d9ab0f33381d4f",
+      "kind": "workflow",
+      "label": "fetch:developer.android.com",
+      "startedAt": 1785565980962,
+      "doneAt": 1785565980962,
+      "group": "Fetch"
+    },
+    {
+      "id": "a0dad36b9ba8ceda1",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980962,
+      "doneAt": 1785565980962,
+      "group": "Fetch"
+    },
+    {
+      "id": "a675442f0114b1384",
+      "kind": "workflow",
+      "label": "fetch:developer.android.com",
+      "startedAt": 1785565980962,
+      "doneAt": 1785565980962,
+      "group": "Fetch"
+    },
+    {
+      "id": "a700d04e6ecfd2bee",
+      "kind": "workflow",
+      "label": "v0:Apple defines Liquid Glass as a distinct",
+      "startedAt": 1785565980985,
+      "doneAt": 1785565980985,
+      "group": "Verify"
+    },
+    {
+      "id": "a3f36f71ef3550e8d",
+      "kind": "workflow",
+      "label": "v1:Apple defines Liquid Glass as a distinct",
+      "startedAt": 1785565980985,
+      "doneAt": 1785565980985,
+      "group": "Verify"
+    },
+    {
+      "id": "a1898f8c145a8bb86",
+      "kind": "workflow",
+      "label": "v2:Apple defines Liquid Glass as a distinct",
+      "startedAt": 1785565980985,
+      "doneAt": 1785565980985,
+      "group": "Verify"
+    },
+    {
+      "id": "af00bb44cf705b8b5",
+      "kind": "workflow",
+      "label": "v0:Apple explicitly prohibits using Liquid",
+      "startedAt": 1785565980985,
+      "doneAt": 1785565980985,
+      "group": "Verify"
+    },
+    {
+      "id": "a9af23a127d8b6287",
+      "kind": "workflow",
+      "label": "v1:Apple explicitly prohibits using Liquid",
+      "startedAt": 1785565980985,
+      "doneAt": 1785565980985,
+      "group": "Verify"
+    },
+    {
+      "id": "aa1a1ea8afe4e2193",
+      "kind": "workflow",
+      "label": "v2:Apple explicitly prohibits using Liquid",
+      "startedAt": 1785565980985,
+      "doneAt": 1785565980985,
+      "group": "Verify"
+    },
+    {
+      "id": "ac365f91e7c576a18",
+      "kind": "workflow",
+      "label": "v0:Apple instructs designers to use Liquid",
+      "startedAt": 1785565980985,
+      "doneAt": 1785565980985,
+      "group": "Verify"
+    },
+    {
+      "id": "af0ba8f40a59e4c43",
+      "kind": "workflow",
+      "label": "v1:Apple instructs designers to use Liquid",
+      "startedAt": 1785565980985,
+      "doneAt": 1785565980985,
+      "group": "Verify"
+    },
+    {
+      "id": "aaa383a8f9c4f24a9",
+      "kind": "workflow",
+      "label": "v2:Apple instructs designers to use Liquid",
+      "startedAt": 1785565980985,
+      "doneAt": 1785565980985,
+      "group": "Verify"
+    },
+    {
+      "id": "ae3a1a713ef305221",
+      "kind": "workflow",
+      "label": "v0:Liquid Glass ships in two variants — reg",
+      "startedAt": 1785565980986,
+      "doneAt": 1785565980986,
+      "group": "Verify"
+    },
+    {
+      "id": "af12149d316d7e3d9",
+      "kind": "workflow",
+      "label": "v1:Liquid Glass ships in two variants — reg",
+      "startedAt": 1785565980986,
+      "doneAt": 1785565980986,
+      "group": "Verify"
+    },
+    {
+      "id": "a27c24fcc982aa6fb",
+      "kind": "workflow",
+      "label": "v2:Liquid Glass ships in two variants — reg",
+      "startedAt": 1785565980986,
+      "doneAt": 1785565980986,
+      "group": "Verify"
+    },
+    {
+      "id": "ab010581b206679d3",
+      "kind": "workflow",
+      "label": "v0:Apple defines Liquid Glass as a single n",
+      "startedAt": 1785565980986,
+      "doneAt": 1785565980986,
+      "group": "Verify"
+    },
+    {
+      "id": "a16f49d7c677d5b5c",
+      "kind": "workflow",
+      "label": "v1:Apple defines Liquid Glass as a single n",
+      "startedAt": 1785565980986,
+      "doneAt": 1785565980986,
+      "group": "Verify"
+    },
+    {
+      "id": "ad2b0faf05c259050",
+      "kind": "workflow",
+      "label": "v2:Apple defines Liquid Glass as a single n",
+      "startedAt": 1785565980986,
+      "doneAt": 1785565980986,
+      "group": "Verify"
+    },
+    {
+      "id": "a20fcadf7712a8c2f",
+      "kind": "workflow",
+      "label": "v0:Liquid Glass applies to the controls and",
+      "startedAt": 1785565984866,
+      "doneAt": 1785566090636,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a8c6c4e61620218ad",
+      "kind": "workflow",
+      "label": "v1:Liquid Glass applies to the controls and",
+      "startedAt": 1785565983865,
+      "doneAt": 1785566094804,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a18c48242defb4d3e",
+      "kind": "workflow",
+      "label": "v2:Liquid Glass applies to the controls and",
+      "startedAt": 1785565986441,
+      "doneAt": 1785566091971,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a5a6f6e452462e523",
+      "kind": "workflow",
+      "label": "v0:Apple instructs designers to restrain co",
+      "startedAt": 1785565985580,
+      "doneAt": 1785566100206,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a036166e2d1869c2b",
+      "kind": "workflow",
+      "label": "v1:Apple instructs designers to restrain co",
+      "startedAt": 1785565985227,
+      "doneAt": 1785566097266,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ad7d719f4ac53d551",
+      "kind": "workflow",
+      "label": "v2:Apple instructs designers to restrain co",
+      "startedAt": 1785565988254,
+      "doneAt": 1785566089978,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a064afbe00bbaaff1",
+      "kind": "workflow",
+      "label": "v0:Apple defines Liquid Glass as a single n",
+      "startedAt": 1785565985056,
+      "doneAt": 1785566092192,
+      "group": "Verify"
+    },
+    {
+      "id": "a45a3bb3e48b0a8fc",
+      "kind": "workflow",
+      "label": "v1:Apple defines Liquid Glass as a single n",
+      "startedAt": 1785565989974,
+      "doneAt": 1785566099453,
+      "group": "Verify"
+    },
+    {
+      "id": "a3755b1bcff60b696",
+      "kind": "workflow",
+      "label": "v2:Apple defines Liquid Glass as a single n",
+      "startedAt": 1785566091231,
+      "doneAt": 1785566091746,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "af19fb2a6ccf2c9ec",
+      "kind": "workflow",
+      "label": "v0:Liquid Glass is applied by the system to",
+      "startedAt": 1785566091259,
+      "doneAt": 1785566092045,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a18cdcf747d68ebb1",
+      "kind": "workflow",
+      "label": "v1:Liquid Glass is applied by the system to",
+      "startedAt": 1785566094802,
+      "doneAt": 1785566096281,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a3a51d74b3fe1e150",
+      "kind": "workflow",
+      "label": "v2:Liquid Glass is applied by the system to",
+      "startedAt": 1785566093218,
+      "doneAt": 1785566094609,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "aca82e6db3d5075e0",
+      "kind": "workflow",
+      "label": "v0:Apple's stated design constraint for the",
+      "startedAt": 1785566093276,
+      "doneAt": 1785566096547,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a6562da8b57d0e582",
+      "kind": "workflow",
+      "label": "v1:Apple's stated design constraint for the",
+      "startedAt": 1785566093595,
+      "doneAt": 1785566094826,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "acee8336b436e41a7",
+      "kind": "workflow",
+      "label": "v2:Apple's stated design constraint for the",
+      "startedAt": 1785566095496,
+      "doneAt": 1785566096644,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a837d1b6d72637484",
+      "kind": "workflow",
+      "label": "v0:Liquid Glass is defined by Apple as a di",
+      "startedAt": 1785566098865,
+      "doneAt": 1785566099430,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a7f058c16c46120cc",
+      "kind": "workflow",
+      "label": "v1:Liquid Glass is defined by Apple as a di",
+      "startedAt": 1785566098911,
+      "doneAt": 1785566100528,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a7ed296dc1c6a8be1",
+      "kind": "workflow",
+      "label": "v2:Liquid Glass is defined by Apple as a di",
+      "startedAt": 1785566100563,
+      "doneAt": 1785566102156,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ac3e0e5493303ff06",
+      "kind": "workflow",
+      "label": "v0:Corner radius in the new system is gover",
+      "startedAt": 1785566103779,
+      "doneAt": 1785566104150,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ac892a1abecd33ce2",
+      "kind": "workflow",
+      "label": "v1:Corner radius in the new system is gover",
+      "startedAt": 1785566098366,
+      "doneAt": 1785566098918,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a853cf4b10cc8f2f3",
+      "kind": "workflow",
+      "label": "v2:Corner radius in the new system is gover",
+      "startedAt": 1785566097872,
+      "doneAt": 1785566098416,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "acfea5159ae4d8911",
+      "kind": "workflow",
+      "label": "v0:Apple instructs designers to strip pre-e",
+      "startedAt": 1785566100950,
+      "doneAt": 1785566102310,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a04bb102f2ed30a95",
+      "kind": "workflow",
+      "label": "v1:Apple instructs designers to strip pre-e",
+      "startedAt": 1785566103157,
+      "doneAt": 1785566104474,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ac5050051b87cf767",
+      "kind": "workflow",
+      "label": "v2:Apple instructs designers to strip pre-e",
+      "startedAt": 1785566100345,
+      "doneAt": 1785566100909,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a65582f6c36d32e9a",
+      "kind": "workflow",
+      "label": "v0:The iOS tab bar is reserved for persiste",
+      "startedAt": 1785566100992,
+      "doneAt": 1785566101583,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a30ce26f85d8df21c",
+      "kind": "workflow",
+      "label": "v1:The iOS tab bar is reserved for persiste",
+      "startedAt": 1785566106821,
+      "doneAt": 1785566107523,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a88a3bcc6a70bab62",
+      "kind": "workflow",
+      "label": "v2:The iOS tab bar is reserved for persiste",
+      "startedAt": 1785566102073,
+      "doneAt": 1785566102924,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "acae4ca3fa2d28238",
+      "kind": "workflow",
+      "label": "v0:Apple restricts Liquid Glass to the navi",
+      "startedAt": 1785566102520,
+      "doneAt": 1785566103254,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "afd9dec8c84c22e08",
+      "kind": "workflow",
+      "label": "v1:Apple restricts Liquid Glass to the navi",
+      "startedAt": 1785566103160,
+      "doneAt": 1785566104688,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ab41e9f47a19bec16",
+      "kind": "workflow",
+      "label": "v2:Apple restricts Liquid Glass to the navi",
+      "startedAt": 1785566106186,
+      "doneAt": 1785566107539,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a036b80aa5f69aa2c",
+      "kind": "workflow",
+      "label": "v0:Apple prohibits stacking Liquid Glass on",
+      "startedAt": 1785566106822,
+      "doneAt": 1785566108683,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "acaf96cb847aeaf0d",
+      "kind": "workflow",
+      "label": "v1:Apple prohibits stacking Liquid Glass on",
+      "startedAt": 1785566104775,
+      "doneAt": 1785566105490,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ad17cff608786101e",
+      "kind": "workflow",
+      "label": "v2:Apple prohibits stacking Liquid Glass on",
+      "startedAt": 1785566103939,
+      "doneAt": 1785566105947,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "afe347fc63c732e9f",
+      "kind": "workflow",
+      "label": "v0:Liquid Glass ships in exactly two varian",
+      "startedAt": 1785566109562,
+      "doneAt": 1785566113036,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a94f4857d1e62248a",
+      "kind": "workflow",
+      "label": "v1:Liquid Glass ships in exactly two varian",
+      "startedAt": 1785566105902,
+      "doneAt": 1785566108474,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "aaa1c188555186bb1",
+      "kind": "workflow",
+      "label": "v2:Liquid Glass ships in exactly two varian",
+      "startedAt": 1785566105499,
+      "doneAt": 1785566107499,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "af19dbccffce82035",
+      "kind": "workflow",
+      "label": "v0:Apple's HIG root page describes Liquid G",
+      "startedAt": 1785566106456,
+      "doneAt": 1785566107156,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ad21642d788ab9d35",
+      "kind": "workflow",
+      "label": "v1:Apple's HIG root page describes Liquid G",
+      "startedAt": 1785566108558,
+      "doneAt": 1785566109830,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a8828f72b391218fe",
+      "kind": "workflow",
+      "label": "v2:Apple's HIG root page describes Liquid G",
+      "startedAt": 1785566108816,
+      "doneAt": 1785566110082,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a21c6435d1ae1e937",
+      "kind": "workflow",
+      "label": "v0:Apple frames Liquid Glass as a layer tha",
+      "startedAt": 1785566110532,
+      "doneAt": 1785566111946,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "aef9336391d39e7f1",
+      "kind": "workflow",
+      "label": "v1:Apple frames Liquid Glass as a layer tha",
+      "startedAt": 1785566109515,
+      "doneAt": 1785566110178,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a4a968f88359b8521",
+      "kind": "workflow",
+      "label": "v2:Apple frames Liquid Glass as a layer tha",
+      "startedAt": 1785566110623,
+      "doneAt": 1785566111892,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a8da6557fccb41f9e",
+      "kind": "workflow",
+      "label": "v0:Materials is a first-class HIG \"foundati",
+      "startedAt": 1785566112826,
+      "doneAt": 1785566113410,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a39061f427e386601",
+      "kind": "workflow",
+      "label": "v1:Materials is a first-class HIG \"foundati",
+      "startedAt": 1785566113030,
+      "doneAt": 1785566115053,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a748b60866ef2f4ab",
+      "kind": "workflow",
+      "label": "v2:Materials is a first-class HIG \"foundati",
+      "startedAt": 1785566112732,
+      "doneAt": 1785566114268,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a0cf0104c92717e41",
+      "kind": "workflow",
+      "label": "v0:Google states Material 3 Expressive's re",
+      "startedAt": 1785566112482,
+      "doneAt": 1785566113727,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a1129c87a05643dc4",
+      "kind": "workflow",
+      "label": "v1:Google states Material 3 Expressive's re",
+      "startedAt": 1785566113579,
+      "doneAt": 1785566114868,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a16460c319edeeb62",
+      "kind": "workflow",
+      "label": "v2:Google states Material 3 Expressive's re",
+      "startedAt": 1785566113770,
+      "doneAt": 1785566114720,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a61488be5d78510c0",
+      "kind": "workflow",
+      "label": "v0:Google claims a measured usability gain",
+      "startedAt": 1785566113952,
+      "doneAt": 1785566114518,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a5cfa83f3a2adeba2",
+      "kind": "workflow",
+      "label": "v1:Google claims a measured usability gain",
+      "startedAt": 1785566116294,
+      "doneAt": 1785566117392,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a059a842b019f3a4d",
+      "kind": "workflow",
+      "label": "v2:Google claims a measured usability gain",
+      "startedAt": 1785566116275,
+      "doneAt": 1785566116970,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a0b5d951175a1cdb9",
+      "kind": "workflow",
+      "label": "v0:Google states expressive design carries",
+      "startedAt": 1785566116366,
+      "doneAt": 1785566117624,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "aa87102184b3882e3",
+      "kind": "workflow",
+      "label": "v1:Google states expressive design carries",
+      "startedAt": 1785566116074,
+      "doneAt": 1785566117617,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a77c653dd512c14eb",
+      "kind": "workflow",
+      "label": "v2:Google states expressive design carries",
+      "startedAt": 1785566117403,
+      "doneAt": 1785566118817,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ade147759e1c6ac13",
+      "kind": "workflow",
+      "label": "v0:Material 3 Expressive is an evolution of",
+      "startedAt": 1785566116273,
+      "doneAt": 1785566117594,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a1feae836b78864eb",
+      "kind": "workflow",
+      "label": "v1:Material 3 Expressive is an evolution of",
+      "startedAt": 1785566116765,
+      "doneAt": 1785566118018,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a6074514e1a5e1187",
+      "kind": "workflow",
+      "label": "v2:Material 3 Expressive is an evolution of",
+      "startedAt": 1785566118977,
+      "doneAt": 1785566119910,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "aabcf30d70dcb8bb2",
+      "kind": "workflow",
+      "label": "v0:The stated research basis for M3 Express",
+      "startedAt": 1785566120614,
+      "doneAt": 1785566121487,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a87b9e900fc4bcb5c",
+      "kind": "workflow",
+      "label": "v1:The stated research basis for M3 Express",
+      "startedAt": 1785566119329,
+      "doneAt": 1785566120162,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ae33162fe7c46545c",
+      "kind": "workflow",
+      "label": "v2:The stated research basis for M3 Express",
+      "startedAt": 1785566120613,
+      "doneAt": 1785566121361,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a6d798cb08e66ff66",
+      "kind": "workflow",
+      "label": "synthesize",
+      "startedAt": 1785566122726,
+      "doneAt": 1785566123370,
+      "failed": true,
+      "group": "Synthesize"
+    },
+    {
+      "id": "ac4cc6be9f49bec70",
+      "kind": "workflow",
+      "label": "scope",
+      "startedAt": 1785565980945,
+      "doneAt": 1785565980945,
+      "group": "Scope"
+    },
+    {
+      "id": "a038d4e30c75a6346",
+      "kind": "workflow",
+      "label": "search:Apple primary — Dynamic Type ramp + VoiceOver design decisions",
+      "startedAt": 1785565980953,
+      "doneAt": 1785565980953,
+      "group": "Search"
+    },
+    {
+      "id": "a5d4b6ae4fae5fe95",
+      "kind": "workflow",
+      "label": "search:Android primary — TalkBack, 48dp targets, non-linear font scaling",
+      "startedAt": 1785565980954,
+      "doneAt": 1785565980954,
+      "group": "Search"
+    },
+    {
+      "id": "a5357cdd5a7675302",
+      "kind": "workflow",
+      "label": "search:Native-vs-web gap — what a WCAG web checklist misses",
+      "startedAt": 1785565980954,
+      "doneAt": 1785565980954,
+      "group": "Search"
+    },
+    {
+      "id": "a5efc8e5dcb3e1c6c",
+      "kind": "workflow",
+      "label": "search:EU law primary — EAA scope, dates, microenterprise exemption",
+      "startedAt": 1785565980954,
+      "doneAt": 1785565980954,
+      "group": "Search"
+    },
+    {
+      "id": "a3ac6c3f45a978815",
+      "kind": "workflow",
+      "label": "search:Standards conformance — EN 301 549 version and its WCAG mapping",
+      "startedAt": 1785565980954,
+      "doneAt": 1785565980954,
+      "group": "Search"
+    },
+    {
+      "id": "ae45d9d5dbfb06ac8",
+      "kind": "workflow",
+      "label": "search:US federal rulemaking — ADA Title II rule, Section 508, and WCAG 2.2",
+      "startedAt": 1785565980954,
+      "doneAt": 1785565980954,
+      "group": "Search"
+    },
+    {
+      "id": "a72a2e07146aa8543",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980963,
+      "doneAt": 1785565980963,
+      "group": "Fetch"
+    },
+    {
+      "id": "a73f82913b33433e5",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980963,
+      "doneAt": 1785565980963,
+      "group": "Fetch"
+    },
+    {
+      "id": "ae95664a6ab8b5da5",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980963,
+      "doneAt": 1785565980963,
+      "group": "Fetch"
+    },
+    {
+      "id": "ad27cdddbe7837ea3",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980963,
+      "doneAt": 1785565980963,
+      "group": "Fetch"
+    },
+    {
+      "id": "ab6bbf86d9a3e5eee",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980963,
+      "doneAt": 1785565980963,
+      "group": "Fetch"
+    },
+    {
+      "id": "ae92fa0bddb1b1a89",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980964,
+      "doneAt": 1785565980964,
+      "group": "Fetch"
+    },
+    {
+      "id": "a911a26893debecd7",
+      "kind": "workflow",
+      "label": "fetch:developer.android.com",
+      "startedAt": 1785565980964,
+      "doneAt": 1785565980964,
+      "group": "Fetch"
+    },
+    {
+      "id": "a65b6fe6d9a00e64d",
+      "kind": "workflow",
+      "label": "fetch:developer.android.com",
+      "startedAt": 1785565980964,
+      "doneAt": 1785565980964,
+      "group": "Fetch"
+    },
+    {
+      "id": "a6af914c190394b9d",
+      "kind": "workflow",
+      "label": "fetch:developer.android.com",
+      "startedAt": 1785565980964,
+      "doneAt": 1785565980964,
+      "group": "Fetch"
+    },
+    {
+      "id": "a9e863f0bba4deb20",
+      "kind": "workflow",
+      "label": "fetch:developer.android.com",
+      "startedAt": 1785565980964,
+      "doneAt": 1785565980964,
+      "group": "Fetch"
+    },
+    {
+      "id": "ad85f97063e55ea59",
+      "kind": "workflow",
+      "label": "fetch:developer.android.com",
+      "startedAt": 1785565980964,
+      "doneAt": 1785565980964,
+      "group": "Fetch"
+    },
+    {
+      "id": "ad38a561ed340c238",
+      "kind": "workflow",
+      "label": "fetch:developer.android.com",
+      "startedAt": 1785565980964,
+      "doneAt": 1785565980964,
+      "group": "Fetch"
+    },
+    {
+      "id": "a69b767972cbfbe08",
+      "kind": "workflow",
+      "label": "fetch:w3.org",
+      "startedAt": 1785565980964,
+      "doneAt": 1785565980964,
+      "group": "Fetch"
+    },
+    {
+      "id": "aa958ad019407f75b",
+      "kind": "workflow",
+      "label": "fetch:w3.org",
+      "startedAt": 1785565980964,
+      "doneAt": 1785565980964,
+      "group": "Fetch"
+    },
+    {
+      "id": "a5da075ea78a5d291",
+      "kind": "workflow",
+      "label": "fetch:w3.org",
+      "startedAt": 1785565980964,
+      "doneAt": 1785565980964,
+      "group": "Fetch"
+    },
+    {
+      "id": "a228aba3241fffbb4",
+      "kind": "workflow",
+      "label": "fetch:eur-lex.europa.eu",
+      "startedAt": 1785565980964,
+      "doneAt": 1785565980964,
+      "group": "Fetch"
+    },
+    {
+      "id": "a91f60a0b9e551f06",
+      "kind": "workflow",
+      "label": "fetch:commission.europa.eu",
+      "startedAt": 1785565980964,
+      "doneAt": 1785565980964,
+      "group": "Fetch"
+    },
+    {
+      "id": "ae0f15424d5203713",
+      "kind": "workflow",
+      "label": "fetch:ec.europa.eu",
+      "startedAt": 1785565980964,
+      "doneAt": 1785565980964,
+      "group": "Fetch"
+    },
+    {
+      "id": "af189fc9bda4020b2",
+      "kind": "workflow",
+      "label": "fetch:etsi.org",
+      "startedAt": 1785565980964,
+      "doneAt": 1785565980964,
+      "group": "Fetch"
+    },
+    {
+      "id": "ad0b8efd1649d1492",
+      "kind": "workflow",
+      "label": "fetch:etsi.org",
+      "startedAt": 1785565980964,
+      "doneAt": 1785565980964,
+      "group": "Fetch"
+    },
+    {
+      "id": "ad34106503e1f5abe",
+      "kind": "workflow",
+      "label": "fetch:eur-lex.europa.eu",
+      "startedAt": 1785565980964,
+      "doneAt": 1785565980964,
+      "group": "Fetch"
+    },
+    {
+      "id": "af2f21eac45f631be",
+      "kind": "workflow",
+      "label": "fetch:digital-strategy.ec.europa.eu",
+      "startedAt": 1785565980964,
+      "doneAt": 1785565980964,
+      "group": "Fetch"
+    },
+    {
+      "id": "ac58f3c43d6d44ba3",
+      "kind": "workflow",
+      "label": "fetch:federalregister.gov",
+      "startedAt": 1785565980964,
+      "doneAt": 1785565980964,
+      "group": "Fetch"
+    },
+    {
+      "id": "ad79da5eef93b1956",
+      "kind": "workflow",
+      "label": "fetch:ecfr.gov",
+      "startedAt": 1785565980964,
+      "doneAt": 1785565980964,
+      "group": "Fetch"
+    },
+    {
+      "id": "a910a7718d93a095d",
+      "kind": "workflow",
+      "label": "fetch:ada.gov",
+      "startedAt": 1785565980964,
+      "doneAt": 1785565980964,
+      "group": "Fetch"
+    },
+    {
+      "id": "aa56bac2830359d97",
+      "kind": "workflow",
+      "label": "fetch:ada.gov",
+      "startedAt": 1785565980965,
+      "doneAt": 1785565980965,
+      "group": "Fetch"
+    },
+    {
+      "id": "af780afa254dbe3d1",
+      "kind": "workflow",
+      "label": "fetch:section508.gov",
+      "startedAt": 1785565980965,
+      "doneAt": 1785565980965,
+      "group": "Fetch"
+    },
+    {
+      "id": "a5a875a695939bd15",
+      "kind": "workflow",
+      "label": "fetch:access-board.gov",
+      "startedAt": 1785565980965,
+      "doneAt": 1785565980965,
+      "group": "Fetch"
+    },
+    {
+      "id": "abe39a4762e7dc7f6",
+      "kind": "workflow",
+      "label": "v0:Apple's iOS/iPadOS Dynamic Type ramp has",
+      "startedAt": 1785565980991,
+      "doneAt": 1785565980991,
+      "group": "Verify"
+    },
+    {
+      "id": "a509006458556e6bb",
+      "kind": "workflow",
+      "label": "v1:Apple's iOS/iPadOS Dynamic Type ramp has",
+      "startedAt": 1785565980991,
+      "doneAt": 1785565980991,
+      "group": "Verify"
+    },
+    {
+      "id": "a29cf982b1c27689c",
+      "kind": "workflow",
+      "label": "v2:Apple's iOS/iPadOS Dynamic Type ramp has",
+      "startedAt": 1785565980991,
+      "doneAt": 1785565980991,
+      "group": "Verify"
+    },
+    {
+      "id": "ae401ef849527ec1c",
+      "kind": "workflow",
+      "label": "v0:Apple explicitly instructs designers to",
+      "startedAt": 1785565980991,
+      "doneAt": 1785565980991,
+      "group": "Verify"
+    },
+    {
+      "id": "a252910c0494865a8",
+      "kind": "workflow",
+      "label": "v1:Apple explicitly instructs designers to",
+      "startedAt": 1785565980991,
+      "doneAt": 1785565980991,
+      "group": "Verify"
+    },
+    {
+      "id": "a1b66aea373252c75",
+      "kind": "workflow",
+      "label": "v2:Apple explicitly instructs designers to",
+      "startedAt": 1785565980991,
+      "doneAt": 1785565980991,
+      "group": "Verify"
+    },
+    {
+      "id": "a5373d02570515038",
+      "kind": "workflow",
+      "label": "v0:Apple sets a concrete, testable commitme",
+      "startedAt": 1785565980991,
+      "doneAt": 1785565980991,
+      "group": "Verify"
+    },
+    {
+      "id": "aa12ff224ecd57e35",
+      "kind": "workflow",
+      "label": "v1:Apple sets a concrete, testable commitme",
+      "startedAt": 1785565980992,
+      "doneAt": 1785565980992,
+      "group": "Verify"
+    },
+    {
+      "id": "a3e5e591684665852",
+      "kind": "workflow",
+      "label": "v2:Apple sets a concrete, testable commitme",
+      "startedAt": 1785565980992,
+      "doneAt": 1785565980992,
+      "group": "Verify"
+    },
+    {
+      "id": "a92a31283338889c8",
+      "kind": "workflow",
+      "label": "v0:Apple's HIG accessibility page sets an e",
+      "startedAt": 1785565980992,
+      "doneAt": 1785565980992,
+      "group": "Verify"
+    },
+    {
+      "id": "ac865b306c2644a15",
+      "kind": "workflow",
+      "label": "v1:Apple's HIG accessibility page sets an e",
+      "startedAt": 1785565980992,
+      "doneAt": 1785565980992,
+      "group": "Verify"
+    },
+    {
+      "id": "ae0482cb8ee057a20",
+      "kind": "workflow",
+      "label": "v2:Apple's HIG accessibility page sets an e",
+      "startedAt": 1785565980992,
+      "doneAt": 1785565980992,
+      "group": "Verify"
+    },
+    {
+      "id": "a1141da18ceb5a960",
+      "kind": "workflow",
+      "label": "v0:Apple's recommended minimum control size",
+      "startedAt": 1785565980992,
+      "doneAt": 1785565980992,
+      "group": "Verify"
+    },
+    {
+      "id": "a469a17e7b9a7609a",
+      "kind": "workflow",
+      "label": "v1:Apple's recommended minimum control size",
+      "startedAt": 1785565980992,
+      "doneAt": 1785565980992,
+      "group": "Verify"
+    },
+    {
+      "id": "a9ffe43ef03b6276c",
+      "kind": "workflow",
+      "label": "v2:Apple's recommended minimum control size",
+      "startedAt": 1785565980992,
+      "doneAt": 1785565980992,
+      "group": "Verify"
+    },
+    {
+      "id": "a3c7b2e28301bb3f1",
+      "kind": "workflow",
+      "label": "v0:Apple states VoiceOver reads elements in",
+      "startedAt": 1785565980992,
+      "doneAt": 1785565980992,
+      "group": "Verify"
+    },
+    {
+      "id": "adbe582ac8dfbd0ba",
+      "kind": "workflow",
+      "label": "v1:Apple states VoiceOver reads elements in",
+      "startedAt": 1785565988562,
+      "doneAt": 1785566089797,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a31f18511165384c0",
+      "kind": "workflow",
+      "label": "v2:Apple states VoiceOver reads elements in",
+      "startedAt": 1785565990101,
+      "doneAt": 1785566091720,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "afa3732f3fd1cd5bf",
+      "kind": "workflow",
+      "label": "v0:Apple assigns the grouping/ordering/link",
+      "startedAt": 1785565990516,
+      "doneAt": 1785566082168,
+      "group": "Verify"
+    },
+    {
+      "id": "a95bddc1c54523a09",
+      "kind": "workflow",
+      "label": "v1:Apple assigns the grouping/ordering/link",
+      "startedAt": 1785565993764,
+      "doneAt": 1785566097563,
+      "group": "Verify"
+    },
+    {
+      "id": "a20caf7bdda29ffdd",
+      "kind": "workflow",
+      "label": "v2:Apple assigns the grouping/ordering/link",
+      "startedAt": 1785565992131,
+      "doneAt": 1785566093684,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a4965cfc5c5b64f48",
+      "kind": "workflow",
+      "label": "v0:The VoiceOver rotor is a navigation cont",
+      "startedAt": 1785565991570,
+      "doneAt": 1785566091743,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a9b16c9b80be59547",
+      "kind": "workflow",
+      "label": "v1:The VoiceOver rotor is a navigation cont",
+      "startedAt": 1785565992556,
+      "doneAt": 1785566110243,
+      "group": "Verify"
+    },
+    {
+      "id": "a2d87701675dfe148",
+      "kind": "workflow",
+      "label": "v2:The VoiceOver rotor is a navigation cont",
+      "startedAt": 1785565988248,
+      "doneAt": 1785566117349,
+      "group": "Verify"
+    },
+    {
+      "id": "a003a2d86f92ec30a",
+      "kind": "workflow",
+      "label": "v0:Apple's Dynamic Type ramp offers 7 text",
+      "startedAt": 1785566086191,
+      "doneAt": 1785566098873,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ae37fb0c187a16ce4",
+      "kind": "workflow",
+      "label": "v1:Apple's Dynamic Type ramp offers 7 text",
+      "startedAt": 1785566090379,
+      "doneAt": 1785566090918,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ad3ba42929544367b",
+      "kind": "workflow",
+      "label": "v2:Apple's Dynamic Type ramp offers 7 text",
+      "startedAt": 1785566091749,
+      "doneAt": 1785566092215,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a6025acb8fcd10a09",
+      "kind": "workflow",
+      "label": "v0:Apple's stated guidance is that horizont",
+      "startedAt": 1785566093345,
+      "doneAt": 1785566093941,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a67403ce8d2639b7f",
+      "kind": "workflow",
+      "label": "v1:Apple's stated guidance is that horizont",
+      "startedAt": 1785566093459,
+      "doneAt": 1785566094563,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a907aec004138b6b0",
+      "kind": "workflow",
+      "label": "v2:Apple's stated guidance is that horizont",
+      "startedAt": 1785566093122,
+      "doneAt": 1785566094386,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ab305946906e14ec1",
+      "kind": "workflow",
+      "label": "v0:Apple states that iOS Dynamic Type reach",
+      "startedAt": 1785566094829,
+      "doneAt": 1785566095424,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ab03c472e1c375a2e",
+      "kind": "workflow",
+      "label": "v1:Apple states that iOS Dynamic Type reach",
+      "startedAt": 1785566094711,
+      "doneAt": 1785566095261,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ac88f23f065e37c4c",
+      "kind": "workflow",
+      "label": "v2:Apple states that iOS Dynamic Type reach",
+      "startedAt": 1785566095563,
+      "doneAt": 1785566096944,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a2ac184bf70ad590b",
+      "kind": "workflow",
+      "label": "v0:Apple's stated layout guidance for large",
+      "startedAt": 1785566095307,
+      "doneAt": 1785566096883,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a76559ba1fe7fe5e5",
+      "kind": "workflow",
+      "label": "v1:Apple's stated layout guidance for large",
+      "startedAt": 1785566096995,
+      "doneAt": 1785566097828,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ade6ac40ee03b7b02",
+      "kind": "workflow",
+      "label": "v2:Apple's stated layout guidance for large",
+      "startedAt": 1785566096650,
+      "doneAt": 1785566097510,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a4da6f434adcf2538",
+      "kind": "workflow",
+      "label": "v0:Apple's criteria treat truncation as a f",
+      "startedAt": 1785566099898,
+      "doneAt": 1785566100817,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a1d899772cd691133",
+      "kind": "workflow",
+      "label": "v1:Apple's criteria treat truncation as a f",
+      "startedAt": 1785566098319,
+      "doneAt": 1785566099415,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a2494d69b027527eb",
+      "kind": "workflow",
+      "label": "v2:Apple's criteria treat truncation as a f",
+      "startedAt": 1785566098148,
+      "doneAt": 1785566099328,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a569d328019dd9cf3",
+      "kind": "workflow",
+      "label": "v0:Apple explicitly disallows relying on sy",
+      "startedAt": 1785566098642,
+      "doneAt": 1785566099490,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a108672e7169e0768",
+      "kind": "workflow",
+      "label": "v1:Apple explicitly disallows relying on sy",
+      "startedAt": 1785566100197,
+      "doneAt": 1785566101873,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "afbfc599839d70544",
+      "kind": "workflow",
+      "label": "v2:Apple explicitly disallows relying on sy",
+      "startedAt": 1785566102555,
+      "doneAt": 1785566103579,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a0ce7cbbe0c37f7fe",
+      "kind": "workflow",
+      "label": "v0:Apple's App Store Connect VoiceOver eval",
+      "startedAt": 1785566100743,
+      "doneAt": 1785566103477,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a285f8119433273ac",
+      "kind": "workflow",
+      "label": "v1:Apple's App Store Connect VoiceOver eval",
+      "startedAt": 1785566100676,
+      "doneAt": 1785566103177,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a4e0bdfca55c9c481",
+      "kind": "workflow",
+      "label": "v2:Apple's App Store Connect VoiceOver eval",
+      "startedAt": 1785566101025,
+      "doneAt": 1785566102018,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a6b27d8b2ce13b75c",
+      "kind": "workflow",
+      "label": "v0:Apple explicitly prohibits encoding cont",
+      "startedAt": 1785566105151,
+      "doneAt": 1785566106571,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "acce8a4d1166d6320",
+      "kind": "workflow",
+      "label": "v1:Apple explicitly prohibits encoding cont",
+      "startedAt": 1785566108440,
+      "doneAt": 1785566109982,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a5a504f7dd3e5e57e",
+      "kind": "workflow",
+      "label": "v2:Apple explicitly prohibits encoding cont",
+      "startedAt": 1785566102757,
+      "doneAt": 1785566104180,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a6d0ff9ae6778d4b4",
+      "kind": "workflow",
+      "label": "v0:Apple's criteria require every visible e",
+      "startedAt": 1785566108750,
+      "doneAt": 1785566110114,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a5782a0c1927cebc2",
+      "kind": "workflow",
+      "label": "v1:Apple's criteria require every visible e",
+      "startedAt": 1785566108749,
+      "doneAt": 1785566110122,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a1566c3fd8ed01c89",
+      "kind": "workflow",
+      "label": "v2:Apple's criteria require every visible e",
+      "startedAt": 1785566105514,
+      "doneAt": 1785566106056,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a84727372277c97f9",
+      "kind": "workflow",
+      "label": "v0:For grouped elements, Apple gives design",
+      "startedAt": 1785566105974,
+      "doneAt": 1785566107231,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a8af264112bfea146",
+      "kind": "workflow",
+      "label": "v1:For grouped elements, Apple gives design",
+      "startedAt": 1785566107822,
+      "doneAt": 1785566109012,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a21c184078c8d3000",
+      "kind": "workflow",
+      "label": "v2:For grouped elements, Apple gives design",
+      "startedAt": 1785566109282,
+      "doneAt": 1785566110421,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a58788b7e8868c20b",
+      "kind": "workflow",
+      "label": "v0:Android 14 raised the maximum user font",
+      "startedAt": 1785566108790,
+      "doneAt": 1785566110227,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a4cae9587cee82498",
+      "kind": "workflow",
+      "label": "v1:Android 14 raised the maximum user font",
+      "startedAt": 1785566110158,
+      "doneAt": 1785566111234,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a39ea97a18704fead",
+      "kind": "workflow",
+      "label": "v2:Android 14 raised the maximum user font",
+      "startedAt": 1785566113521,
+      "doneAt": 1785566114911,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ac40a1a066259ac32",
+      "kind": "workflow",
+      "label": "v0:Because scaling is nonlinear, sp dimensi",
+      "startedAt": 1785566113395,
+      "doneAt": 1785566114824,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a48e24328c63d908c",
+      "kind": "workflow",
+      "label": "v1:Because scaling is nonlinear, sp dimensi",
+      "startedAt": 1785566113842,
+      "doneAt": 1785566114948,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a0cf9c7cd63cc0692",
+      "kind": "workflow",
+      "label": "v2:Because scaling is nonlinear, sp dimensi",
+      "startedAt": 1785566115266,
+      "doneAt": 1785566116526,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ac1854e85bd86241d",
+      "kind": "workflow",
+      "label": "v0:Text sizes must be specified in sp units",
+      "startedAt": 1785566113040,
+      "doneAt": 1785566114719,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a91d9fa5ae2ae80a4",
+      "kind": "workflow",
+      "label": "v1:Text sizes must be specified in sp units",
+      "startedAt": 1785566111918,
+      "doneAt": 1785566113248,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ae36229dd082fa05e",
+      "kind": "workflow",
+      "label": "v2:Text sizes must be specified in sp units",
+      "startedAt": 1785566114149,
+      "doneAt": 1785566115201,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a2a29ff53363f60b6",
+      "kind": "workflow",
+      "label": "v0:Android's official design guidance sets",
+      "startedAt": 1785566114355,
+      "doneAt": 1785566115650,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a1320616bfc8efb66",
+      "kind": "workflow",
+      "label": "v1:Android's official design guidance sets",
+      "startedAt": 1785566116263,
+      "doneAt": 1785566117619,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a714365ec7850418b",
+      "kind": "workflow",
+      "label": "v2:Android's official design guidance sets",
+      "startedAt": 1785566117287,
+      "doneAt": 1785566118222,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ac5f99094fc5630ec",
+      "kind": "workflow",
+      "label": "v0:Android requires font sizes to be declar",
+      "startedAt": 1785566118068,
+      "doneAt": 1785566118885,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ac01bea47f7158091",
+      "kind": "workflow",
+      "label": "v1:Android requires font sizes to be declar",
+      "startedAt": 1785566118069,
+      "doneAt": 1785566119137,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a66390dc400fb5811",
+      "kind": "workflow",
+      "label": "v2:Android requires font sizes to be declar",
+      "startedAt": 1785566116662,
+      "doneAt": 1785566117143,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a02cda799616cebef",
+      "kind": "workflow",
+      "label": "v0:Android's designer-facing accessibility",
+      "startedAt": 1785566116641,
+      "doneAt": 1785566117584,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a79593295303f5551",
+      "kind": "workflow",
+      "label": "v1:Android's designer-facing accessibility",
+      "startedAt": 1785566123140,
+      "doneAt": 1785566123861,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a6e9be2fee26f056b",
+      "kind": "workflow",
+      "label": "v2:Android's designer-facing accessibility",
+      "startedAt": 1785566117929,
+      "doneAt": 1785566118536,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "af4f6c8ab2b526a71",
+      "kind": "workflow",
+      "label": "v0:Android's official accessibility princip",
+      "startedAt": 1785566120357,
+      "doneAt": 1785566121038,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a499cc54aca935703",
+      "kind": "workflow",
+      "label": "v1:Android's official accessibility princip",
+      "startedAt": 1785566120206,
+      "doneAt": 1785566121186,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "afde356dbdbe21b35",
+      "kind": "workflow",
+      "label": "v2:Android's official accessibility princip",
+      "startedAt": 1785566119946,
+      "doneAt": 1785566120703,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ac5f1e3578c8226e0",
+      "kind": "workflow",
+      "label": "synthesize",
+      "startedAt": 1785566125220,
+      "doneAt": 1785566125965,
+      "failed": true,
+      "group": "Synthesize"
+    },
+    {
+      "id": "aad6647342ebfa453",
+      "kind": "workflow",
+      "label": "scope",
+      "startedAt": 1785565980946,
+      "doneAt": 1785565980946,
+      "group": "Scope"
+    },
+    {
+      "id": "a85b149e573b76e09",
+      "kind": "workflow",
+      "label": "search:primary/authoritative — APG pattern selection and its obligations",
+      "startedAt": 1785565980954,
+      "doneAt": 1785565980954,
+      "group": "Search"
+    },
+    {
+      "id": "a3aa287d0be853ba9",
+      "kind": "workflow",
+      "label": "search:contrarian/rules — when ARIA is the wrong answer, with measured harm",
+      "startedAt": 1785565980954,
+      "doneAt": 1785565980954,
+      "group": "Search"
+    },
+    {
+      "id": "a94d42508e325ecbc",
+      "kind": "workflow",
+      "label": "search:practitioner/implementation — SPA route change focus",
+      "startedAt": 1785565980954,
+      "doneAt": 1785565980954,
+      "group": "Search"
+    },
+    {
+      "id": "a0bb1e5a1a527c17d",
+      "kind": "workflow",
+      "label": "search:technical spec — live region semantics",
+      "startedAt": 1785565980954,
+      "doneAt": 1785565980954,
+      "group": "Search"
+    },
+    {
+      "id": "a3c85ae68d23ed821",
+      "kind": "workflow",
+      "label": "search:empirical/interoperability — screen reader support gaps",
+      "startedAt": 1785565980954,
+      "doneAt": 1785565980954,
+      "group": "Search"
+    },
+    {
+      "id": "aa1aea3e9a4fb8f28",
+      "kind": "workflow",
+      "label": "fetch:w3.org",
+      "startedAt": 1785565980965,
+      "doneAt": 1785565980965,
+      "group": "Fetch"
+    },
+    {
+      "id": "a34a7276855c80023",
+      "kind": "workflow",
+      "label": "fetch:w3.org",
+      "startedAt": 1785565980965,
+      "doneAt": 1785565980965,
+      "group": "Fetch"
+    },
+    {
+      "id": "a06503a6723627fce",
+      "kind": "workflow",
+      "label": "fetch:w3.org",
+      "startedAt": 1785565980965,
+      "doneAt": 1785565980965,
+      "group": "Fetch"
+    },
+    {
+      "id": "abedd1487145ef00e",
+      "kind": "workflow",
+      "label": "fetch:w3.org",
+      "startedAt": 1785565980965,
+      "doneAt": 1785565980965,
+      "group": "Fetch"
+    },
+    {
+      "id": "a1dc03fbf3ff08236",
+      "kind": "workflow",
+      "label": "fetch:w3.org",
+      "startedAt": 1785565980965,
+      "doneAt": 1785565980965,
+      "group": "Fetch"
+    },
+    {
+      "id": "a5e6e5237398fa243",
+      "kind": "workflow",
+      "label": "fetch:w3.org",
+      "startedAt": 1785565980965,
+      "doneAt": 1785565980965,
+      "group": "Fetch"
+    },
+    {
+      "id": "a0da8c462c88f64de",
+      "kind": "workflow",
+      "label": "fetch:webaim.org",
+      "startedAt": 1785565980965,
+      "doneAt": 1785565980965,
+      "group": "Fetch"
+    },
+    {
+      "id": "a9bb2d0a3e40ff857",
+      "kind": "workflow",
+      "label": "fetch:w3.org",
+      "startedAt": 1785565980965,
+      "doneAt": 1785565980965,
+      "group": "Fetch"
+    },
+    {
+      "id": "ac972e41e213c4c5a",
+      "kind": "workflow",
+      "label": "fetch:w3.org",
+      "startedAt": 1785565980966,
+      "doneAt": 1785565980966,
+      "group": "Fetch"
+    },
+    {
+      "id": "a38489cbc436c2416",
+      "kind": "workflow",
+      "label": "fetch:w3.org",
+      "startedAt": 1785565980966,
+      "doneAt": 1785565980966,
+      "group": "Fetch"
+    },
+    {
+      "id": "af38e21ec175899c6",
+      "kind": "workflow",
+      "label": "fetch:webaim.org",
+      "startedAt": 1785565980966,
+      "doneAt": 1785565980966,
+      "group": "Fetch"
+    },
+    {
+      "id": "a6043175b8d5048a4",
+      "kind": "workflow",
+      "label": "fetch:deque.com",
+      "startedAt": 1785565980966,
+      "doneAt": 1785565980966,
+      "group": "Fetch"
+    },
+    {
+      "id": "a7d357c0137660ad4",
+      "kind": "workflow",
+      "label": "fetch:marcysutton.com",
+      "startedAt": 1785565980966,
+      "doneAt": 1785565980966,
+      "group": "Fetch"
+    },
+    {
+      "id": "a8816c775f3b7cc1e",
+      "kind": "workflow",
+      "label": "fetch:gatsbyjs.com",
+      "startedAt": 1785565980966,
+      "doneAt": 1785565980966,
+      "group": "Fetch"
+    },
+    {
+      "id": "a809cbba31d74183c",
+      "kind": "workflow",
+      "label": "fetch:deque.com",
+      "startedAt": 1785565980966,
+      "doneAt": 1785565980966,
+      "group": "Fetch"
+    },
+    {
+      "id": "a189e0517bfb8e912",
+      "kind": "workflow",
+      "label": "fetch:developer.mozilla.org",
+      "startedAt": 1785565980966,
+      "doneAt": 1785565980966,
+      "group": "Fetch"
+    },
+    {
+      "id": "a01ca298e8ab509f3",
+      "kind": "workflow",
+      "label": "fetch:w3c.github.io",
+      "startedAt": 1785565980967,
+      "doneAt": 1785565980967,
+      "group": "Fetch"
+    },
+    {
+      "id": "af7f92753b9b2646c",
+      "kind": "workflow",
+      "label": "fetch:adrianroselli.com",
+      "startedAt": 1785565980967,
+      "doneAt": 1785565980967,
+      "group": "Fetch"
+    },
+    {
+      "id": "aac16de9900f4976d",
+      "kind": "workflow",
+      "label": "fetch:tpgi.com",
+      "startedAt": 1785565980967,
+      "doneAt": 1785565980967,
+      "group": "Fetch"
+    },
+    {
+      "id": "a6dfcee9b691452de",
+      "kind": "workflow",
+      "label": "fetch:w3.org",
+      "startedAt": 1785565980967,
+      "doneAt": 1785565980967,
+      "group": "Fetch"
+    },
+    {
+      "id": "a7b8e16f15de479dc",
+      "kind": "workflow",
+      "label": "fetch:w3.org",
+      "startedAt": 1785565980967,
+      "doneAt": 1785565980967,
+      "group": "Fetch"
+    },
+    {
+      "id": "a72c88813877b099e",
+      "kind": "workflow",
+      "label": "fetch:tetralogical.com",
+      "startedAt": 1785565980967,
+      "doneAt": 1785565980967,
+      "group": "Fetch"
+    },
+    {
+      "id": "a93f25d0b9ff27c87",
+      "kind": "workflow",
+      "label": "v0:The APG treats disclosure and accordion",
+      "startedAt": 1785565980995,
+      "doneAt": 1785565980995,
+      "group": "Verify"
+    },
+    {
+      "id": "a6503bd7f3dca9ad6",
+      "kind": "workflow",
+      "label": "v1:The APG treats disclosure and accordion",
+      "startedAt": 1785565980995,
+      "doneAt": 1785565980995,
+      "group": "Verify"
+    },
+    {
+      "id": "abf95f129066ad372",
+      "kind": "workflow",
+      "label": "v2:The APG treats disclosure and accordion",
+      "startedAt": 1785565980995,
+      "doneAt": 1785565980995,
+      "group": "Verify"
+    },
+    {
+      "id": "ae5aa7e69c6e36f65",
+      "kind": "workflow",
+      "label": "v0:The APG separates grid from table on the",
+      "startedAt": 1785565980995,
+      "doneAt": 1785565980995,
+      "group": "Verify"
+    },
+    {
+      "id": "ad8c3cfef8eec1334",
+      "kind": "workflow",
+      "label": "v1:The APG separates grid from table on the",
+      "startedAt": 1785565980995,
+      "doneAt": 1785565980995,
+      "group": "Verify"
+    },
+    {
+      "id": "a68edd7128233935b",
+      "kind": "workflow",
+      "label": "v2:The APG separates grid from table on the",
+      "startedAt": 1785565980995,
+      "doneAt": 1785565980995,
+      "group": "Verify"
+    },
+    {
+      "id": "a8546756b72253760",
+      "kind": "workflow",
+      "label": "v0:Treegrid is a third, distinct pattern fr",
+      "startedAt": 1785565980995,
+      "doneAt": 1785565980995,
+      "group": "Verify"
+    },
+    {
+      "id": "a578a0b853dff9197",
+      "kind": "workflow",
+      "label": "v1:Treegrid is a third, distinct pattern fr",
+      "startedAt": 1785565980995,
+      "doneAt": 1785565980995,
+      "group": "Verify"
+    },
+    {
+      "id": "ae101f623b18bd86e",
+      "kind": "workflow",
+      "label": "v2:Treegrid is a third, distinct pattern fr",
+      "startedAt": 1785565980995,
+      "doneAt": 1785565980995,
+      "group": "Verify"
+    },
+    {
+      "id": "aa64e33b26451a61c",
+      "kind": "workflow",
+      "label": "v0:The APG distinguishes alert dialog from",
+      "startedAt": 1785565980995,
+      "doneAt": 1785565980995,
+      "group": "Verify"
+    },
+    {
+      "id": "aa531602ee8a034b8",
+      "kind": "workflow",
+      "label": "v1:The APG distinguishes alert dialog from",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "a879b874d30fc5212",
+      "kind": "workflow",
+      "label": "v2:The APG distinguishes alert dialog from",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "a85dd1e7ef7cca231",
+      "kind": "workflow",
+      "label": "v0:The APG defines combobox by a design-lev",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "aa6ab5636a692d285",
+      "kind": "workflow",
+      "label": "v1:The APG defines combobox by a design-lev",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "a1a7a7db1403b629a",
+      "kind": "workflow",
+      "label": "v2:The APG defines combobox by a design-lev",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "a1de6a2d6abe147b1",
+      "kind": "workflow",
+      "label": "v0:Choosing the combobox pattern does not s",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "a43a1e74bed41cce0",
+      "kind": "workflow",
+      "label": "v1:Choosing the combobox pattern does not s",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "af11f4306bd6788cb",
+      "kind": "workflow",
+      "label": "v2:Choosing the combobox pattern does not s",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "a2f869f8040b7ad47",
+      "kind": "workflow",
+      "label": "v0:Combobox obliges a specific, non-obvious",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "aec831b15411a83ba",
+      "kind": "workflow",
+      "label": "v1:Combobox obliges a specific, non-obvious",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "a8b1d0406a7224278",
+      "kind": "workflow",
+      "label": "v2:Combobox obliges a specific, non-obvious",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "ab52345b8423a1242",
+      "kind": "workflow",
+      "label": "v0:The open/closed state of the popup must",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "ac73834d672478bee",
+      "kind": "workflow",
+      "label": "v1:The open/closed state of the popup must",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "a012295361293af70",
+      "kind": "workflow",
+      "label": "v2:The open/closed state of the popup must",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "a296338d5027002c4",
+      "kind": "workflow",
+      "label": "v0:Choosing the ARIA grid pattern over a pl",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "a3736e98075d585c8",
+      "kind": "workflow",
+      "label": "v1:Choosing the ARIA grid pattern over a pl",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "a012b35c71073e23c",
+      "kind": "workflow",
+      "label": "v2:Choosing the ARIA grid pattern over a pl",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "aa69c1aa29a551ee7",
+      "kind": "workflow",
+      "label": "v0:Picking grid obliges a specific, non-neg",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "acd92c390ff1095e7",
+      "kind": "workflow",
+      "label": "v1:Picking grid obliges a specific, non-neg",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "ae21ea2b9c2943149",
+      "kind": "workflow",
+      "label": "v2:Picking grid obliges a specific, non-neg",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "aad29e11ad32fdf27",
+      "kind": "workflow",
+      "label": "v0:The grid choice carries a documented har",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "ab496e80362a48cac",
+      "kind": "workflow",
+      "label": "v1:The grid choice carries a documented har",
+      "startedAt": 1785565980996,
+      "doneAt": 1785565980996,
+      "group": "Verify"
+    },
+    {
+      "id": "a0e5afa0d333001b4",
+      "kind": "workflow",
+      "label": "v2:The grid choice carries a documented har",
+      "startedAt": 1785565988977,
+      "doneAt": 1785566104115,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a859f723c62f15386",
+      "kind": "workflow",
+      "label": "v0:Grid navigation keys are mutually exclus",
+      "startedAt": 1785565987137,
+      "doneAt": 1785566112273,
+      "group": "Verify"
+    },
+    {
+      "id": "a987269deb19d45f2",
+      "kind": "workflow",
+      "label": "v1:Grid navigation keys are mutually exclus",
+      "startedAt": 1785565985426,
+      "doneAt": 1785566092351,
+      "group": "Verify"
+    },
+    {
+      "id": "a453c95fc47142f56",
+      "kind": "workflow",
+      "label": "v2:Grid navigation keys are mutually exclus",
+      "startedAt": 1785565990176,
+      "doneAt": 1785566093467,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ac8a30203d167fc33",
+      "kind": "workflow",
+      "label": "v0:Choosing the modal dialog pattern oblige",
+      "startedAt": 1785565988321,
+      "doneAt": 1785566105255,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a4695852faf520b0b",
+      "kind": "workflow",
+      "label": "v1:Choosing the modal dialog pattern oblige",
+      "startedAt": 1785565988512,
+      "doneAt": 1785566089709,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a95e1b722ad163da8",
+      "kind": "workflow",
+      "label": "v2:Choosing the modal dialog pattern oblige",
+      "startedAt": 1785565992923,
+      "doneAt": 1785566094199,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a165de609c6946379",
+      "kind": "workflow",
+      "label": "v0:The pattern mandates a two-sided focus-t",
+      "startedAt": 1785565986869,
+      "doneAt": 1785566108375,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a0899bf2a24b58ef2",
+      "kind": "workflow",
+      "label": "v1:The pattern mandates a two-sided focus-t",
+      "startedAt": 1785566090393,
+      "doneAt": 1785566091001,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a7c8929fc78c184ca",
+      "kind": "workflow",
+      "label": "v2:The pattern mandates a two-sided focus-t",
+      "startedAt": 1785566092430,
+      "doneAt": 1785566093374,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "aa58d68410ed8356f",
+      "kind": "workflow",
+      "label": "v0:Where initial focus lands is an explicit",
+      "startedAt": 1785566094828,
+      "doneAt": 1785566095557,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a2477a9dae2fd7b8e",
+      "kind": "workflow",
+      "label": "v1:Where initial focus lands is an explicit",
+      "startedAt": 1785566098910,
+      "doneAt": 1785566099633,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a520f52e50f539dc0",
+      "kind": "workflow",
+      "label": "v2:Where initial focus lands is an explicit",
+      "startedAt": 1785566098457,
+      "doneAt": 1785566099079,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a5487bb00a23b215a",
+      "kind": "workflow",
+      "label": "v0:aria-modal=\"true\" is not a free annotati",
+      "startedAt": 1785566096154,
+      "doneAt": 1785566096726,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a6f8f652112f2687f",
+      "kind": "workflow",
+      "label": "v1:aria-modal=\"true\" is not a free annotati",
+      "startedAt": 1785566099889,
+      "doneAt": 1785566101346,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ac2c9d91918ce0f90",
+      "kind": "workflow",
+      "label": "v2:aria-modal=\"true\" is not a free annotati",
+      "startedAt": 1785566101288,
+      "doneAt": 1785566101955,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a539c6d972f2f9f0c",
+      "kind": "workflow",
+      "label": "v0:Choosing the menu/menubar pattern commit",
+      "startedAt": 1785566099740,
+      "doneAt": 1785566102077,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a82a49491319a3cba",
+      "kind": "workflow",
+      "label": "v1:Choosing the menu/menubar pattern commit",
+      "startedAt": 1785566100838,
+      "doneAt": 1785566102408,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ad065cfc3248bca80",
+      "kind": "workflow",
+      "label": "v2:Choosing the menu/menubar pattern commit",
+      "startedAt": 1785566105447,
+      "doneAt": 1785566106816,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a2217836197d7238e",
+      "kind": "workflow",
+      "label": "v0:The menu pattern obliges a specific, non",
+      "startedAt": 1785566103054,
+      "doneAt": 1785566104424,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ae250823238500a63",
+      "kind": "workflow",
+      "label": "v1:The menu pattern obliges a specific, non",
+      "startedAt": 1785566103922,
+      "doneAt": 1785566104563,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "adc18a3298a834869",
+      "kind": "workflow",
+      "label": "v2:The menu pattern obliges a specific, non",
+      "startedAt": 1785566105215,
+      "doneAt": 1785566106151,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a6531ca63b5966067",
+      "kind": "workflow",
+      "label": "v0:Any menu item that opens a submenu must",
+      "startedAt": 1785566106349,
+      "doneAt": 1785566107309,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a13d5e42a452f2e0f",
+      "kind": "workflow",
+      "label": "v1:Any menu item that opens a submenu must",
+      "startedAt": 1785566105327,
+      "doneAt": 1785566106038,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a17048b14727b5bb7",
+      "kind": "workflow",
+      "label": "v2:Any menu item that opens a submenu must",
+      "startedAt": 1785566105633,
+      "doneAt": 1785566107101,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a9c3b7a0147bfe4bb",
+      "kind": "workflow",
+      "label": "v0:The APG defines a disclosure as exactly",
+      "startedAt": 1785566108379,
+      "doneAt": 1785566110210,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a4557f9269fdc6038",
+      "kind": "workflow",
+      "label": "v1:The APG defines a disclosure as exactly",
+      "startedAt": 1785566107259,
+      "doneAt": 1785566108345,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ac0bf3c21686c8805",
+      "kind": "workflow",
+      "label": "v2:The APG defines a disclosure as exactly",
+      "startedAt": 1785566109189,
+      "doneAt": 1785566110297,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a16a6df9aa9ce7711",
+      "kind": "workflow",
+      "label": "v0:The disclosure pattern obliges a specifi",
+      "startedAt": 1785566108897,
+      "doneAt": 1785566109967,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ab69612670cf82e4b",
+      "kind": "workflow",
+      "label": "v1:The disclosure pattern obliges a specifi",
+      "startedAt": 1785566109499,
+      "doneAt": 1785566110664,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a9c247875d0b9cb19",
+      "kind": "workflow",
+      "label": "v2:The disclosure pattern obliges a specifi",
+      "startedAt": 1785566110146,
+      "doneAt": 1785566111013,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ac64b36a65e2f638c",
+      "kind": "workflow",
+      "label": "v0:aria-expanded is mandatory on the disclo",
+      "startedAt": 1785566109139,
+      "doneAt": 1785566109747,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a9d2d015bb8448204",
+      "kind": "workflow",
+      "label": "v1:aria-expanded is mandatory on the disclo",
+      "startedAt": 1785566113430,
+      "doneAt": 1785566114001,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "aeb7fba9fac3ab6e1",
+      "kind": "workflow",
+      "label": "v2:aria-expanded is mandatory on the disclo",
+      "startedAt": 1785566110507,
+      "doneAt": 1785566111715,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a56c72bbfa4c3ddf0",
+      "kind": "workflow",
+      "label": "v0:WebAIM's 2026 automated scan of 1,000,00",
+      "startedAt": 1785566114823,
+      "doneAt": 1785566117195,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a1831e0e44313372c",
+      "kind": "workflow",
+      "label": "v1:WebAIM's 2026 automated scan of 1,000,00",
+      "startedAt": 1785566115589,
+      "doneAt": 1785566116628,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "af9090fcfec7530d1",
+      "kind": "workflow",
+      "label": "v2:WebAIM's 2026 automated scan of 1,000,00",
+      "startedAt": 1785566113396,
+      "doneAt": 1785566114466,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a9a4cffb0aea86bb1",
+      "kind": "workflow",
+      "label": "v0:The ARIA menu pattern (role=\"menu\") appe",
+      "startedAt": 1785566112868,
+      "doneAt": 1785566114078,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a4ee43e30e22b8b49",
+      "kind": "workflow",
+      "label": "v1:The ARIA menu pattern (role=\"menu\") appe",
+      "startedAt": 1785566112800,
+      "doneAt": 1785566113857,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "abaedf38b7786ab98",
+      "kind": "workflow",
+      "label": "v2:The ARIA menu pattern (role=\"menu\") appe",
+      "startedAt": 1785566112815,
+      "doneAt": 1785566114048,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ab1b8af729cb5e369",
+      "kind": "workflow",
+      "label": "v0:The APG states that ARIA roles, unlike n",
+      "startedAt": 1785566114683,
+      "doneAt": 1785566116263,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a0b5ae05c86fe339d",
+      "kind": "workflow",
+      "label": "v1:The APG states that ARIA roles, unlike n",
+      "startedAt": 1785566116228,
+      "doneAt": 1785566117173,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a4a307c41f99050bf",
+      "kind": "workflow",
+      "label": "v2:The APG states that ARIA roles, unlike n",
+      "startedAt": 1785566115686,
+      "doneAt": 1785566116715,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a75908e7cea1fd94e",
+      "kind": "workflow",
+      "label": "synthesize",
+      "startedAt": 1785566119663,
+      "doneAt": 1785566120873,
+      "failed": true,
+      "group": "Synthesize"
+    },
+    {
+      "id": "a6c550b3cb93efa1f",
+      "kind": "workflow",
+      "label": "scope",
+      "startedAt": 1785565980947,
+      "doneAt": 1785565980947,
+      "group": "Scope"
+    },
+    {
+      "id": "ac82049052e93dca7",
+      "kind": "workflow",
+      "label": "search:Apple primary — iPadOS layout, multitasking, hybrid input",
+      "startedAt": 1785565980954,
+      "doneAt": 1785565980954,
+      "group": "Search"
+    },
+    {
+      "id": "aa545736da04cce16",
+      "kind": "workflow",
+      "label": "search:Google primary — Material adaptive layouts, dp breakpoints, large-screen quality",
+      "startedAt": 1785565980954,
+      "doneAt": 1785565980954,
+      "group": "Search"
+    },
+    {
+      "id": "a937aebdd813ddceb",
+      "kind": "workflow",
+      "label": "search:Apple primary — macOS desktop app conventions",
+      "startedAt": 1785565980954,
+      "doneAt": 1785565980954,
+      "group": "Search"
+    },
+    {
+      "id": "adcb5cdfd59cbcb18",
+      "kind": "workflow",
+      "label": "search:Microsoft primary — Windows/Fluent desktop design and shortcut divergence",
+      "startedAt": 1785565980954,
+      "doneAt": 1785565980954,
+      "group": "Search"
+    },
+    {
+      "id": "ac5eb613752515b7f",
+      "kind": "workflow",
+      "label": "search:Electron/Tauri — the \"website in a window\" failure and native-feel checklist",
+      "startedAt": 1785565980954,
+      "doneAt": 1785565980954,
+      "group": "Search"
+    },
+    {
+      "id": "a3616722370e8359d",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980970,
+      "doneAt": 1785565980970,
+      "group": "Fetch"
+    },
+    {
+      "id": "ae6af2635b8d83dcf",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980971,
+      "doneAt": 1785565980971,
+      "group": "Fetch"
+    },
+    {
+      "id": "aabe4b039a02106a2",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980971,
+      "doneAt": 1785565980971,
+      "group": "Fetch"
+    },
+    {
+      "id": "a471ea5cd2a7df036",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980971,
+      "doneAt": 1785565980971,
+      "group": "Fetch"
+    },
+    {
+      "id": "a00be29a1d6602f5e",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980971,
+      "doneAt": 1785565980971,
+      "group": "Fetch"
+    },
+    {
+      "id": "aa621373c0edb9c99",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980971,
+      "doneAt": 1785565980971,
+      "group": "Fetch"
+    },
+    {
+      "id": "a54bf1904e330fabf",
+      "kind": "workflow",
+      "label": "fetch:developer.android.com",
+      "startedAt": 1785565980971,
+      "doneAt": 1785565980971,
+      "group": "Fetch"
+    },
+    {
+      "id": "ab85255ad27b70ab3",
+      "kind": "workflow",
+      "label": "fetch:m3.material.io",
+      "startedAt": 1785565980971,
+      "doneAt": 1785565980971,
+      "group": "Fetch"
+    },
+    {
+      "id": "a0498a81f30cb5e9d",
+      "kind": "workflow",
+      "label": "fetch:m3.material.io",
+      "startedAt": 1785565980971,
+      "doneAt": 1785565980971,
+      "group": "Fetch"
+    },
+    {
+      "id": "aa5cf1e251ab6989b",
+      "kind": "workflow",
+      "label": "fetch:developer.android.com",
+      "startedAt": 1785565980971,
+      "doneAt": 1785565980971,
+      "group": "Fetch"
+    },
+    {
+      "id": "a6f5ecd45a18f7f93",
+      "kind": "workflow",
+      "label": "fetch:m3.material.io",
+      "startedAt": 1785565980971,
+      "doneAt": 1785565980971,
+      "group": "Fetch"
+    },
+    {
+      "id": "a72d0d46704ee1f5c",
+      "kind": "workflow",
+      "label": "fetch:developer.android.com",
+      "startedAt": 1785565980971,
+      "doneAt": 1785565980971,
+      "group": "Fetch"
+    },
+    {
+      "id": "a30dc586a4249ea2b",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980971,
+      "doneAt": 1785565980971,
+      "group": "Fetch"
+    },
+    {
+      "id": "a299586150a6ed51e",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980971,
+      "doneAt": 1785565980971,
+      "group": "Fetch"
+    },
+    {
+      "id": "a579d4b639c8ff09a",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980971,
+      "doneAt": 1785565980971,
+      "group": "Fetch"
+    },
+    {
+      "id": "ae84ea13475d76a29",
+      "kind": "workflow",
+      "label": "fetch:developer.apple.com",
+      "startedAt": 1785565980971,
+      "doneAt": 1785565980971,
+      "group": "Fetch"
+    },
+    {
+      "id": "adffdcd8100cd97aa",
+      "kind": "workflow",
+      "label": "fetch:learn.microsoft.com",
+      "startedAt": 1785565980971,
+      "doneAt": 1785565980971,
+      "group": "Fetch"
+    },
+    {
+      "id": "a92295b1104bcdcc4",
+      "kind": "workflow",
+      "label": "fetch:learn.microsoft.com",
+      "startedAt": 1785565980971,
+      "doneAt": 1785565980971,
+      "group": "Fetch"
+    },
+    {
+      "id": "a191edbebc2838360",
+      "kind": "workflow",
+      "label": "fetch:learn.microsoft.com",
+      "startedAt": 1785565980971,
+      "doneAt": 1785565980971,
+      "group": "Fetch"
+    },
+    {
+      "id": "a20a045425237e584",
+      "kind": "workflow",
+      "label": "fetch:learn.microsoft.com",
+      "startedAt": 1785565980971,
+      "doneAt": 1785565980971,
+      "group": "Fetch"
+    },
+    {
+      "id": "aa1e4819431542316",
+      "kind": "workflow",
+      "label": "fetch:electronjs.org",
+      "startedAt": 1785565980971,
+      "doneAt": 1785565980971,
+      "group": "Fetch"
+    },
+    {
+      "id": "aac0cf826e6a1c875",
+      "kind": "workflow",
+      "label": "fetch:electronjs.org",
+      "startedAt": 1785565980972,
+      "doneAt": 1785565980972,
+      "group": "Fetch"
+    },
+    {
+      "id": "aa38eec04aaebff8d",
+      "kind": "workflow",
+      "label": "fetch:electronjs.org",
+      "startedAt": 1785565980972,
+      "doneAt": 1785565980972,
+      "group": "Fetch"
+    },
+    {
+      "id": "ae9b33819949f3f2d",
+      "kind": "workflow",
+      "label": "fetch:getlotus.app",
+      "startedAt": 1785565980972,
+      "doneAt": 1785565980972,
+      "group": "Fetch"
+    },
+    {
+      "id": "a2fac2a462b18d67b",
+      "kind": "workflow",
+      "label": "fetch:v2.tauri.app",
+      "startedAt": 1785565980972,
+      "doneAt": 1785565980972,
+      "group": "Fetch"
+    },
+    {
+      "id": "a2312485d965e89b7",
+      "kind": "workflow",
+      "label": "v0:Apple's iPadOS HIG requires apps to adap",
+      "startedAt": 1785565980998,
+      "doneAt": 1785565980998,
+      "group": "Verify"
+    },
+    {
+      "id": "a5b0cc2084079fb50",
+      "kind": "workflow",
+      "label": "v1:Apple's iPadOS HIG requires apps to adap",
+      "startedAt": 1785565980998,
+      "doneAt": 1785565980998,
+      "group": "Verify"
+    },
+    {
+      "id": "aa78f46b98dfe21b0",
+      "kind": "workflow",
+      "label": "v2:Apple's iPadOS HIG requires apps to adap",
+      "startedAt": 1785565980998,
+      "doneAt": 1785565980998,
+      "group": "Verify"
+    },
+    {
+      "id": "adfd87240f30397ba",
+      "kind": "workflow",
+      "label": "v0:Apple states that iPad users combine mul",
+      "startedAt": 1785565980998,
+      "doneAt": 1785565980998,
+      "group": "Verify"
+    },
+    {
+      "id": "adbda49e6245b18d2",
+      "kind": "workflow",
+      "label": "v1:Apple states that iPad users combine mul",
+      "startedAt": 1785565980998,
+      "doneAt": 1785565980998,
+      "group": "Verify"
+    },
+    {
+      "id": "a49bf2bf5ae2c1540",
+      "kind": "workflow",
+      "label": "v2:Apple states that iPad users combine mul",
+      "startedAt": 1785565980998,
+      "doneAt": 1785565980998,
+      "group": "Verify"
+    },
+    {
+      "id": "ad38a3440ce89bdeb",
+      "kind": "workflow",
+      "label": "v0:Apple explicitly directs designers to su",
+      "startedAt": 1785565980998,
+      "doneAt": 1785565980998,
+      "group": "Verify"
+    },
+    {
+      "id": "a3748e568348987ae",
+      "kind": "workflow",
+      "label": "v1:Apple explicitly directs designers to su",
+      "startedAt": 1785565980998,
+      "doneAt": 1785565980998,
+      "group": "Verify"
+    },
+    {
+      "id": "a4412c8b0ebe0821b",
+      "kind": "workflow",
+      "label": "v2:Apple explicitly directs designers to su",
+      "startedAt": 1785565980998,
+      "doneAt": 1785565980998,
+      "group": "Verify"
+    },
+    {
+      "id": "a476870f09b3c5210",
+      "kind": "workflow",
+      "label": "v0:Apple's stated large-display guidance fo",
+      "startedAt": 1785565980998,
+      "doneAt": 1785565980998,
+      "group": "Verify"
+    },
+    {
+      "id": "ab8b8ecfe00a53e9d",
+      "kind": "workflow",
+      "label": "v1:Apple's stated large-display guidance fo",
+      "startedAt": 1785565980998,
+      "doneAt": 1785565980998,
+      "group": "Verify"
+    },
+    {
+      "id": "ac79956e48d9587d1",
+      "kind": "workflow",
+      "label": "v2:Apple's stated large-display guidance fo",
+      "startedAt": 1785565980998,
+      "doneAt": 1785565980998,
+      "group": "Verify"
+    },
+    {
+      "id": "a6d5f5b9c2a6c7173",
+      "kind": "workflow",
+      "label": "v0:Apple's current iPadOS layout guidance f",
+      "startedAt": 1785565980998,
+      "doneAt": 1785565980998,
+      "group": "Verify"
+    },
+    {
+      "id": "aed4e6378afc5856b",
+      "kind": "workflow",
+      "label": "v1:Apple's current iPadOS layout guidance f",
+      "startedAt": 1785565980998,
+      "doneAt": 1785565980998,
+      "group": "Verify"
+    },
+    {
+      "id": "afec914904d891566",
+      "kind": "workflow",
+      "label": "v2:Apple's current iPadOS layout guidance f",
+      "startedAt": 1785565980998,
+      "doneAt": 1785565980998,
+      "group": "Verify"
+    },
+    {
+      "id": "af6cc423a5299e45b",
+      "kind": "workflow",
+      "label": "v0:Apple prescribes a specific collapse ord",
+      "startedAt": 1785565980998,
+      "doneAt": 1785565980998,
+      "group": "Verify"
+    },
+    {
+      "id": "a60a76da1ca852744",
+      "kind": "workflow",
+      "label": "v1:Apple prescribes a specific collapse ord",
+      "startedAt": 1785565980998,
+      "doneAt": 1785565980998,
+      "group": "Verify"
+    },
+    {
+      "id": "a8d83accc7804fa69",
+      "kind": "workflow",
+      "label": "v2:Apple prescribes a specific collapse ord",
+      "startedAt": 1785565980998,
+      "doneAt": 1785565980998,
+      "group": "Verify"
+    },
+    {
+      "id": "a8b7050f58e7487b7",
+      "kind": "workflow",
+      "label": "v0:Apple names the concrete iPad window siz",
+      "startedAt": 1785565987618,
+      "doneAt": 1785566090221,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a1cfa01884ba42b85",
+      "kind": "workflow",
+      "label": "v1:Apple names the concrete iPad window siz",
+      "startedAt": 1785565991044,
+      "doneAt": 1785566101209,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a49c901de3dcba0a5",
+      "kind": "workflow",
+      "label": "v2:Apple names the concrete iPad window siz",
+      "startedAt": 1785565993538,
+      "doneAt": 1785566105944,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a7a28bac4fd9ddd9b",
+      "kind": "workflow",
+      "label": "v0:Apple's size class system is binary (reg",
+      "startedAt": 1785565986756,
+      "doneAt": 1785566108673,
+      "group": "Verify"
+    },
+    {
+      "id": "a91a2834edcfb6f99",
+      "kind": "workflow",
+      "label": "v1:Apple's size class system is binary (reg",
+      "startedAt": 1785565994445,
+      "doneAt": 1785566099975,
+      "group": "Verify"
+    },
+    {
+      "id": "a8d1fa18e09693951",
+      "kind": "workflow",
+      "label": "v2:Apple's size class system is binary (reg",
+      "startedAt": 1785565989564,
+      "doneAt": 1785566096648,
+      "group": "Verify"
+    },
+    {
+      "id": "a3e0380f7fc3b0a81",
+      "kind": "workflow",
+      "label": "v0:Apple's HIG explicitly instructs designe",
+      "startedAt": 1785565987818,
+      "doneAt": 1785566105783,
+      "group": "Verify"
+    },
+    {
+      "id": "a31e54220f5fbe21f",
+      "kind": "workflow",
+      "label": "v1:Apple's HIG explicitly instructs designe",
+      "startedAt": 1785565994878,
+      "doneAt": 1785566104119,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ab9584590f7929a03",
+      "kind": "workflow",
+      "label": "v2:Apple's HIG explicitly instructs designe",
+      "startedAt": 1785566090998,
+      "doneAt": 1785566091459,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "abdc156b8f8553ac6",
+      "kind": "workflow",
+      "label": "v0:On iPadOS, Apple's split view supports e",
+      "startedAt": 1785566092197,
+      "doneAt": 1785566093742,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a75adf403af8d2ed8",
+      "kind": "workflow",
+      "label": "v1:On iPadOS, Apple's split view supports e",
+      "startedAt": 1785566095491,
+      "doneAt": 1785566096308,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a6e409979121e0f62",
+      "kind": "workflow",
+      "label": "v2:On iPadOS, Apple's split view supports e",
+      "startedAt": 1785566098513,
+      "doneAt": 1785566099413,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ade162da39118e7d7",
+      "kind": "workflow",
+      "label": "v0:Apple requires iPadOS split-view layouts",
+      "startedAt": 1785566100453,
+      "doneAt": 1785566102283,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a4ac592e75c9be2eb",
+      "kind": "workflow",
+      "label": "v1:Apple requires iPadOS split-view layouts",
+      "startedAt": 1785566101837,
+      "doneAt": 1785566104229,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a5e57b49aa73b0787",
+      "kind": "workflow",
+      "label": "v2:Apple requires iPadOS split-view layouts",
+      "startedAt": 1785566103112,
+      "doneAt": 1785566105123,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ab0cb83be39a24a6d",
+      "kind": "workflow",
+      "label": "v0:Apple's iPadOS pointer system defines ex",
+      "startedAt": 1785566102256,
+      "doneAt": 1785566104025,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ab94094f79a89c955",
+      "kind": "workflow",
+      "label": "v1:Apple's iPadOS pointer system defines ex",
+      "startedAt": 1785566106259,
+      "doneAt": 1785566106882,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a82b972024b775235",
+      "kind": "workflow",
+      "label": "v2:Apple's iPadOS pointer system defines ex",
+      "startedAt": 1785566107375,
+      "doneAt": 1785566109123,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a11832336ff86797a",
+      "kind": "workflow",
+      "label": "v0:Apple publishes specific numeric hit-reg",
+      "startedAt": 1785566110557,
+      "doneAt": 1785566112067,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a63d2359ae9e7e486",
+      "kind": "workflow",
+      "label": "v1:Apple publishes specific numeric hit-reg",
+      "startedAt": 1785566108871,
+      "doneAt": 1785566109764,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a417a07db4affb3e4",
+      "kind": "workflow",
+      "label": "v2:Apple publishes specific numeric hit-reg",
+      "startedAt": 1785566108955,
+      "doneAt": 1785566109834,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ad70c3f9952b84635",
+      "kind": "workflow",
+      "label": "v0:Apple states that on iPad the pointing d",
+      "startedAt": 1785566108005,
+      "doneAt": 1785566109049,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "aa728fb3b02c013db",
+      "kind": "workflow",
+      "label": "v1:Apple states that on iPad the pointing d",
+      "startedAt": 1785566110231,
+      "doneAt": 1785566111078,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "afd59f4594890ff9e",
+      "kind": "workflow",
+      "label": "v2:Apple states that on iPad the pointing d",
+      "startedAt": 1785566110506,
+      "doneAt": 1785566112565,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ad1f3a9d9d86ad2d1",
+      "kind": "workflow",
+      "label": "v0:Apple requires apps under Stage Manager",
+      "startedAt": 1785566113859,
+      "doneAt": 1785566114755,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a8510cd945165ff71",
+      "kind": "workflow",
+      "label": "v1:Apple requires apps under Stage Manager",
+      "startedAt": 1785566114605,
+      "doneAt": 1785566115394,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "aa176010cbb87be74",
+      "kind": "workflow",
+      "label": "v2:Apple requires apps under Stage Manager",
+      "startedAt": 1785566112739,
+      "doneAt": 1785566113810,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a2b38e8943c2e5e92",
+      "kind": "workflow",
+      "label": "v0:Apple names the specific set of non-full",
+      "startedAt": 1785566112658,
+      "doneAt": 1785566114871,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a04bfcd3082fb9b55",
+      "kind": "workflow",
+      "label": "v1:Apple names the specific set of non-full",
+      "startedAt": 1785566111512,
+      "doneAt": 1785566112605,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "af66398cc435bfcde",
+      "kind": "workflow",
+      "label": "v2:Apple names the specific set of non-full",
+      "startedAt": 1785566113179,
+      "doneAt": 1785566113598,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a644f017e66b03a4b",
+      "kind": "workflow",
+      "label": "v0:Hybrid input on iPadOS requires the same",
+      "startedAt": 1785566114234,
+      "doneAt": 1785566115310,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ad0145067d82d6445",
+      "kind": "workflow",
+      "label": "v1:Hybrid input on iPadOS requires the same",
+      "startedAt": 1785566115864,
+      "doneAt": 1785566116993,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a1cd6811392b9990c",
+      "kind": "workflow",
+      "label": "v2:Hybrid input on iPadOS requires the same",
+      "startedAt": 1785566113674,
+      "doneAt": 1785566114279,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "afedf7563b1847f47",
+      "kind": "workflow",
+      "label": "v0:Apple states that on iPadOS, designers s",
+      "startedAt": 1785566118570,
+      "doneAt": 1785566119980,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a31869a2da69dcc2c",
+      "kind": "workflow",
+      "label": "v1:Apple states that on iPadOS, designers s",
+      "startedAt": 1785566115538,
+      "doneAt": 1785566116524,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a13ad9a9072cc3b16",
+      "kind": "workflow",
+      "label": "v2:Apple states that on iPadOS, designers s",
+      "startedAt": 1785566115171,
+      "doneAt": 1785566116476,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a2019999c9dcaca6f",
+      "kind": "workflow",
+      "label": "v0:Apple publishes a specific modifier-key",
+      "startedAt": 1785566117079,
+      "doneAt": 1785566118388,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "abf34d643e58a614a",
+      "kind": "workflow",
+      "label": "v1:Apple publishes a specific modifier-key",
+      "startedAt": 1785566118563,
+      "doneAt": 1785566119675,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a08d42c7ccbb6f385",
+      "kind": "workflow",
+      "label": "v2:Apple publishes a specific modifier-key",
+      "startedAt": 1785566117672,
+      "doneAt": 1785566119112,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a21133885a751545f",
+      "kind": "workflow",
+      "label": "v0:Apple treats a physical keyboard as an e",
+      "startedAt": 1785566116653,
+      "doneAt": 1785566117597,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "abcd871f396509648",
+      "kind": "workflow",
+      "label": "v1:Apple treats a physical keyboard as an e",
+      "startedAt": 1785566119769,
+      "doneAt": 1785566120777,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "accbe9c41eadaa07c",
+      "kind": "workflow",
+      "label": "v2:Apple treats a physical keyboard as an e",
+      "startedAt": 1785566117930,
+      "doneAt": 1785566118786,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "aa6e7fa6442f7d986",
+      "kind": "workflow",
+      "label": "v0:Android publishes five width window size",
+      "startedAt": 1785566119285,
+      "doneAt": 1785566120172,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a34d4561e0bef97e1",
+      "kind": "workflow",
+      "label": "v1:Android publishes five width window size",
+      "startedAt": 1785566119051,
+      "doneAt": 1785566119739,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "af0ab86364b73ac26",
+      "kind": "workflow",
+      "label": "v2:Android publishes five width window size",
+      "startedAt": 1785566119820,
+      "doneAt": 1785566120894,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a4937cd00db9e342b",
+      "kind": "workflow",
+      "label": "v0:A window size class describes the app's",
+      "startedAt": 1785566119531,
+      "doneAt": 1785566120163,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "afe2fc575654fa673",
+      "kind": "workflow",
+      "label": "v1:A window size class describes the app's",
+      "startedAt": 1785566121619,
+      "doneAt": 1785566122499,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a170b0235747df5ae",
+      "kind": "workflow",
+      "label": "v2:A window size class describes the app's",
+      "startedAt": 1785566121248,
+      "doneAt": 1785566121906,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a77d2d9017c7ac409",
+      "kind": "workflow",
+      "label": "v0:The window size class is dynamic and can",
+      "startedAt": 1785566120359,
+      "doneAt": 1785566120965,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a70c1d78453c89fe7",
+      "kind": "workflow",
+      "label": "v1:The window size class is dynamic and can",
+      "startedAt": 1785566121747,
+      "doneAt": 1785566122506,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a23786bc254545d8f",
+      "kind": "workflow",
+      "label": "v2:The window size class is dynamic and can",
+      "startedAt": 1785566121572,
+      "doneAt": 1785566122219,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "ae833538790ed544e",
+      "kind": "workflow",
+      "label": "v0:Size classes are intended for high-level",
+      "startedAt": 1785566122190,
+      "doneAt": 1785566122752,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a38534f707180bc4a",
+      "kind": "workflow",
+      "label": "v1:Size classes are intended for high-level",
+      "startedAt": 1785566122805,
+      "doneAt": 1785566123749,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "af1cb396afe644abe",
+      "kind": "workflow",
+      "label": "v2:Size classes are intended for high-level",
+      "startedAt": 1785566122451,
+      "doneAt": 1785566123659,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "abdbd32b59d2aac72",
+      "kind": "workflow",
+      "label": "v0:Material Design 3 has renamed \"window si",
+      "startedAt": 1785566121997,
+      "doneAt": 1785566122892,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a2eb28f8fbce15a48",
+      "kind": "workflow",
+      "label": "v1:Material Design 3 has renamed \"window si",
+      "startedAt": 1785566123031,
+      "doneAt": 1785566123900,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "a9629b31ce34bee04",
+      "kind": "workflow",
+      "label": "v2:Material Design 3 has renamed \"window si",
+      "startedAt": 1785566123729,
+      "doneAt": 1785566124192,
+      "failed": true,
+      "group": "Verify"
+    },
+    {
+      "id": "acd4bc39869d67e33",
+      "kind": "workflow",
+      "label": "synthesize",
+      "startedAt": 1785566125727,
+      "doneAt": 1785566126394,
+      "failed": true,
+      "group": "Synthesize"
+    }
+  ],
+  "output": null,
+  "children": null,
+  "linkScanOffset": 2078134,
+  "linkScanPath": "/Users/taha/.claude/projects/-Users-taha/c7a33960-1c96-4b0c-b15f-02a996414e54.jsonl",
+  "template": "bg",
+  "respawnFlags": [
+    "--allowed-tools",
+    "mcp__computer-use__request_access",
+    "--allowed-tools",
+    "mcp__computer-use__screenshot",
+    "--allowed-tools",
+    "mcp__computer-use__zoom",
+    "--allowed-tools",
+    "mcp__computer-use__left_click",
+    "--allowed-tools",
+    "mcp__computer-use__double_click",
+    "--allowed-tools",
+    "mcp__computer-use__triple_click",
+    "--allowed-tools",
+    "mcp__computer-use__right_click",
+    "--allowed-tools",
+    "mcp__computer-use__middle_click",
+    "--allowed-tools",
+    "mcp__computer-use__type",
+    "--allowed-tools",
+    "mcp__computer-use__key",
+    "--allowed-tools",
+    "mcp__computer-use__scroll",
+    "--allowed-tools",
+    "mcp__computer-use__left_click_drag",
+    "--allowed-tools",
+    "mcp__computer-use__mouse_move",
+    "--allowed-tools",
+    "mcp__computer-use__open_application",
+    "--allowed-tools",
+    "mcp__computer-use__switch_display",
+    "--allowed-tools",
+    "mcp__computer-use__list_granted_applications",
+    "--allowed-tools",
+    "mcp__computer-use__read_clipboard",
+    "--allowed-tools",
+    "mcp__computer-use__write_clipboard",
+    "--allowed-tools",
+    "mcp__computer-use__wait",
+    "--allowed-tools",
+    "mcp__computer-use__cursor_position",
+    "--allowed-tools",
+    "mcp__computer-use__hold_key",
+    "--allowed-tools",
+    "mcp__computer-use__left_mouse_down",
+    "--allowed-tools",
+    "mcp__computer-use__left_mouse_up",
+    "--allowed-tools",
+    "mcp__computer-use__computer_batch",
+    "--permission-mode",
+    "auto",
+    "--model",
+    "claude-opus-5[1m]"
+  ],
+  "bgIsolation": "none",
+  "providerEnv": {},
+  "interactiveLineage": true,
+  "intent": "run the workflows that did not finish so they git done",
+  "name": "Extract design system into universal plugin",
+  "nameSource": "auto",
+  "sessionId": "c7a33960-1c96-4b0c-b15f-02a996414e54",
+  "resumeSessionId": "c7a33960-1c96-4b0c-b15f-02a996414e54",
+  "daemonShort": "c7a33960",
+  "cwd": "/Users/taha",
+  "createdAt": "2026-08-01T06:32:53.990Z",
+  "updatedAt": "2026-08-01T06:35:28.246Z",
+  "firstTerminalAt": null,
+  "bridgeSessionId": "cse_01GxHnZ518Ck8A4gHi6Xi1Dp",
+  "bridgeOutboundOnly": false,
+  "backend": "daemon",
+  "needs": "login required — run /login · API Error: 403 The socket connection was closed unexpectedly. For more information, pass `verbose: true` in the second argument to fetch()"
+}

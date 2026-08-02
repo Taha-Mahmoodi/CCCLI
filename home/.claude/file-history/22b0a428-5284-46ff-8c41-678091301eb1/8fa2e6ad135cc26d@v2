@@ -1,0 +1,71 @@
+# Third Eye Kit — Envisioned v2
+
+**A wearable that lets a blind person feel the world in real time — instead of waiting to be told.**
+
+> **⚠️ Status & safety — read first.** This is an in-progress research and engineering project. **v1 is a tested prototype; v2 (described here) is a design and reference specification — a blueprint, not a finished or certified product.** The powered exoskeleton, hot-surface warning, and health features are novel and unproven, and must pass the staged safety validation in [SAFETY.md](SAFETY.md) before anyone relies on them. Nothing here is medical advice. **The white cane and the user's own hearing remain primary — this system augments them, it does not replace them.** See [SAFETY.md](SAFETY.md).
+
+**Mission — "They deserve more."** Blind travelers have been handed a pile of tools that don't work together and aren't safe on a real road. This is built for the capable, long-overlooked traveler.
+
+**North-star — "Feel, don't wait."** The world must reach the person through the *body*, by feel, instantly — never through a slow voice that arrives after the moment has passed.
+
+**Project lead & engineer:** Said Mohaddes Sadeqi — Hillsboro, Oregon, USA
+
+---
+
+## The one idea
+
+Almost everyone builds the "robot eyes" (camera + AI). Almost no one builds the **human input channel** — how the information actually gets *into* the person fast enough to act on. That input channel — a full-body vibration "buzz-language" plus a gently-steering exoskeleton — is this project's invention.
+
+## What it is
+
+One integrated wearable that:
+1. **Senses** with direct physical measurement (lasers/ToF, radar, ultrasonic, hand + foot sensors) — never guesswork.
+2. **Delivers** the world into the body instantly via full-body vibration + a gently-steering exoskeleton.
+3. **Assists** with AI that reads signs, names things, and helps with routes — but never becomes the eyes and never steers.
+
+Plus: scanning gloves (a "modern cane" for indoor/manual exploration), a hot/cold-surface warning, a health & emergency bracelet, live city navigation, and a training game.
+
+## Documents
+
+- 📄 **[Full dossier (Markdown)](docs/Third-Eye-Kit_Envisioned-v2.md)** — every subsystem, all the detail.
+- 📄 **[Full dossier (PDF)](docs/Third-Eye-Kit_Envisioned-v2.pdf)** — the same, print/share ready.
+- 🛡️ **[SAFETY.md](SAFETY.md)** — disclaimer, contraindications, the validation gate.
+- 🤝 **[CONTRIBUTING.md](CONTRIBUTING.md)** — repo layout and how to help.
+- 📚 **[references.md](references.md)** — the research sources.
+
+## Schematics
+
+![System architecture](schematics/01_architecture.svg)
+
+![Electronics & bus wiring](schematics/02_electronics_wiring.svg)
+
+![Exoskeleton state logic](schematics/03_exo_state_machine.svg)
+
+![Haptic body map](schematics/04_haptic_body_map.svg)
+
+## Founding design rules
+
+1. Life-critical sensing & steering = **physics, not AI inference**.
+2. The **AI is an assistant only** — it never becomes the eyes and never steers.
+3. Exoskeleton: **warn → gently steer → never lock**.
+4. **Fail transparent** — on any fault or e-stop, the motors freewheel (never trap a limb).
+5. **Real-time hardware isolation** — the AI/cloud layer can never stall the safety layer.
+6. **Augment, not replace** the cane and the user's hearing.
+7. **Not a health monitor** — the health features are for emergencies, not vitals/diagnosis.
+
+## Status
+
+| Part | State |
+|------|-------|
+| v1 prototype | built & field-tested |
+| v2 design | frozen at reference-spec level (this repo) |
+| Haptic / sensing "essentials" build | ready to prototype (< ~$1,000) |
+| Powered exoskeleton | design-stage; must clear staged validation before human use |
+
+## License
+
+Code: [MIT](LICENSE). Documentation & figures: CC-BY-4.0. See [LICENSE](LICENSE).
+
+---
+
+*Built on the principle that blind travelers deserve to feel the world in real time, not wait to be told about it. This is a research and design project; its powered and health features must pass staged safety validation before anyone relies on them.*

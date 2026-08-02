@@ -1,0 +1,312 @@
+# BRIEF — Said Mohaddes Sadeqi · sadeqi.me
+
+Loop 1 output. The single source every later loop reads. Claims bind to
+`EVIDENCE.md` under `§5`.
+
+Run date: 2026-07-26 · Conductor: Opus (top tier, per `§24`)
+
+---
+
+## 1. Interview record — verbatim (Loop 1a)
+
+Recorded as spoken, spelling untouched. This is the only voice sample the run has;
+Loop 3 writes against these sentences (`BRAND.md` § verbal identity).
+
+**Q: What should someone feel in the first three seconds, before they read a word?**
+
+> "they should feel they have entered a world that vison is not requierd one 100%,
+> we have other senses and body parts, it is ok if eyes are not at 100%"
+
+**Q: Someone lands with their eyes closed. What reaches them first?**
+
+> "a voice tha says something like welcome, you are not alone."
+
+**Q: Who is the person you're saying "you are not alone" to?**
+
+> "a person with impeared vision,"
+
+**Q: What happens next for that person — who is it really for?**
+
+> "other parts are the standard AAA accesablity and regular website, that voice is
+> for requreters to know who i am and what i stand for, and for other visualy impared
+> people if they land on my website so it can motivate them that they can also do big
+> things"
+
+**Q: If a recruiter sees only one thing you've made, what has to be it?**
+
+> "my active project taht im working on with CEAL team in columbia univercity named
+> the third eye world a acceceblity first social media that we are building for
+> visualy impared."
+
+**Q: What is yours inside it?**
+
+> "our partnership is not yet public but it will be soon we can change it than. it is
+> my idea my build all my disesions CEAL partner"
+
+**Q: What broke?**
+
+> "the whole design of our first bata was dependant on vision more than we liked, the
+> gustures were gneric and navigation was hard and requierd multiple gustures to do
+> some thing we after we got feed back from our testers we are now tring to improve
+> our design and all the problems we have."
+
+**Q: Someone recommends you in a room you're not in. What do they say?**
+
+> "intelegence, hard working, jack of all traieds master of non but ofthen beter than
+> master of one."
+
+**Practical set:**
+
+> 1. Heard role — "the founder and idea was mine."
+> 2. Uncorroborated claims — "we can just mention them for now we can add them later,
+>    i do not have them for now."
+> 3. Third Eye World status — "the close bata test is doen and the MVP is under active
+>    development."
+> 4. "AAA Literal. lets do a multypage but with out blog."
+> 5. Domain/deploy — "yes i own that domain and it will be deployed on my own VPS."
+> 6. Do-nots — "no be free but i like the green colors of the rivers."
+> 7. Cyborg Tech figures — "those are real and not gnerated"
+> 8. Photo — supplied to `inbox/`
+> 9. Projects — "all of them get a page, but leave the gneric repos out. you can also
+>    add the repos im a contributor at."
+
+### Standing constraints from 1a
+
+- **Columbia / CEAL is NOT public** → must not be named anywhere on the site (`§21`).
+  A slot is reserved; it becomes one commit when he says go.
+- "my idea my build all my disesions" = his own claim, proof rank 3. Attributed speech,
+  never stated as verified fact.
+- Do not print the "jack of all trades" proverb verbatim (`§11` cliché). Ship the
+  argument underneath it.
+- **AAA is literal WCAG AAA**, his explicit choice. 7:1 body contrast binds the palette.
+
+---
+
+## 2. Evidence summary
+
+Full ledger in `EVIDENCE.md`. The shape of it:
+
+| Rank | What | Status |
+|---|---|---|
+| 2 | TEKNOFEST Black Sea 2022, "Third Eye" wearable — glasses + vibrating shoes + GPS, ~$112, field-tested with blind users in Herat. **Best Presentation** award. Team captain, ABRT01. | Corroborated: 2 news outlets, official finalist registry, proposal PDF with embedded 2022-05-17 metadata and real hardware/field photos |
+| 2 | Lost his sight/an eye during the war in Afghanistan | Independent news coverage (Anadolu Agency, Faktor.ba) |
+| 2 | `teww.org` and `heard.teww.org` are live and his | Direct fetch |
+| 3 | Third Eye Worldwide — founder/president | Self-published |
+| 3 | Heard — **founder, idea his**. Not the builder. | His own words + repo record |
+| 3 | Third Eye World — closed beta done, MVP in active development | His own words |
+| 4 | Third Eye Kit v2, Third Eye AI conversational layer | Repos' own READMEs call them specifications, not products |
+| 5 | Intel, Cyborg Tech (12 yrs / 20+ projects / 78% water reduction), St. Cloud State, interpreter credential, the book, four papers | His claim only. He confirms the Cyborg figures are his and real, not generated → ships as attributed speech |
+
+**Finding for Gate A (`BRAND.md` § proof ladder):** this is a **thin portfolio** by the
+ladder's own test — one rank-2 project, no rank-1. That is a real and common case, not
+a failed intake. The strategy below is built for it: lead with trajectory, decisions,
+and what broke, rather than with outcomes he does not yet have. Inflation is the one
+response that is banned outright, and it is also the one that gets detected.
+
+### Contradictions to fix on his existing properties
+
+1. `teww.org` publishes "70% global unemployment among blind people." His own
+   `heard-research` repo calls that figure a myth and says use 44% employed vs 77%.
+2. Draft HTML claims "Gold Medal, Barrier-Free Living." Every corroborated source,
+   including his own site, says **Best Presentation**. Site uses Best Presentation.
+
+---
+
+## 3. Competitive map and the gap
+
+Nine live peer portfolios charted in `PEERS.md` — blind developers and accessibility
+specialists, each fetched, not recalled.
+
+**Where they cluster:** Sage archetype 4/9. Light-default 7/9. Reductive monochrome +
+one accent, or a plain blog list, 7/9. System-ui/humanist sans near-universal. Skip
+links 8/9.
+
+**The empty quadrant, named precisely:** *nobody treats sound, or any non-visual
+channel, as a first-class entrance.* All nine — including sites run by blind people —
+are visual-first documents with a compliance-grade accessible path bolted alongside.
+Zero `<audio>` elements. Zero purposeful `aria-live`. One mention of "non-visual"
+across nine homepages.
+
+**Decision: occupy it.** It is the subject's own stated thesis, it is not closed by the
+recruiter audience, and it is not taken. Decline the careless versions — autoplay
+audio, decorative `aria-live`, novelty sound design — because the audience most likely
+to test this rigorously is screen-reader users, several of whom are the peers in that
+chart.
+
+Second gap, free: dark-default is open (1/9). It also happens to be where this
+palette hits AAA most easily.
+
+---
+
+## 4. Archetype
+
+**Primary — Outlaw.** He attacks the accepted way of doing it: that a website, a
+social network, an interface, presumes sight.
+
+> "they should feel they have entered a world that vison is not requierd one 100%"
+> — interview, Q1
+
+> "the whole design of our first bata was dependant on vision more than we liked" —
+> interview, Q7. He turned the attack on his own product and threw the beta out.
+
+**Shadow — Caregiver.** The reason for the argument is service to the people in it.
+
+> "a voice tha says something like welcome, you are not alone." — interview, Q2
+
+> "so it can motivate them that they can also do big things" — interview, Q4
+
+**The tension this produces:** an argument delivered as an embrace. The site's premise
+is confrontational — sight is not a requirement, and your defaults are wrong — while
+its address to the visitor is warm and direct. Neither impulse alone would produce
+this site. Outlaw alone gives a hostile terminal aesthetic that abandons the person it
+claims to serve. Caregiver alone gives the soft, apologetic, "inspiring" disability
+site this run bans outright.
+
+Deliberately **not** Sage or Hero: `BRAND.md` marks both unearned on a thin portfolio,
+and both would require outcomes he does not have yet.
+
+---
+
+## 5. Positioning
+
+> For **hiring teams building consumer or accessibility products**, deciding **whether
+> to trust someone with non-visual interaction design**, **Said Mohaddes Sadeqi** is
+> the **assistive-technology builder who designs for non-visual use from inside it**,
+> who **tests his own assumptions against blind users and throws out what fails**,
+> because **his first Third Eye World beta still leaned on vision, his testers said
+> so, and he scrapped it and is rebuilding — and at seventeen he built a $112 wearable
+> field-tested with blind users in Herat, corroborated by TEKNOFEST and two news
+> outlets.**
+
+Category: **existing**. "Assistive-technology builder" is understood without a
+glossary. `BRAND.md`'s three conditions for naming a new category fail on condition 2 —
+the evidence supports one project, not a whole category — and inventing one here would
+read as inflation over a thin ladder.
+
+### Anti-positioning
+
+| Line | This run |
+|---|---|
+| Not competing on | Years of experience, volume of shipped product, formal credentials, breadth of stack |
+| Not claiming | A shipped social network. Authorship of the Heard codebase. A verified Columbia, Intel, or university affiliation. Any metric without a source. |
+| Not for | Agencies buying commodity front-end hours. Anyone shopping for a compliance audit or an overlay widget. |
+| Not doing | Inspirational-disability framing ("despite his blindness", "overcame", "differently abled"). Accessibility as a badge row. Autoplay anything. Corporate-safe gradient-mesh. A logo wall. |
+
+The entry that hurts: **not claiming a shipped social network.** Third Eye World is the
+hero and it is not shipped. The site says so.
+
+---
+
+## 6. Verbal identity
+
+Extracted from his sentences. Never invented.
+
+**Lexicon:** vision is not required · not alone · other senses · body parts · not at
+100% · testers · gestures · navigation · closed beta · MVP · accessibility first ·
+big things · founder · the idea was mine
+
+**Banned words:** the standard slop list (passionate, leverage, seamless,
+cutting-edge, innovative, robust, delve, journey, elevate, unlock, game-changing,
+transformative) **plus the disability-copy genre**, which is the specific risk here:
+inspiring, inspirational, overcome, overcame, despite, differently abled, special
+needs, suffers from, confined to, empower, empowering, brave, courageous, "gives a
+voice to". Also banned: "jack of all trades" as printed text.
+
+**Sentence rhythm:** long, comma-spliced, run-on, unhedged. He does not stop to
+qualify. Copy inherits the plainness and the forward push, cleaned of the typos but
+not of the cadence.
+
+**Opening move:** straight to the claim, no preamble. Q1 opens "they should feel", Q7
+opens "the whole design of our first bata was dependant on vision". Every section
+intro and the hero use this move.
+
+**Failure talk:** names it unprompted, in detail, without reframing it as learning.
+Asked what broke, he gave the fullest answer of the interview.
+→ **Every case study carries a "what broke" beat, and it is blunt.**
+
+**Three verbatim sentences Loop 3 writes against:**
+1. "we have other senses and body parts, it is ok if eyes are not at 100%"
+2. "welcome, you are not alone"
+3. "the whole design of our first bata was dependant on vision more than we liked"
+
+---
+
+## 7. Audience and the decision
+
+**Primary: recruiters and hiring teams.** Decision: is this person worth an hour?
+They are early, and the reader knows it. What they are actually assessing is how he
+thinks and whether he tells the truth about his own work.
+
+**Secondary: a visually impaired visitor.** No decision to make; they are the proof.
+The site must be completely usable by them, and the fact that it is *is the argument
+made to audience one.* This is why the two audiences do not conflict here and why the
+site does not split: one artifact, read two ways.
+
+`§6` test for every section: does it help a recruiter decide, or demonstrate the
+thesis to a blind visitor? A section doing neither gets cut.
+
+---
+
+## 8. Narrative spine and project list
+
+**Spine:** a boy who lost his sight in a war built a device for people like him at
+seventeen, and has spent every year since arguing that the interface, not the person,
+is what needs fixing — including when the thing that needed fixing was his own.
+
+| # | Page | Rank | Treatment |
+|---|---|---|---|
+| 1 | **Third Eye World** | 3 | Hero. Active work. Closed beta done, MVP in development. The "what broke" case study — the beta leaned on vision, testers said so, rebuild underway. No version number, no "beta built". |
+| 2 | **Third Eye Kit (2022)** | 2 | The proof. Full case study, real hardware photos, real field test, Best Presentation. The only rank-2 project and therefore the credibility anchor. |
+| 3 | **Heard** | 3 | Credit line stated precisely: founder, the idea was his. Not builder. No implied code ownership. |
+| 4 | **Third Eye Kit v2** | 4 | Page labelled as what it is — a design specification. Four real SVG schematics exist and carry it. Never a headline. |
+| 5 | **Third Eye AI conversational layer** | 4 | Same treatment. Specification. |
+| — | 7 generic tool repos | — | Cut. His instruction, and their commit history predates the account. |
+| — | "repos I'm a contributor at" | ? | **UNRESOLVED — see Gate A question 1.** Zero found across all 8 PIIIX-org repos. |
+
+---
+
+## 9. Translation table
+
+Every row filled. Loop 2 works from this instead of guessing.
+
+| Strategy input | Design constraint it produces | Consumed by |
+|---|---|---|
+| **Primary: Outlaw** | Style shortlist: neo-brutalism, terminal, riso. Motion: abrupt, snapping, decisive. Type: monospace or oversized degraded display. | 2a, B1 |
+| **Shadow: Caregiver** | The collision: Outlaw structure in Caregiver materials. Harsh grid, warm surface. Gentle easing on a brutal layout. High legibility, comfortable measure, nothing sudden — inside a page that argues. **This is the run's `§3` answer and it is stated in `DIRECTION.md`.** | 2a, DIRECTION |
+| **Voice** | Long unhedged sentences, straight to the claim, no qualifier. "What broke" is a required beat. Banned: slop list + the entire disability-inspiration genre. | 3 |
+| **Audience: recruiters / blind visitors** | Sections must serve the hire decision or demonstrate the thesis. Depth: explain the interaction problem, assume nothing about a11y knowledge. | 2a, 3, `§6` |
+| **Decision: worth an hour?** | Structure leads with thinking and what broke, not with a metrics row he does not have. Order: thesis → the proof (2022) → the active rebuild → the rest. | 2a |
+| **Positioning** | The hero must land, in three seconds and without sight, that this person builds for non-visual use from inside it. Testable: play it eyes-closed. | 2a, B1 |
+| **Anti-positioning** | Banned: logo wall, badge row, metric hero, autoplay, gradient mesh, overlay-widget aesthetics, inspiration framing. | 2a, 2b, 4 |
+| **Proof ladder** | Order and depth fixed in §8 above. Rank 4 pages are labelled specifications. | 3 |
+| **Competitive gap** | **Occupy:** sound as a first-class entrance, offered not fired. **Occupy:** dark default (1/9 peers). Decline: novelty audio, decorative `aria-live`. | 2a |
+| **Brand color (`§8`)** | Sampled from a photograph of the **Hari Rud at Herat**, his home river — the "green colors of the rivers" he named. Dominant cluster `#9FB4AD`, average `#6C8474`. A pale mineral river-green, not an eco-green, because that is what that river actually is. | 2a |
+
+### Palette — literal AAA, both modes, verified
+
+| Token | Dark | on `#0B0F0D` | Light | on `#F4F2EC` |
+|---|---|---|---|---|
+| Brand / river | `#9FB4AD` | **8.83:1 AAA** | `#375349` | **7.52:1 AAA** |
+| Body text | `#F4F2EC` | **17.24:1 AAA** | `#0B0F0D` | **17.24:1 AAA** |
+| Dim text | `#C9CFCB` | **12.19:1 AAA** | — | — |
+| Lift / hover | `#B6C9C2` | **11.14:1 AAA** | `#2B443B` | **9.41:1 AAA** |
+
+Dark is default — it is the peer gap and it is where this hue clears 7:1 most easily.
+Both modes ship and `prefers-color-scheme` is honored, because low-vision preference
+splits both ways and picking one for them would contradict the entire thesis.
+
+Secondary accent available if 2a needs one: `#C99A56`, sampled from the golden-hour
+foliage in his own photograph (7.57:1 on ink, AAA).
+
+---
+
+## 10. Site shape and stack — settled at Gate A, not revisited
+
+- **Multi-page, no blog.** His choice; he does not intend to write.
+- **Stack: hand-authored HTML + CSS.** No framework, no generator. Five project pages
+  does not make hand-editing a bottleneck, and nothing is published without a rebuild.
+- **Routing:** `/` · `/work/third-eye-world` · `/work/third-eye-kit` · `/work/heard` ·
+  `/work/third-eye-kit-v2` · `/work/third-eye-ai` · `/about`
+- **Deploy: his own VPS, nginx** (`deploy/vps-nginx.md`). Domain `sadeqi.me`, owned.
+- **Repo: his GitHub account** `sadeqisaidmohaddes-star`. `§20` — his `gh` identity and
+  a repo-local `git config`, verified before first push and again before deploy.

@@ -1,0 +1,11 @@
+import type { Metadata } from "next";
+import { ModeratorConsole } from "@/components/ModeratorConsole";
+
+export const metadata: Metadata = {
+  title: "Moderation queue · Third Eye World",
+  robots: { index: false, follow: false },
+};
+
+export default function ModeratePage() {
+  return <ModeratorConsole />;
+}

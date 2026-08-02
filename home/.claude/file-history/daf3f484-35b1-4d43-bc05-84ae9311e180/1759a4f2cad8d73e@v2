@@ -1,0 +1,90 @@
+# Yildizim
+
+Closed-source, closed-source 3D galaxy visualization and gamification layer
+for knowledge bases. Ships as the differentiator on PIIIX's *hosted*
+version of [Chapters](https://github.com/PIIIX-org/chapters) — an
+open-core relationship:
+
+- **Self-hosted Chapters** (open source, free) — a plain node-graph
+  visualization, in the spirit of Graphify.
+- **PIIIX-hosted Chapters** (paid) — same Chapters backend, plus Yildizim's
+  proprietary galaxy/gamification visualization on top.
+
+**Status: vision/research phase. No code.** This README is the working
+record of the vision as it's been described so far — nothing here is
+finalized, and the visual language especially is still being explored.
+
+## Core visual hierarchy
+
+| Chapters concept | Yildizim visual |
+|---|---|
+| Project | Galaxy |
+| Vault (a section of a project) | Star |
+| Note | Planet, orbiting its vault-star |
+| Sub-note / comment | Moon, orbiting its note-planet |
+
+**Size** of any body (star, planet, moon) is driven by two things together:
+how much information it holds, and how much it's actually being used.
+
+## Zoom levels
+
+- Zoomed in: individual planets and moons orbiting a star, visible in
+  detail.
+- Zoomed out: stars pull together into a single spinning galaxy.
+- Zoomed out further: many galaxies visible at once, chained together
+  wherever cross-project relationships exist.
+
+## Opening moment
+
+On open, the camera doesn't land on a static overview — it zooms straight
+into the single biggest galaxy in the graph, as an animated entry.
+
+## Decay & neglect
+
+An untouched note/star/galaxy doesn't just sit there — it dims, then
+fades, then eventually collapses into a cloud of dust. Recovering it back
+into a real galaxy/star again requires active work. Decay is a real,
+reversible mechanic tied to actual neglect, not a cosmetic dimming effect.
+
+## System activity as visuals
+
+- Data flowing between parts of the system = animated space shuttles.
+- An AI performing a search = a visible spaceship moving through the
+  scene.
+
+## Dual view modes (for companies/teams)
+
+1. **By project** — the default hierarchical galaxy view described above.
+2. **By user** — shows each team member's own knowledge base as its own
+   visual shape/size, even when their content isn't connected to the
+   shared knowledge base. Privacy-preserving by design: a teammate can see
+   that someone has a galaxy of a certain size and shape — visible
+   activity, visible scale — but never what's actually inside it. Visual
+   only, never content.
+
+## Gamification
+
+- Finishing/completing a project = "conquering a galaxy."
+- Keeping a project alive, updated, and versioned earns points.
+- Achievements, shareable to social media.
+- Explicit goal: keep users engaged and motivated to build, and push back
+  against procrastination and neglect — especially in a company/startup
+  context, where the by-user view creates social visibility into who's
+  actively building and who isn't.
+- Must support multiplayer for company/startup use — this isn't a
+  single-player mechanic bolted onto a solo tool.
+- **Reward system is still an open question** — not yet designed, to be
+  worked out together rather than guessed at.
+
+## Rendering
+
+Full 3D. Fly through, rotate, navigate freely — not a flat 2D "look up at
+the sky" view.
+
+## Design process note
+
+UI/UX has been called out as the single most important part of this
+project. The next step is real research — existing 3D knowledge-graph
+tools, gamification mechanics from products and games that do this well,
+rendering/technical approaches — rather than guessing at the details from
+scratch.

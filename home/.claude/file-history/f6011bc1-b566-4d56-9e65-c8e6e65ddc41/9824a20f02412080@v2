@@ -1,0 +1,73 @@
+/* ── NAV ───────────────────────────────── */
+/* Night glass bar: translucent over the page, gold accents. */
+nav.topnav { position: sticky; top: 0; z-index: 100; background: color-mix(in oklab, var(--bg) 84%, transparent); backdrop-filter: saturate(140%) blur(14px); -webkit-backdrop-filter: saturate(140%) blur(14px); border-bottom: 1px solid var(--border); transition: background .25s, border-color .25s; }
+[data-theme="high-contrast"] nav.topnav { background: var(--bg); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.nav-inner { max-width: var(--maxw); margin: 0 auto; padding: 0 var(--space-8); height: var(--header-height); display: flex; align-items: center; justify-content: space-between; gap: var(--space-6); }
+.nav-logo { display: flex; align-items: center; cursor: pointer; flex-shrink: 0; background: none; border: none; padding: 0; color: inherit; }
+.nav-logo img,
+.nav-logo .brand-logo-svg { height: 28px; width: auto; display: block; }
+.nav-links { display: flex; align-items: center; gap: var(--space-6); list-style: none; }
+.nav-links > li { position: relative; }
+.nav-links a, .nav-links button.nav-link-btn { font-family: var(--font-body); font-size: .9rem; font-weight: 600; color: var(--fg-muted); padding: 6px 0; border-bottom: 2px solid transparent; transition: color .15s, border-color .15s; background: none; border-left: none; border-right: none; border-top: none; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.nav-links a:hover, .nav-links button.nav-link-btn:hover { color: var(--fg); }
+.nav-links a.active, .nav-links button.nav-link-btn.active { color: var(--brand); border-bottom-color: var(--brand); }
+.nav-dropdown { position: absolute; top: calc(100% + 6px); left: -16px; min-width: 220px; background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); padding: 8px; opacity: 0; visibility: hidden; transform: translateY(-4px); transition: opacity .15s, transform .15s, visibility .15s; z-index: 110; }
+.nav-links > li:hover .nav-dropdown, .nav-links > li:focus-within .nav-dropdown, .nav-dropdown.open { opacity: 1; visibility: visible; transform: translateY(0); }
+.nav-dropdown a { display: block; padding: 10px 12px; border-radius: var(--radius-md); border-bottom: none; color: var(--fg); font-weight: 500; font-size: .88rem; }
+.nav-dropdown a:hover { background: var(--brand-subtle); color: var(--fg); }
+
+.nav-controls { display: flex; align-items: center; gap: var(--space-3); flex-shrink: 0; }
+.icon-btn { width: 38px; height: 38px; border-radius: var(--radius-md); border: 1.5px solid var(--border); background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--fg-muted); font-size: 17px; transition: background .15s, border-color .15s, color .15s; }
+.icon-btn:hover { background: var(--brand-subtle); color: var(--fg); border-color: var(--border-strong); }
+.text-size-btns { display: flex; border: 1.5px solid var(--border); border-radius: var(--radius-full); overflow: hidden; }
+.ts-btn { padding: 5px 10px; background: transparent; border: none; cursor: pointer; font-family: var(--font-body); font-size: 11px; font-weight: 800; color: var(--fg-muted); border-right: 1px solid var(--border); transition: background .15s, color .15s; min-width: 30px; }
+.ts-btn:last-child { border-right: none; }
+.ts-btn.active { background: var(--brand); color: var(--brand-fg); }
+.nav-cta { background: var(--brand); color: var(--brand-fg); font-family: var(--font-body); font-size: .9rem; font-weight: 800; padding: 10px 22px; border-radius: var(--radius-full); border: none; cursor: pointer; transition: background .15s, transform .1s; white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.nav-cta:hover { background: var(--brand-hover); }
+.nav-cta:active { transform: scale(.97); }
+
+/* Skip link */
+.skip-link { position: absolute; left: 8px; width: 1px; height: 1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; background: var(--brand); color: var(--brand-fg); border-radius: var(--radius-md); z-index: 9999; font-family: var(--font-body); font-weight: 800; }
+.skip-link:focus-visible { top: 8px; width: auto; height: auto; padding: 8px 16px; overflow: visible; clip: auto; clip-path: none; color: var(--brand-fg); }
+
+/* ── PAGE SHELL ──────────────────────────────── */
+.page { display: none; }
+.page.active { display: block; animation: pageIn .3s ease-out; }
+@keyframes pageIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ── SUBNAV (tabs) ──────────────────────────────
+ * Secondary in-page tab bar used by /media, /documents, /about, and
+ * anywhere else <Subnav> is mounted. Stays pinned to the top of the
+ * viewport (under the global topnav) while the user scrolls through
+ * the active tab's content.
+ *
+ * Sticky positioning relies on:
+ *   - top: var(--header-height) so it tucks exactly below the topnav
+ *     even if the topnav height changes
+ *   - z-index: 90 (one below the topnav's 100) so it slides under the
+ *     topnav on scroll, never over it
+ *   - No `overflow: hidden` on any ancestor in the page tree (verified
+ *     in layout.tsx — main has no overflow set; only html/body have
+ *     overflow-x: hidden which doesn't kill sticky on Chromium)
+ *
+ * Visual treatment: same night glass as the topnav so the two bars
+ * read as one instrument when pinned together.
+ */
+.subnav {
+  position: sticky;
+  top: var(--header-height);
+  z-index: 90;
+  background: color-mix(in oklab, var(--bg) 84%, transparent);
+  backdrop-filter: saturate(140%) blur(10px);
+  -webkit-backdrop-filter: saturate(140%) blur(10px);
+  border-bottom: 1px solid var(--border);
+}
+[data-theme="high-contrast"] .subnav { background: var(--bg); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.subnav-inner { max-width: var(--maxw); margin: 0 auto; padding: 0 var(--space-8); display: flex; gap: var(--space-6); overflow-x: auto; }
+.subnav button { font-family: var(--font-body); font-size: .85rem; font-weight: 700; color: var(--fg-muted); padding: 14px 2px; background: none; border: none; border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; transition: color .15s, border-color .15s; letter-spacing: .01em; }
+.subnav button:hover { color: var(--fg); }
+.subnav button.active { color: var(--brand); border-bottom-color: var(--brand); }
+
+.subpage { display: none; }
+.subpage.active { display: block; }

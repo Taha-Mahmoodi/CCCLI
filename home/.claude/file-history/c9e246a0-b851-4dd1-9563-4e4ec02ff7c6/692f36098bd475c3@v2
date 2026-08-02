@@ -1,0 +1,49 @@
+# Third Eye World
+
+Web home for **Third Eye** — a mission-driven assistive-technology project: a wearable that
+lets a blind person feel the world in real time. *"Feel, don't wait." / "They deserve more."*
+
+This repository contains two surfaces in one Next.js app:
+
+- **Marketing site** (`/`) — the public "who we are" identity page for the mission.
+- **Third Eye Commons** (`/app/*`) — an auth-gated platform where blind travelers, families,
+  clinicians, engineers, and supporters sign up and take part.
+
+Accessibility is the product's identity: screen-reader-native, keyboard-first, WCAG 2.2 AA as
+the floor, verified in CI. Content is grounded in the real Third Eye Kit v2 dossier — no filler.
+
+## Stack
+
+Next.js 16 (App Router / RSC) · React 19 · TypeScript (strict) · Tailwind CSS 4 · Shadcn/ui ·
+Motion + GSAP · Auth.js (Credentials) · Prisma · PostgreSQL · Vitest · Playwright (+ axe) ·
+Docker.
+
+## Getting started
+
+```bash
+cp .env.example .env       # then fill AUTH_SECRET (openssl rand -base64 32) and DATABASE_URL
+npm install
+npm run dev                # http://localhost:3000
+```
+
+## Scripts
+
+| Script | Purpose |
+| --- | --- |
+| `npm run dev` | Dev server |
+| `npm run build` / `npm run start` | Production build / serve |
+| `npm run type-check` | `tsc --noEmit` |
+| `npm run lint` | ESLint |
+| `npm test` | Unit tests (Vitest) |
+| `npm run test:e2e` | End-to-end + a11y + visual (Playwright) |
+
+## Docs
+
+- `docs/superpowers/specs/2026-07-13-third-eye-world-design.md` — design spec
+- `docs/superpowers/plans/2026-07-13-third-eye-world.md` — implementation plan
+- `docs/instructions/` — the engineering-build instruction package
+
+## Contributing workflow
+
+Feature branches off `dev`; every PR is opened from the collaborator account and reviewed
+before merge. See `docs/instructions/github-workflow.md`.

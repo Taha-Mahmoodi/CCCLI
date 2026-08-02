@@ -1,0 +1,40 @@
+# apps/ios — Third Eye World (iOS)
+
+Native iOS app (spec §6). **Built Swift/SwiftUI, not cross-platform** — screen-
+reader fidelity is the product.
+
+## What's here and verified
+
+- **`ThirdEyeCore`** — the shared logic, a faithful Swift port of the web player
+  store: `RadioEngine` (record → radio → per-station queue → shuffle → the-
+  stream-ends), models, channel/shuffle helpers, transcript-correction, playback
+  speed, formatting.
+- **`ThirdEyeUI`** — the real SwiftUI screens driving `RadioEngine`:
+  `RadioScreen` (header, recorder, station bar, stream list, docked player),
+  `RadioViewModel` (`ObservableObject`), and `AudioService`. Every control is
+  labelled for VoiceOver, with **rotor custom actions** (Like/Play) — the
+  screen-reader route (§4); on-screen targets are ≥44 pt.
+
+**Both compile + verify with just the Swift toolchain — no Xcode, no simulator:**
+
+```bash
+cd apps/ios
+swift build                       # compiles ThirdEyeCore + ThirdEyeUI (SwiftUI + a11y)
+swift run ThirdEyeCoreChecks      # → "✓ 19 ThirdEyeCore checks passed"
+```
+
+The macOS SDK ships SwiftUI/Combine, so the screens, view model, and
+accessibility annotations **compile-verify** here (and in CI on a macOS runner).
+
+## Only the on-device runtime needs Xcode
+
+The iOS-specific audio + hardware route lives in `AudioService+iOS.swift` behind
+`#if os(iOS)` — real `AVAudioRecorder`/`AVAudioPlayer`, `AVAudioSession`
+(`.spokenAudio`; **no custom ducking** — VoiceOver ducks, §6.4), and
+`MPRemoteCommandCenter`/`MPNowPlayingInfoCenter` (the lock-screen/headphone
+route). It compiles under Xcode; on macOS the views run against `StubAudioService`.
+
+What genuinely needs a device/simulator: driving VoiceOver against the running
+app, the App Store target (Info.plist, mic/audio privacy strings, App Intents
+for Siri), and Review Guideline 2.5.9 sign-off. The screens, their accessibility,
+and the engine they drive are already built and verified.

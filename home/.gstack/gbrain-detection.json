@@ -1,0 +1,13 @@
+{
+  "gbrain_on_path": false,
+  "gbrain_version": null,
+  "gbrain_config_exists": false,
+  "gbrain_engine": null,
+  "gbrain_doctor_ok": false,
+  "gbrain_mcp_mode": "none",
+  "gstack_brain_sync_mode": "off",
+  "gstack_brain_git": false,
+  "gstack_artifacts_remote": "",
+  "gbrain_local_status": "no-cli",
+  "gbrain_pooler_mode": null
+}

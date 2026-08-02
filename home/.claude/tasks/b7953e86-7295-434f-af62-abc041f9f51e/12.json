@@ -1,0 +1,8 @@
+{
+  "id": "12",
+  "subject": "Visual breadcrumb trail",
+  "description": "Only exists as invisible BreadcrumbList schema. Design the visible component, honest about weak justification given flat routing — state when it does and doesn't earn its place.",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

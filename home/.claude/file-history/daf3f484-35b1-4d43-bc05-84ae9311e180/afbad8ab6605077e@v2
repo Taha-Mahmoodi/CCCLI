@@ -1,0 +1,82 @@
+import { describe, expect, it } from "vitest";
+import {
+  DECAY_DAYS,
+  decayCountdown,
+  earnedStage,
+  effectiveStage,
+  mockProjects,
+  remnantFactor,
+  type Project,
+} from "./data";
+
+const DAY = 86_400_000;
+const NOW = 1_800_000_000_000;
+
+function proj(over: Partial<Project>): Project {
+  return {
+    id: "t",
+    name: "Test",
+    noteCount: 100,
+    contributors: 3,
+    cadence: 20,
+    createdAt: NOW - 200 * DAY,
+    lastActivity: NOW,
+    milestoneMarked: false,
+    ...over,
+  };
+}
+
+describe("earnedStage", () => {
+  it("new empty project is a nebula", () => {
+    expect(
+      earnedStage(proj({ cadence: 0.2, contributors: 0, createdAt: NOW - 2 * DAY })),
+    ).toBe("nebula");
+  });
+  it("sustained multi-contributor activity reaches blue giant", () => {
+    expect(earnedStage(proj({ cadence: 30, contributors: 6 }))).toBe("blue-giant");
+  });
+  it("milestone always wins: black hole", () => {
+    expect(earnedStage(proj({ milestoneMarked: true }))).toBe("black-hole");
+  });
+});
+
+describe("decay", () => {
+  it("active project does not decay", () => {
+    const p = proj({ cadence: 30, contributors: 6 });
+    expect(effectiveStage(p, NOW)).toBe("blue-giant");
+  });
+  it("cools one step after its stage window", () => {
+    const p = proj({
+      cadence: 30,
+      contributors: 6,
+      lastActivity: NOW - (DECAY_DAYS["blue-giant"] + 1) * DAY,
+    });
+    expect(effectiveStage(p, NOW)).toBe("main-sequence");
+  });
+  it("countdown is visible and decreases toward the next step", () => {
+    const p = proj({
+      cadence: 30,
+      contributors: 6,
+      lastActivity: NOW - 2 * DAY,
+    });
+    const days = decayCountdown(p, NOW);
+    expect(days).not.toBeNull();
+    expect(days!).toBeCloseTo(DECAY_DAYS["blue-giant"] - 2, 5);
+  });
+  it("black hole never reverts, only dims toward a remnant", () => {
+    const p = proj({ milestoneMarked: true, lastActivity: NOW - 400 * DAY });
+    expect(effectiveStage(p, NOW)).toBe("black-hole");
+    expect(remnantFactor(p, NOW)).toBe(0.25);
+    expect(remnantFactor(proj({ milestoneMarked: true }), NOW)).toBe(1);
+  });
+});
+
+describe("mock universe", () => {
+  it("is deterministic for a given seed", () => {
+    expect(mockProjects(NOW, 7)).toEqual(mockProjects(NOW, 7));
+  });
+  it("covers every stage so the sky has visual variety", () => {
+    const stages = new Set(mockProjects(NOW).map((p) => effectiveStage(p, NOW)));
+    expect(stages.size).toBeGreaterThanOrEqual(4);
+  });
+});

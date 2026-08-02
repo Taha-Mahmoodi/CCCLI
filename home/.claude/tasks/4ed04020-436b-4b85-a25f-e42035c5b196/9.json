@@ -1,0 +1,9 @@
+{
+  "id": "9",
+  "subject": "Task 2: Scaffold tablet/ Capacitor + React + TS app",
+  "description": "Vite+React+TS+Tailwind v4+Capacitor 7 Android scaffold, plus tablet CI job.",
+  "activeForm": "Implementing Task 2 (tablet scaffold)",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

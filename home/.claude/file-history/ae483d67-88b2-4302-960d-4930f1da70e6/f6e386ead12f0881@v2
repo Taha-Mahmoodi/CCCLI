@@ -1,0 +1,207 @@
+package com.thirdeyeworld.android
+
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.Button
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.thirdeyeworld.core.ALL_CHANNELS
+import com.thirdeyeworld.core.PlayerStatus
+import com.thirdeyeworld.core.formatDuration
+
+@Composable
+fun RadioScreen(vm: RadioViewModel = viewModel()) {
+  Column(Modifier.fillMaxSize()) {
+    Text("Third Eye World", Modifier.padding(16.dp).semantics { heading() })
+    Column(
+      Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(16.dp),
+      verticalArrangement = Arrangement.spacedBy(20.dp),
+    ) {
+      Text("Your radio", Modifier.semantics { heading() })
+      RecorderCard(vm)
+      StationBar(vm)
+      StreamList(vm)
+    }
+    PlayerBar(vm)
+  }
+}
+
+@Composable
+private fun RecorderCard(vm: RadioViewModel) {
+  Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+    FilledIconButton(
+      onClick = { if (vm.isRecording) vm.stopRecording() else vm.startRecording() },
+      modifier = Modifier.size(80.dp).semantics {
+        contentDescription = if (vm.isRecording) "Stop recording" else "Record a voice memo"
+      },
+    ) {
+      Icon(if (vm.isRecording) Icons.Filled.Stop else Icons.Filled.Mic, contentDescription = null)
+    }
+    Text("New memos post to ${vm.stationName(if (vm.activeChannel == ALL_CHANNELS) "main" else vm.activeChannel)}")
+  }
+}
+
+@Composable
+private fun StationBar(vm: RadioViewModel) {
+  var newStation by remember { mutableStateOf("") }
+  Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Text("Stations", Modifier.semantics { heading() })
+    Row(
+      Modifier.horizontalScroll(rememberScrollState()),
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+      StationChip(vm, ALL_CHANNELS, "All")
+      vm.channels.forEach { StationChip(vm, it.id, it.name) }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      OutlinedTextField(
+        value = newStation,
+        onValueChange = { newStation = it },
+        label = { Text("New station name") },
+        modifier = Modifier.weight(1f),
+      )
+      Button(
+        onClick = { vm.createChannel(newStation); newStation = "" },
+        enabled = newStation.isNotBlank(),
+      ) { Text("Create") }
+    }
+  }
+}
+
+@Composable
+private fun StationChip(vm: RadioViewModel, id: String, name: String) {
+  val selectedNow = vm.activeChannel == id
+  OutlinedButton(
+    onClick = { vm.selectChannel(id) },
+    modifier = Modifier.semantics {
+      contentDescription = "Station $name"
+      selected = selectedNow
+    },
+  ) { Text(name) }
+}
+
+@Composable
+private fun StreamList(vm: RadioViewModel) {
+  Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Text("Your stream", Modifier.semantics { heading() })
+    if (vm.queue.isEmpty()) {
+      Text(
+        if (vm.activeChannel == ALL_CHANNELS) "Your radio is quiet. Record the first memo."
+        else "This station is quiet. Record a memo for it.",
+      )
+    } else {
+      vm.queue.forEachIndexed { index, memo ->
+        val isCurrent = index == vm.currentIndex && vm.status != PlayerStatus.ENDED
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(12.dp),
+          modifier = Modifier.fillMaxWidth().semantics {
+            // rotor / TalkBack custom actions — the screen-reader route (§4/§6.3)
+            customActions = listOf(
+              CustomAccessibilityAction("Play") { vm.playFrom(index); true },
+              CustomAccessibilityAction(if (memo.liked) "Unlike" else "Like") {
+                vm.toggleLike(memo.id); true
+              },
+            )
+          },
+        ) {
+          IconButton(
+            onClick = { vm.playFrom(index) },
+            modifier = Modifier.semantics { contentDescription = "Play memo ${index + 1}" },
+          ) { Icon(Icons.Filled.PlayArrow, contentDescription = null) }
+          Column(Modifier.weight(1f)) {
+            Text("Memo ${index + 1}")
+            Text(formatDuration(memo.durationMs))
+          }
+          IconButton(
+            onClick = { vm.toggleLike(memo.id) },
+            modifier = Modifier.semantics {
+              contentDescription = if (memo.liked) "Unlike memo ${index + 1}" else "Like memo ${index + 1}"
+            },
+          ) {
+            Icon(if (memo.liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, contentDescription = null)
+          }
+        }
+        val transcript = memo.displayTranscript
+        if (transcript.isNotEmpty()) Text(transcript, Modifier.padding(start = 56.dp))
+      }
+    }
+  }
+}
+
+@Composable
+private fun PlayerBar(vm: RadioViewModel) {
+  Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Text(nowPlaying(vm))
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+      IconButton(
+        onClick = { vm.previous() },
+        enabled = vm.queue.isNotEmpty() && vm.currentIndex > 0,
+        modifier = Modifier.semantics { contentDescription = "Previous memo" },
+      ) { Icon(Icons.Filled.SkipPrevious, contentDescription = null) }
+      FilledIconButton(
+        onClick = { vm.togglePlay() },
+        enabled = vm.queue.isNotEmpty(),
+        modifier = Modifier.semantics { contentDescription = if (vm.isPlaying) "Pause" else "Play" },
+      ) { Icon(if (vm.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = null) }
+      IconButton(
+        onClick = { vm.next() },
+        enabled = vm.queue.isNotEmpty() && vm.status != PlayerStatus.ENDED,
+        modifier = Modifier.semantics { contentDescription = "Skip to next memo" },
+      ) { Icon(Icons.Filled.SkipNext, contentDescription = null) }
+      val rate = if (vm.playbackRate == vm.playbackRate.toLong().toDouble()) vm.playbackRate.toLong().toString()
+      else vm.playbackRate.toString()
+      Button(
+        onClick = { vm.cyclePlaybackRate() },
+        enabled = vm.queue.isNotEmpty(),
+        modifier = Modifier.semantics { contentDescription = "Playback speed $rate times. Tap to change." },
+      ) { Text("${rate}×") }
+    }
+  }
+}
+
+private fun nowPlaying(vm: RadioViewModel): String = when {
+  vm.queue.isEmpty() -> "Nothing to play yet — record a memo."
+  vm.status == PlayerStatus.ENDED -> "End of the stream."
+  else -> "Memo ${vm.currentIndex + 1} of ${vm.queue.size}"
+}

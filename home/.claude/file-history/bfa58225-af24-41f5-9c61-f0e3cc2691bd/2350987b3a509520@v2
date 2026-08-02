@@ -1,0 +1,1236 @@
+# Tablet App 8b — Offline Queue, Check-in/out, Task List, Goal Progress
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Second half of PLAN.md Phase 8 (PLAN 8.3/8.4) — an offline queue (Capacitor Preferences-backed) that durably captures check-ins, check-outs, task completions, and location pings whenever a live request fails, flushes them on reconnect, plus the three UI screens a field rep actually uses day-to-day: check-in/out, task list, goal progress. First half (scaffold, auth, API client, background location + live ping posting — PLAN 8.1/8.2) is `2026-07-21-tablet-8a-scaffold-auth-location.md`, already merged to `main`.
+
+**Architecture:** A generic `QueuedAction` union (ping / check_in / check_out / complete_task), persisted as one JSON array under one `@capacitor/preferences` key, flushed strictly in FIFO order by a single `flushQueue()` function triggered on network reconnect (`@capacitor/network`) and a periodic fallback timer. Each of the app's write paths (ping posting, check-in, check-out, task completion) tries the live API call first and only enqueues on failure — the queue is a durability fallback, not the primary path, so the common (online) case behaves exactly like 8a already does.
+
+**Tech Stack:** Same as 8a — Capacitor 8.4.2 + React 19 + TypeScript + Tailwind v4, Vite, vitest. New dependency: `@capacitor/network` (official first-party Capacitor plugin, `^8.0.2`, verified compatible with `@capacitor/core@^8.4.2` via its own `peerDependencies`).
+
+## Global Constraints
+
+- **Why `@capacitor/network` instead of the DOM's `navigator.onLine`/`online`/`offline` events**: those browser APIs are well documented to be unreliable inside Android WebViews (fire once at startup, don't reliably update on real connectivity changes) — this is exactly why Capacitor ships a dedicated first-party plugin for it. `@capacitor/network`'s real API (verified by installing the package and reading `node_modules/@capacitor/network/dist/esm/definitions.d.ts` directly, not guessed): `Network.getStatus(): Promise<ConnectionStatus>`, `Network.addListener('networkStatusChange', (status: ConnectionStatus) => void): Promise<PluginListenerHandle>`, `ConnectionStatus { connected: boolean; connectionType: 'wifi' | 'cellular' | 'none' | 'unknown' }`. Import as `import { Network } from '@capacitor/network'`.
+- **Queue persistence**: one `@capacitor/preferences` key (`atlas_offline_queue`) holding a JSON-serialized `QueuedAction[]`, mirroring `preferencesStore.ts`'s existing style exactly (same plugin, same project already depends on it, no new storage mechanism invented).
+- **Every queued action carries a client-generated `id` (the idempotency key, `crypto.randomUUID()`)** — pings and check-ins already send this to the backend per 8a/tablet-backend-prereqs; check-outs and task-completions don't need a *server-side* idempotency key (neither endpoint has one — `check_out` is naturally idempotent via a 409 on replay, `complete_task` likewise via its not-OPEN guard), but the queue item itself still needs a unique `id` purely as the client-side handle used to remove it after a successful (or permanently-failed) send.
+- **FIFO order, one at a time, stop-on-first-transient-failure**: `flushQueue()` must never send item N+1 before item N has been confirmed sent (or permanently dropped) — this is the exact guarantee that makes "check out a visit you checked into" safe: both actions were queued in the order the rep tapped them, and strict FIFO processing preserves that order on replay. Do not parallelize the flush loop.
+- **Permanent-failure classification is `404` or `409` ONLY — nothing else.** A `404` means the target resource is genuinely gone (nothing to retry). A `409` on `check_out`/`complete_task` means the action already succeeded server-side on a prior attempt whose response was lost (e.g. the app crashed or lost connectivity between the server committing and the response arriving) — safe to treat as done and discard. **Every other failure — including `401`/`403` (not authenticated yet, or token expired with no valid refresh token — the rep just hasn't logged back in, this is NOT "delete their pending check-in") and any `5xx` or raw network error — must be treated as transient and retried later.** This distinction is the single most important correctness property in this plan: getting it wrong in the direction of "drop on 401" silently deletes a field rep's real check-in the first time the app is killed and relaunched before they log back in. Task 3's tests must include an explicit regression test for the 401 case, not just the two drop cases.
+- **Concurrency guard on the queue store**: `queueStore.ts`'s enqueue/read/remove operations must be serialized with an in-memory promise-chain lock (single-instance Capacitor WebView, no multi-tab — this is sufficient, not a distributed-systems problem) so a rep tapping "check in" while a background flush is mid-read-modify-write can't lose either write. Mark this with a `ponytail:` comment naming the ceiling (in-memory lock, fine for a single-WebView app).
+- **Check-out and task-completion queue items always carry a REAL, server-known ID** (`visitId`/`taskId`) — never a not-yet-synced client-generated one. This is why check-out is gated on the UI layer (Task 4): a rep cannot tap "check out" until the corresponding check-in has actually synced and returned a real `Visit.id` from the server. `docs/design.md`'s offline-queueing promise names "pings, check-ins, task updates" explicitly — it does not name check-outs as needing to survive being queued *before their own check-in has synced*, and building ID-reconciliation for that (queue a check-out referencing "the check-in with idempotency key X," resolve the real ID after that check-in flushes) is real complexity this v1 doesn't need. A rep who checked in offline sees a "syncing…" state and can check out once that clears — a materially simpler and still-correct design. Once the check-in has synced, checking out while offline again queues normally with zero special-casing, because by then a real `visitId` exists.
+- **Goal progress is read-only and online-only** — no queueing, no offline caching. Per `PLAN.md`'s own scope-cut rule ("cut tablet polish before offline-sync correctness" — a *lost visit* is worse than an *ugly screen*), the budget in this plan goes entirely to making writes (check-in, check-out, task completion, pings) durable; a goals screen that shows a clear "check your connection" error when offline is an acceptable, explicitly-scoped-down v1, not an oversight.
+- **Backend change (Task 1) does not add a new endpoint or change any request/response schema** — `POST /api/v1/visits/check-in`'s `zone_id` field stays optional and its meaning is unchanged when a caller supplies it explicitly. The only behavior change is what happens when `zone_id` is omitted: today that always leaves `geofence_verified=False`; after this change, the server checks whether the rep's own assigned zones (if any) contain the given coordinates and auto-populates `zone_id`/`geofence_verified` when one does, mirroring the exact query and point-in-polygon logic `app/violations/service.py::evaluate_ping` already uses for the identical "which of this rep's assigned zones are they physically inside" question — same pattern, not a new one. This closes a real, otherwise-permanent gap: the tablet app (the only real caller of this endpoint) never has a reason to know or supply a `zone_id`, so without this change `geofence_verified` — a named field in `design.md`'s data model — could never become `True` for any tablet-initiated check-in.
+- **No test-file scope creep**: same calibration as 8a and the dashboard's 7b — `npm run typecheck` + `npm run build` + the Gradle build are the primary per-task gates; targeted vitest tests only for genuinely new logic with real correctness stakes (`queueStore`'s persistence/locking, `flushQueue`'s ordering/failure-classification). The three new UI screens (`CheckInOutScreen`, `TaskListScreen`, `GoalProgressScreen`) get zero dedicated component tests, matching the dashboard's 7b precedent exactly (`TasksPage`/`GoalsPage`/`ViolationsPage` shipped with no new tests — "UI composition over already-tested API functions").
+- Backend: same conventions as every prior phase (service layer owns business rules, routers thin, models logic-free, `uv run pytest` + `uv run ruff check .` gates).
+
+---
+
+## File Structure
+
+```
+backend/
+  app/visits/service.py                # MODIFY: check_in auto-detects zone when zone_id is None
+  tests/visits/test_service.py          # MODIFY: 3 new tests
+  tests/visits/test_router.py           # MODIFY: 1 new test
+
+tablet/
+  package.json                         # MODIFY: add @capacitor/network
+  src/
+    offline/
+      types.ts                          # NEW: QueuedAction union
+      queueStore.ts                     # NEW: Preferences-backed queue, locked read-modify-write
+      queueStore.test.ts                # NEW
+      flushQueue.ts                     # NEW: FIFO send loop, permanent-vs-transient classification
+      flushQueue.test.ts                # NEW
+      useSyncQueue.ts                    # NEW: network-reconnect + periodic-fallback trigger
+    location/
+      locationStore.ts                   # NEW: tiny latest-GPS-fix singleton, replaces TrackingToggle's local ref
+      TrackingToggle.tsx                 # MODIFY: write/read through locationStore; enqueue a ping on post failure
+    api/
+      visits.ts                          # MODIFY: add listVisits
+    visits/
+      CheckInOutScreen.tsx                # NEW
+    tasks/
+      TaskListScreen.tsx                  # NEW
+    goals/
+      GoalProgressScreen.tsx              # NEW
+    Layout.tsx                            # NEW: shared nav bar (mirrors dashboard/src/Layout.tsx)
+    App.tsx                               # MODIFY: nav routes + mount useSyncQueue in Layout
+```
+
+**Interfaces summary:**
+- `src/offline/types.ts` — `QueuedAction = {id: string; type: 'ping'; queuedAt: string; payload: PingCreateInput} | {id: string; type: 'check_in'; queuedAt: string; payload: VisitCheckInInput} | {id: string; type: 'check_out'; queuedAt: string; payload: {visitId: string}} | {id: string; type: 'complete_task'; queuedAt: string; payload: {taskId: string}}`.
+- `src/offline/queueStore.ts` — `getQueue(): Promise<QueuedAction[]>`, `enqueue(action: QueuedAction): Promise<void>`, `removeFromQueue(id: string): Promise<void>`.
+- `src/offline/flushQueue.ts` — `flushQueue(): Promise<void>` (no return value — callers don't need per-call results, only that it was attempted; failures are silently retried next trigger).
+- `src/offline/useSyncQueue.ts` — `useSyncQueue(): void` — mount once, inside `Layout` (i.e. only while authenticated).
+- `src/location/locationStore.ts` — `setLatestLocation(location: GeoLocation | null): void`, `getLatestLocation(): GeoLocation | null`.
+- `src/api/visits.ts` gains `listVisits(limit = 50, offset = 0): Promise<Visit[]>`.
+
+---
+
+### Task 1: Backend — auto-detect zone at check-in when `zone_id` is omitted
+
+**Files:**
+- Modify: `backend/app/visits/service.py`
+- Modify: `backend/tests/visits/test_service.py`, `backend/tests/visits/test_router.py`
+
+- [ ] **Step 1: Read the current files in full**
+
+Read `backend/app/visits/service.py`, `backend/app/violations/service.py` (the `evaluate_ping` reference implementation for the auto-detect query shape), `backend/app/zones/models.py`, `backend/tests/visits/test_service.py`, and `backend/tests/visits/test_router.py` before writing anything.
+
+- [ ] **Step 2: Write the failing tests**
+
+Append to `backend/tests/visits/test_service.py` (reuse the file's existing `_make_rep`/`_make_zone`/`_assign`/`SQUARE_GEOJSON`/`ASYMMETRIC_GEOJSON` helpers — don't redefine them):
+
+```python
+async def test_check_in_without_zone_id_auto_detects_assigned_zone_when_inside_it(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+    zone = await _make_zone(db_session, tenant_id)
+    await _assign(db_session, tenant_id, zone.id, rep.id)
+
+    visit, _ = await check_in(
+        db_session, tenant_id=tenant_id, rep_id=rep.id, zone_id=None,
+        latitude=5.0, longitude=5.0, idempotency_key="checkin-auto-detect-inside",
+    )
+
+    assert visit.zone_id == zone.id
+    assert visit.geofence_verified is True
+
+
+async def test_check_in_auto_detect_catches_coordinate_swap(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+    zone = await _make_zone(db_session, tenant_id, boundary=ASYMMETRIC_GEOJSON)
+    await _assign(db_session, tenant_id, zone.id, rep.id)
+
+    # Same rationale as test_check_in_with_asymmetric_zone_catches_coordinate_swap:
+    # a symmetric square can't distinguish a (lat, lon) vs (lon, lat) bug in the
+    # new auto-detect helper; this rectangle can.
+    visit, _ = await check_in(
+        db_session, tenant_id=tenant_id, rep_id=rep.id, zone_id=None,
+        latitude=15.0, longitude=2.0, idempotency_key="checkin-auto-detect-asymmetric",
+    )
+
+    assert visit.zone_id == zone.id
+    assert visit.geofence_verified is True
+
+
+async def test_check_in_without_zone_id_does_not_auto_detect_when_outside_all_assigned_zones(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+    zone = await _make_zone(db_session, tenant_id)
+    await _assign(db_session, tenant_id, zone.id, rep.id)
+
+    visit, _ = await check_in(
+        db_session, tenant_id=tenant_id, rep_id=rep.id, zone_id=None,
+        latitude=99.0, longitude=99.0, idempotency_key="checkin-auto-detect-outside",
+    )
+
+    assert visit.zone_id is None
+    assert visit.geofence_verified is False
+```
+
+Append to `backend/tests/visits/test_router.py` (reuse the file's existing `_register`/`_me` helpers):
+
+```python
+async def test_check_in_via_router_auto_detects_assigned_zone(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr-autodetect@example.com", "manager")
+    rep_token = await _register(client, tenant_id, "rep-autodetect@example.com", "rep")
+    rep_id = (await _me(client, rep_token))["id"]
+
+    zone_response = await client.post(
+        "/api/v1/zones",
+        json={
+            "name": "Downtown",
+            "boundary": {"type": "Polygon", "coordinates": [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]]},
+        },
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+    zone_id = zone_response.json()["id"]
+    await client.post(
+        f"/api/v1/zones/{zone_id}/assignments",
+        json={"rep_id": rep_id},
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+
+    response = await client.post(
+        "/api/v1/visits/check-in",
+        json={"latitude": 5.0, "longitude": 5.0, "idempotency_key": "router-auto-detect"},
+        headers={"Authorization": f"Bearer {rep_token}"},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["zone_id"] == zone_id
+    assert body["geofence_verified"] is True
+```
+
+- [ ] **Step 3: Run tests to verify they fail**
+
+Run: `cd backend && uv run pytest tests/visits/ -v -k auto_detect`
+Expected: FAIL — all four new tests assert `zone_id`/`geofence_verified` values the current code can't produce (it never looks at assigned zones when `zone_id is None`).
+
+- [ ] **Step 4: Add the auto-detect helper and wire it into `check_in`**
+
+In `backend/app/visits/service.py`, change the import:
+
+```python
+from app.zones.models import Zone, ZoneAssignment
+```
+
+Add the helper (place it above `check_in`):
+
+```python
+async def _auto_detect_zone(
+    db: AsyncSession, rep_id: uuid.UUID, latitude: float, longitude: float
+) -> uuid.UUID | None:
+    # Same query shape as violations/service.py::evaluate_ping -- rep_id alone
+    # is sufficient scoping (it's a globally-unique UUID already resolved from
+    # an authenticated tenant-scoped user), matching that function's precedent
+    # of not adding a redundant explicit tenant_id filter on top of the
+    # ambient tenancy filter.
+    rows = (
+        await db.execute(
+            select(Zone, ZoneAssignment)
+            .join(ZoneAssignment, ZoneAssignment.zone_id == Zone.id)
+            .where(ZoneAssignment.rep_id == rep_id)
+            .order_by(ZoneAssignment.assigned_at.asc(), ZoneAssignment.id.asc())
+        )
+    ).all()
+    for zone, _assignment in rows:
+        # point_in_geojson_polygon requires (longitude, latitude) order.
+        if point_in_geojson_polygon((longitude, latitude), zone.boundary):
+            return zone.id
+    return None
+```
+
+Replace the `geofence_verified = False` / `if zone_id is not None:` block inside `check_in` with:
+
+```python
+    geofence_verified = False
+
+    if zone_id is not None:
+        zone = await get_zone(db, zone_id)
+        if zone is None or zone.tenant_id != tenant_id:
+            raise ZoneNotFoundError(zone_id)
+
+        assignment_result = await db.execute(
+            select(ZoneAssignment).where(
+                ZoneAssignment.zone_id == zone_id, ZoneAssignment.rep_id == rep_id
+            )
+        )
+        if assignment_result.scalar_one_or_none() is None:
+            raise NotAssignedToZoneError(zone_id, rep_id)
+
+        # point_in_geojson_polygon requires (longitude, latitude) order.
+        geofence_verified = point_in_geojson_polygon((longitude, latitude), zone.boundary)
+    else:
+        detected_zone_id = await _auto_detect_zone(db, rep_id, latitude, longitude)
+        if detected_zone_id is not None:
+            zone_id = detected_zone_id
+            geofence_verified = True
+```
+
+The rest of `check_in` (the `Visit(...)` construction, commit/IntegrityError handling) is unchanged — it already uses whatever `zone_id`/`geofence_verified` are bound to at that point, so reassigning `zone_id` inside the new `else` branch flows through correctly.
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `cd backend && uv run pytest tests/visits/ -v`
+Expected: all pass, including the 4 new tests and every pre-existing test unmodified (the two existing `zone_id=None` tests — `test_check_in_without_zone_id_is_remote_and_not_geofence_verified`, `test_check_in_with_external_reference` — both use reps with zero zone assignments, so `_auto_detect_zone` returns `None` for them and behavior is unchanged; verified by reading both tests before writing this step).
+
+- [ ] **Step 6: Run the full suite and ruff**
+
+Run: `cd backend && uv run pytest -q && uv run ruff check .`
+Expected: all tests pass (258/258 — 254 pre-existing + 4 new), ruff clean.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/
+git commit -m "feat(backend): auto-detect rep's assigned zone at check-in when zone_id is omitted
+
+Mirrors violations/service.py::evaluate_ping's existing point-in-polygon
+lookup against the rep's own zone assignments. The tablet app (the only
+real caller of check-in) never has a zone_id to supply, so without this,
+geofence_verified -- a named field in design.md's data model -- could
+never become true for any tablet-initiated check-in.
+
+Refs PLAN 8.3"
+```
+
+---
+
+### Task 2: Offline queue core — types, persisted store, location store
+
+**Files:**
+- Create: `tablet/src/offline/types.ts`, `tablet/src/offline/queueStore.ts`, `tablet/src/offline/queueStore.test.ts`, `tablet/src/location/locationStore.ts`
+
+- [ ] **Step 1: Write `src/offline/types.ts`**
+
+```ts
+// tablet/src/offline/types.ts
+import type { PingCreateInput } from '../api/pings'
+import type { VisitCheckInInput } from '../api/visits'
+
+export type QueuedAction =
+  | { id: string; type: 'ping'; queuedAt: string; payload: PingCreateInput }
+  | { id: string; type: 'check_in'; queuedAt: string; payload: VisitCheckInInput }
+  | { id: string; type: 'check_out'; queuedAt: string; payload: { visitId: string } }
+  | { id: string; type: 'complete_task'; queuedAt: string; payload: { taskId: string } }
+```
+
+- [ ] **Step 2: Write the failing tests for `queueStore`**
+
+```ts
+// tablet/src/offline/queueStore.test.ts
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+
+// Same Map-backed fake as api/client.test.ts -- @capacitor/preferences needs
+// a native bridge or window.localStorage, neither of which exists under
+// vitest's default node environment.
+const fakePreferences = new Map<string, string>()
+vi.mock('@capacitor/preferences', () => ({
+  Preferences: {
+    get: async ({ key }: { key: string }) => ({ value: fakePreferences.get(key) ?? null }),
+    set: async ({ key, value }: { key: string; value: string }) => {
+      fakePreferences.set(key, value)
+    },
+    remove: async ({ key }: { key: string }) => {
+      fakePreferences.delete(key)
+    },
+  },
+}))
+
+import { enqueue, getQueue, removeFromQueue } from './queueStore'
+
+describe('queueStore', () => {
+  beforeEach(() => {
+    fakePreferences.clear()
+  })
+
+  it('starts empty', async () => {
+    expect(await getQueue()).toEqual([])
+  })
+
+  it('enqueues and lists actions in insertion order', async () => {
+    await enqueue({
+      id: 'a', type: 'ping', queuedAt: 't1',
+      payload: { recorded_at: 't1', latitude: 1, longitude: 1, idempotency_key: 'a' },
+    })
+    await enqueue({ id: 'b', type: 'complete_task', queuedAt: 't2', payload: { taskId: 'task-1' } })
+
+    const queue = await getQueue()
+    expect(queue.map((a) => a.id)).toEqual(['a', 'b'])
+  })
+
+  it('removes an action by id, leaving the rest untouched', async () => {
+    await enqueue({ id: 'a', type: 'complete_task', queuedAt: 't1', payload: { taskId: 'task-1' } })
+    await enqueue({ id: 'b', type: 'complete_task', queuedAt: 't2', payload: { taskId: 'task-2' } })
+
+    await removeFromQueue('a')
+
+    const queue = await getQueue()
+    expect(queue.map((a) => a.id)).toEqual(['b'])
+  })
+
+  it('serializes concurrent enqueue calls so neither is lost', async () => {
+    await Promise.all([
+      enqueue({ id: 'x', type: 'complete_task', queuedAt: 't1', payload: { taskId: 'task-x' } }),
+      enqueue({ id: 'y', type: 'complete_task', queuedAt: 't2', payload: { taskId: 'task-y' } }),
+    ])
+
+    const queue = await getQueue()
+    expect(queue.map((a) => a.id).sort()).toEqual(['x', 'y'])
+  })
+})
+```
+
+- [ ] **Step 3: Run tests to verify they fail**
+
+Run: `cd tablet && npx vitest run src/offline/queueStore.test.ts`
+Expected: FAIL — module `./queueStore` doesn't exist yet.
+
+- [ ] **Step 4: Write `src/offline/queueStore.ts`**
+
+```ts
+// tablet/src/offline/queueStore.ts
+import { Preferences } from '@capacitor/preferences'
+import type { QueuedAction } from './types'
+
+const QUEUE_KEY = 'atlas_offline_queue'
+
+// ponytail: in-memory promise-chain lock. Capacitor apps are single-instance
+// (one WebView, no multi-tab), so this is sufficient to serialize
+// read-modify-write access against interleaved async calls in this process --
+// upgrade to a real cross-process lock only if this app ever runs in more
+// than one WebView context at once, which it doesn't.
+let lock: Promise<unknown> = Promise.resolve()
+
+function withLock<T>(fn: () => Promise<T>): Promise<T> {
+  const result = lock.then(fn, fn)
+  lock = result.catch(() => {})
+  return result
+}
+
+async function readQueue(): Promise<QueuedAction[]> {
+  const { value } = await Preferences.get({ key: QUEUE_KEY })
+  return value ? (JSON.parse(value) as QueuedAction[]) : []
+}
+
+async function writeQueue(queue: QueuedAction[]): Promise<void> {
+  await Preferences.set({ key: QUEUE_KEY, value: JSON.stringify(queue) })
+}
+
+export function getQueue(): Promise<QueuedAction[]> {
+  return withLock(readQueue)
+}
+
+export function enqueue(action: QueuedAction): Promise<void> {
+  return withLock(async () => {
+    const queue = await readQueue()
+    queue.push(action)
+    await writeQueue(queue)
+  })
+}
+
+export function removeFromQueue(id: string): Promise<void> {
+  return withLock(async () => {
+    const queue = await readQueue()
+    await writeQueue(queue.filter((a) => a.id !== id))
+  })
+}
+```
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `cd tablet && npx vitest run src/offline/queueStore.test.ts`
+
+- [ ] **Step 6: Write `src/location/locationStore.ts`**
+
+A trivial singleton — no test needed (a two-function getter/setter with no branches). This replaces `TrackingToggle.tsx`'s current local `latestLocationRef`, so `CheckInOutScreen` (Task 4) can read the same latest GPS fix without either screen owning a second, redundant location watcher (there can only be one `BackgroundGeolocation` watcher active at a time).
+
+```ts
+// tablet/src/location/locationStore.ts
+import type { GeoLocation } from './backgroundLocation'
+
+let latest: GeoLocation | null = null
+
+export function setLatestLocation(location: GeoLocation | null): void {
+  latest = location
+}
+
+export function getLatestLocation(): GeoLocation | null {
+  return latest
+}
+```
+
+- [ ] **Step 7: Verify**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/tablet
+npm run typecheck
+npm run build
+npx vitest run
+```
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add tablet/
+git commit -m "feat(tablet): offline queue core (Preferences-backed store) + shared location store
+
+Refs PLAN 8.3"
+```
+
+---
+
+### Task 3: Flush loop, network-reconnect sync trigger, wire ping posting through the queue
+
+**Files:**
+- Create: `tablet/src/offline/flushQueue.ts`, `tablet/src/offline/flushQueue.test.ts`, `tablet/src/offline/useSyncQueue.ts`
+- Modify: `tablet/src/location/TrackingToggle.tsx`, `tablet/package.json` (add `@capacitor/network`)
+
+**Interfaces:** per the plan header's Interfaces summary.
+
+- [ ] **Step 1: Install the plugin**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/tablet
+npm install @capacitor/network
+```
+
+- [ ] **Step 2: Write the failing tests for `flushQueue`**
+
+```ts
+// tablet/src/offline/flushQueue.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+vi.mock('../api/pings')
+vi.mock('../api/visits')
+vi.mock('../api/tasks')
+vi.mock('./queueStore')
+
+import { flushQueue } from './flushQueue'
+import { ApiError } from '../api/client'
+import { submitPing } from '../api/pings'
+import { checkIn, checkOut } from '../api/visits'
+import { completeTask } from '../api/tasks'
+import { getQueue, removeFromQueue } from './queueStore'
+
+const mockedSubmitPing = vi.mocked(submitPing)
+const mockedCheckIn = vi.mocked(checkIn)
+const mockedCheckOut = vi.mocked(checkOut)
+const mockedCompleteTask = vi.mocked(completeTask)
+const mockedGetQueue = vi.mocked(getQueue)
+const mockedRemoveFromQueue = vi.mocked(removeFromQueue)
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  mockedRemoveFromQueue.mockResolvedValue(undefined)
+})
+
+describe('flushQueue', () => {
+  it('sends each queued action in order and removes it on success', async () => {
+    mockedGetQueue.mockResolvedValue([
+      {
+        id: 'a', type: 'ping', queuedAt: 't',
+        payload: { recorded_at: 't', latitude: 1, longitude: 1, idempotency_key: 'a' },
+      },
+      { id: 'b', type: 'complete_task', queuedAt: 't', payload: { taskId: 'task-1' } },
+    ])
+    // @ts-expect-error -- test doubles don't need the real Ping/Task return shape
+    mockedSubmitPing.mockResolvedValue({})
+    // @ts-expect-error -- test doubles don't need the real Ping/Task return shape
+    mockedCompleteTask.mockResolvedValue({})
+
+    await flushQueue()
+
+    expect(mockedSubmitPing).toHaveBeenCalledTimes(1)
+    expect(mockedCompleteTask).toHaveBeenCalledWith('task-1')
+    expect(mockedRemoveFromQueue).toHaveBeenCalledWith('a')
+    expect(mockedRemoveFromQueue).toHaveBeenCalledWith('b')
+  })
+
+  it('stops at the first transient failure and does not attempt later items', async () => {
+    mockedGetQueue.mockResolvedValue([
+      { id: 'a', type: 'check_in', queuedAt: 't', payload: { idempotency_key: 'a', latitude: 1, longitude: 1 } },
+      { id: 'b', type: 'check_out', queuedAt: 't', payload: { visitId: 'visit-1' } },
+    ])
+    mockedCheckIn.mockRejectedValue(new TypeError('network request failed'))
+
+    await flushQueue()
+
+    expect(mockedCheckOut).not.toHaveBeenCalled()
+    expect(mockedRemoveFromQueue).not.toHaveBeenCalled()
+  })
+
+  it('drops an item on a 409 conflict (already applied server-side) without retrying', async () => {
+    mockedGetQueue.mockResolvedValue([
+      { id: 'a', type: 'check_out', queuedAt: 't', payload: { visitId: 'visit-1' } },
+    ])
+    mockedCheckOut.mockRejectedValue(new ApiError(409, 'visit already checked out'))
+
+    await flushQueue()
+
+    expect(mockedRemoveFromQueue).toHaveBeenCalledWith('a')
+  })
+
+  it('drops an item on a 404 (resource genuinely gone) without retrying', async () => {
+    mockedGetQueue.mockResolvedValue([
+      { id: 'a', type: 'complete_task', queuedAt: 't', payload: { taskId: 'ghost-task' } },
+    ])
+    mockedCompleteTask.mockRejectedValue(new ApiError(404, 'task not found'))
+
+    await flushQueue()
+
+    expect(mockedRemoveFromQueue).toHaveBeenCalledWith('a')
+  })
+
+  it('does NOT drop an item on a 401 -- not authenticated yet is not the same as done, never discard', async () => {
+    mockedGetQueue.mockResolvedValue([
+      {
+        id: 'a', type: 'ping', queuedAt: 't',
+        payload: { recorded_at: 't', latitude: 1, longitude: 1, idempotency_key: 'a' },
+      },
+    ])
+    mockedSubmitPing.mockRejectedValue(new ApiError(401, 'no refresh token available'))
+
+    await flushQueue()
+
+    expect(mockedRemoveFromQueue).not.toHaveBeenCalled()
+  })
+})
+```
+
+- [ ] **Step 3: Run tests to verify they fail**
+
+Run: `cd tablet && npx vitest run src/offline/flushQueue.test.ts`
+Expected: FAIL — module `./flushQueue` doesn't exist yet.
+
+- [ ] **Step 4: Write `src/offline/flushQueue.ts`**
+
+```ts
+// tablet/src/offline/flushQueue.ts
+import { ApiError } from '../api/client'
+import { submitPing } from '../api/pings'
+import { checkIn, checkOut } from '../api/visits'
+import { completeTask } from '../api/tasks'
+import { getQueue, removeFromQueue } from './queueStore'
+import type { QueuedAction } from './types'
+
+// 404 (resource genuinely gone) and 409 (a prior attempt already succeeded
+// server-side, e.g. the response was lost after the server committed) are
+// the only failures that mean "stop retrying, this is done or dead."
+// Everything else -- 401/403 (not authenticated *yet*, not "delete this"),
+// 5xx, raw network errors -- is transient and must be retried later. Getting
+// this wrong toward "drop on 401" silently deletes a rep's real check-in the
+// first time the app is relaunched before they log back in.
+function isPermanentFailure(err: unknown): boolean {
+  return err instanceof ApiError && (err.status === 404 || err.status === 409)
+}
+
+async function sendAction(action: QueuedAction): Promise<void> {
+  switch (action.type) {
+    case 'ping':
+      await submitPing(action.payload)
+      return
+    case 'check_in':
+      await checkIn(action.payload)
+      return
+    case 'check_out':
+      await checkOut(action.payload.visitId)
+      return
+    case 'complete_task':
+      await completeTask(action.payload.taskId)
+      return
+  }
+}
+
+let isFlushing = false
+
+export async function flushQueue(): Promise<void> {
+  if (isFlushing) return
+  isFlushing = true
+  try {
+    const queue = await getQueue()
+    for (const action of queue) {
+      try {
+        await sendAction(action)
+        await removeFromQueue(action.id)
+      } catch (err) {
+        if (isPermanentFailure(err)) {
+          await removeFromQueue(action.id)
+          continue
+        }
+        return // stop here -- preserve order, retry this and later items next time
+      }
+    }
+  } finally {
+    isFlushing = false
+  }
+}
+```
+
+- [ ] **Step 5: Run tests to verify they pass**
+
+Run: `cd tablet && npx vitest run src/offline/flushQueue.test.ts`
+
+- [ ] **Step 6: Write `src/offline/useSyncQueue.ts`**
+
+```ts
+// tablet/src/offline/useSyncQueue.ts
+import { useEffect } from 'react'
+import { Network } from '@capacitor/network'
+import { flushQueue } from './flushQueue'
+
+// Fallback for the (rare) case a queued item fails for a reason other than
+// being offline -- e.g. a transient 5xx while the device stayed connected
+// the whole time, so no reconnect event ever fires to retry it.
+const QUEUE_FLUSH_FALLBACK_INTERVAL_MS = 30_000
+
+export function useSyncQueue(): void {
+  useEffect(() => {
+    flushQueue()
+
+    let previousConnected: boolean | null = null
+    Network.getStatus().then((status) => {
+      previousConnected = status.connected
+    })
+
+    const listenerPromise = Network.addListener('networkStatusChange', (status) => {
+      if (status.connected && previousConnected === false) {
+        flushQueue()
+      }
+      previousConnected = status.connected
+    })
+
+    const intervalId = setInterval(() => {
+      flushQueue()
+    }, QUEUE_FLUSH_FALLBACK_INTERVAL_MS)
+
+    return () => {
+      listenerPromise.then((handle) => handle.remove())
+      clearInterval(intervalId)
+    }
+  }, [])
+}
+```
+
+(This hook is mounted in Task 5's `Layout` component, not here — `Layout` only renders once the rep is authenticated, so this deliberately doesn't attempt a flush before login.)
+
+- [ ] **Step 7: Wire ping posting through the queue in `TrackingToggle.tsx`**
+
+Read the current file first (`tablet/src/location/TrackingToggle.tsx`). Replace the local `latestLocationRef` with the shared `locationStore`, and enqueue on post failure instead of just showing an error:
+
+```tsx
+// tablet/src/location/TrackingToggle.tsx
+import { useRef, useState } from 'react'
+import { startWatching, stopWatching } from './backgroundLocation'
+import { usePingPoster } from './usePingPoster'
+import { submitPing } from '../api/pings'
+import { getLatestLocation, setLatestLocation } from './locationStore'
+import { enqueue } from '../offline/queueStore'
+
+const PING_POST_INTERVAL_MS = 30_000
+
+export function TrackingToggle() {
+  const [isTracking, setIsTracking] = useState(false)
+  const [lastPostedAt, setLastPostedAt] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const watcherIdRef = useRef<string | null>(null)
+
+  usePingPoster(
+    () => (isTracking ? getLatestLocation() : null),
+    PING_POST_INTERVAL_MS,
+    (location) => {
+      const input = {
+        recorded_at: new Date(location.time ?? Date.now()).toISOString(),
+        latitude: location.latitude,
+        longitude: location.longitude,
+        accuracy: location.accuracy,
+        idempotency_key: crypto.randomUUID(),
+      }
+      submitPing(input)
+        .then(() => setLastPostedAt(new Date().toLocaleTimeString()))
+        .catch(async () => {
+          await enqueue({ id: input.idempotency_key, type: 'ping', queuedAt: new Date().toISOString(), payload: input })
+          setLastPostedAt(`${new Date().toLocaleTimeString()} (queued -- offline)`)
+        })
+    },
+  )
+
+  async function handleToggle() {
+    setError(null)
+    try {
+      if (isTracking) {
+        if (watcherIdRef.current) await stopWatching(watcherIdRef.current)
+        watcherIdRef.current = null
+        setIsTracking(false)
+        return
+      }
+      const id = await startWatching((location) => {
+        setLatestLocation(location)
+      })
+      watcherIdRef.current = id
+      setIsTracking(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update location tracking')
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-8">
+      <h1 className="text-2xl font-semibold text-gray-900 mb-4">Atlas Field Force</h1>
+      <button
+        onClick={handleToggle}
+        className={`px-4 py-2 rounded text-white ${isTracking ? 'bg-red-600' : 'bg-blue-600'}`}
+      >
+        {isTracking ? 'Stop tracking' : 'Start tracking'}
+      </button>
+      {lastPostedAt && <p className="mt-4 text-sm text-gray-600">Last location sent: {lastPostedAt}</p>}
+      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+    </div>
+  )
+}
+```
+
+Note what stayed the same: the try/catch around both branches of `handleToggle` (8a's Task 4 fix for the unguarded-native-bridge-rejection bug) is untouched — don't regress it while editing this file.
+
+- [ ] **Step 8: Verify the web layer**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/tablet
+npm run typecheck
+npm run build
+npx vitest run
+```
+
+- [ ] **Step 9: Verify the native layer — `@capacitor/network`'s native code actually compiles in**
+
+`@capacitor-community/background-geolocation`'s Capacitor-8 compatibility was spiked and verified before 8a's plan was written (its own README only claims support up to v7). `@capacitor/network` is a first-party plugin with `"@capacitor/core": ">=8.0.0"` in its own `peerDependencies` (verified via `npm view @capacitor/network peerDependencies`), so the compatibility risk here is materially lower — but this is still the first time its native Android code gets compiled into this specific project, and per this project's own established standard (every task that adds a Capacitor plugin verifies the native build in the same task that introduces it, not a later one), don't defer that check to Task 5:
+
+```bash
+export JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+cd /Users/taha/Documents/atlas-fieldforce/tablet
+npx cap sync android
+cd android
+./gradlew clean assembleDebug
+ls -la app/build/outputs/apk/debug/app-debug.apk
+```
+
+Expected: `npx cap sync android` reports `Found 2 Capacitor plugins for android` (background-geolocation + network), `BUILD SUCCESSFUL`, a real `.apk`. If this fails, the failure is localized to this task's own change (the plugin), not conflated with Task 5's UI/routing work.
+
+- [ ] **Step 10: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add tablet/
+git commit -m "feat(tablet): flush queued actions on reconnect, queue failed ping posts
+
+FIFO send loop stops at the first transient failure to preserve queue
+order (a check-out must never be sent before its own check-in). Only
+404/409 are treated as permanent -- notably 401 is NOT, since 'not
+authenticated yet' must never silently discard a rep's pending action.
+
+Refs PLAN 8.3"
+```
+
+---
+
+### Task 4: Check-in/out screen
+
+**Files:**
+- Create: `tablet/src/visits/CheckInOutScreen.tsx`
+- Modify: `tablet/src/api/visits.ts` (add `listVisits`)
+
+- [ ] **Step 1: Add `listVisits` to `src/api/visits.ts`**
+
+Read the current file first. Add:
+
+```ts
+export function listVisits(limit = 50, offset = 0): Promise<Visit[]> {
+  return apiFetch<Visit[]>(`/api/v1/visits?limit=${limit}&offset=${offset}`)
+}
+```
+
+(`GET /api/v1/visits` already exists and is rep-scoped server-side — verified against `backend/app/visits/router.py`'s `list_visits_endpoint`/`list_visits` — no client-side filtering needed, same convention as `getTasks`/`getGoals`.)
+
+- [ ] **Step 2: Write `src/visits/CheckInOutScreen.tsx`**
+
+```tsx
+// tablet/src/visits/CheckInOutScreen.tsx
+import { useEffect, useState } from 'react'
+import { checkIn, checkOut, listVisits } from '../api/visits'
+import type { Visit } from '../api/types'
+import { enqueue, getQueue } from '../offline/queueStore'
+import { getLatestLocation } from '../location/locationStore'
+
+export function CheckInOutScreen() {
+  const [openVisit, setOpenVisit] = useState<Visit | null>(null)
+  const [pendingCheckIn, setPendingCheckIn] = useState(false)
+  const [pendingCheckOut, setPendingCheckOut] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  async function refresh() {
+    const queue = await getQueue()
+    setPendingCheckIn(queue.some((a) => a.type === 'check_in'))
+    setPendingCheckOut(queue.some((a) => a.type === 'check_out'))
+    try {
+      const visits = await listVisits(1, 0)
+      setOpenVisit(visits.find((v) => v.checked_out_at === null) ?? null)
+    } catch {
+      // Offline or request failed -- fall back to whatever the queue says.
+    }
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    refresh()
+  }, [])
+
+  // While a check-in/out is pending sync, poll so the screen picks up the
+  // real result once useSyncQueue's background flush confirms it -- that
+  // flush runs independently of whichever screen happens to be mounted.
+  useEffect(() => {
+    if (!pendingCheckIn && !pendingCheckOut) return
+    const id = setInterval(refresh, 5000)
+    return () => clearInterval(id)
+  }, [pendingCheckIn, pendingCheckOut])
+
+  async function handleCheckIn() {
+    setError(null)
+    const location = getLatestLocation()
+    if (!location) {
+      setError('No location available yet -- start tracking first.')
+      return
+    }
+    const idempotencyKey = crypto.randomUUID()
+    const input = { idempotency_key: idempotencyKey, latitude: location.latitude, longitude: location.longitude }
+    try {
+      const visit = await checkIn(input)
+      setOpenVisit(visit)
+    } catch {
+      await enqueue({ id: idempotencyKey, type: 'check_in', queuedAt: new Date().toISOString(), payload: input })
+      setPendingCheckIn(true)
+    }
+  }
+
+  async function handleCheckOut() {
+    if (!openVisit) return
+    setError(null)
+    try {
+      await checkOut(openVisit.id)
+      setOpenVisit(null) // this visit is now closed -- next action is a fresh check-in, not another check-out
+    } catch {
+      await enqueue({
+        id: crypto.randomUUID(),
+        type: 'check_out',
+        queuedAt: new Date().toISOString(),
+        payload: { visitId: openVisit.id },
+      })
+      setPendingCheckOut(true)
+    }
+  }
+
+  if (loading) return <div className="p-8 text-gray-500">Loading…</div>
+
+  return (
+    <div className="p-8">
+      <h2 className="text-xl font-semibold text-gray-900 mb-4">Visit</h2>
+      {pendingCheckIn ? (
+        <p className="text-sm text-gray-600">Checked in -- syncing…</p>
+      ) : openVisit ? (
+        <button
+          onClick={handleCheckOut}
+          disabled={pendingCheckOut}
+          className="px-4 py-2 rounded text-white bg-red-600 disabled:opacity-50"
+        >
+          {pendingCheckOut ? 'Checking out -- syncing…' : 'Check out'}
+        </button>
+      ) : (
+        <button onClick={handleCheckIn} className="px-4 py-2 rounded text-white bg-blue-600">
+          Check in
+        </button>
+      )}
+      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+    </div>
+  )
+}
+```
+
+Note the asymmetry between the two success paths: `handleCheckIn` does `setOpenVisit(visit)` (the newly-created visit IS the open one), but `handleCheckOut` does `setOpenVisit(null)` (the visit just closed, so there is no longer an open one — assigning the closed `Visit` object back into `openVisit` would leave the "Check out" button rendered and enabled for an already-closed visit, and a second tap would 409). Don't "simplify" this to `setOpenVisit(await checkOut(...))` — it looks more consistent but is wrong.
+
+- [ ] **Step 3: Verify**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/tablet
+npm run typecheck
+npm run build
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add tablet/
+git commit -m "feat(tablet): check-in/out screen, queues offline, gates check-out on a real synced visit id
+
+Refs PLAN 8.4"
+```
+
+---
+
+### Task 5: Task list screen, nav shell, wire everything into App.tsx
+
+**Files:**
+- Create: `tablet/src/tasks/TaskListScreen.tsx`, `tablet/src/goals/GoalProgressScreen.tsx`, `tablet/src/Layout.tsx`
+- Modify: `tablet/src/App.tsx`
+
+- [ ] **Step 1: Write `src/tasks/TaskListScreen.tsx`**
+
+```tsx
+// tablet/src/tasks/TaskListScreen.tsx
+import { useEffect, useState } from 'react'
+import { getTasks, completeTask } from '../api/tasks'
+import type { Task } from '../api/types'
+import { enqueue, getQueue } from '../offline/queueStore'
+
+export function TaskListScreen() {
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [pendingIds, setPendingIds] = useState<Set<string>>(new Set())
+  const [error, setError] = useState<string | null>(null)
+
+  async function refresh() {
+    try {
+      setTasks(await getTasks())
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load tasks')
+    }
+    const queue = await getQueue()
+    // Discriminated-union narrowing only works inside the ternary's true
+    // branch, not through .filter() with a plain boolean predicate -- this
+    // shape avoids an awkward `is Extract<...>` type predicate.
+    const pendingTaskIds = queue
+      .map((a) => (a.type === 'complete_task' ? a.payload.taskId : null))
+      .filter((id): id is string => id !== null)
+    setPendingIds(new Set(pendingTaskIds))
+  }
+
+  useEffect(() => {
+    refresh()
+  }, [])
+
+  async function handleComplete(task: Task) {
+    setError(null)
+    try {
+      const updated = await completeTask(task.id)
+      setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)))
+    } catch {
+      await enqueue({
+        id: crypto.randomUUID(),
+        type: 'complete_task',
+        queuedAt: new Date().toISOString(),
+        payload: { taskId: task.id },
+      })
+      setPendingIds((prev) => new Set(prev).add(task.id))
+    }
+  }
+
+  return (
+    <div className="p-8">
+      <h2 className="text-xl font-semibold text-gray-900 mb-4">Tasks</h2>
+      <ul className="space-y-2">
+        {tasks.map((task) => (
+          <li
+            key={task.id}
+            className="flex items-center justify-between bg-white p-3 rounded border border-gray-200"
+          >
+            <div>
+              <p className="text-gray-900">{task.title}</p>
+              <p className="text-xs text-gray-500">
+                {task.priority} · {task.status}
+                {task.due_date ? ` · due ${task.due_date}` : ''}
+              </p>
+            </div>
+            {task.status === 'OPEN' && (
+              <button
+                onClick={() => handleComplete(task)}
+                disabled={pendingIds.has(task.id)}
+                className="px-3 py-1 rounded text-white bg-green-600 disabled:opacity-50 text-sm"
+              >
+                {pendingIds.has(task.id) ? 'Syncing…' : 'Complete'}
+              </button>
+            )}
+          </li>
+        ))}
+        {tasks.length === 0 && <p className="text-sm text-gray-500">No tasks assigned.</p>}
+      </ul>
+      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+    </div>
+  )
+}
+```
+
+(A task queued as completing keeps showing its real `OPEN` status with a disabled "Syncing…" button rather than optimistically flipping to `COMPLETED` client-side — safer: if the queued completion later comes back permanently-failed [409, e.g. a manager already cancelled it], nothing needs to be un-done in the UI, because nothing was ever shown as done.)
+
+- [ ] **Step 2: Write `src/goals/GoalProgressScreen.tsx`**
+
+```tsx
+// tablet/src/goals/GoalProgressScreen.tsx
+import { useEffect, useState } from 'react'
+import { getGoals, getGoalProgress } from '../api/goals'
+import type { GoalProgress } from '../api/types'
+
+export function GoalProgressScreen() {
+  const [progress, setProgress] = useState<GoalProgress[]>([])
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const goals = await getGoals()
+        setProgress(await Promise.all(goals.map((g) => getGoalProgress(g.id))))
+      } catch {
+        setError('Failed to load goals -- check your connection.')
+      }
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  if (loading) return <div className="p-8 text-gray-500">Loading…</div>
+
+  return (
+    <div className="p-8">
+      <h2 className="text-xl font-semibold text-gray-900 mb-4">Goals</h2>
+      <ul className="space-y-2">
+        {progress.map((p) => (
+          <li key={p.goal_id} className="bg-white p-3 rounded border border-gray-200">
+            <p className="text-gray-900">{p.metric_type}</p>
+            <p className="text-sm text-gray-600">
+              {p.achieved} / {p.target}
+            </p>
+          </li>
+        ))}
+        {progress.length === 0 && !error && <p className="text-sm text-gray-500">No goals assigned.</p>}
+      </ul>
+      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+    </div>
+  )
+}
+```
+
+- [ ] **Step 3: Write `src/Layout.tsx`**
+
+Mirrors `dashboard/src/Layout.tsx` (read it first) — same nav-bar shape, tablet's own routes, and this is where `useSyncQueue()` is mounted (only renders once the rep is authenticated, since it's always used inside `ProtectedRoute`):
+
+```tsx
+// tablet/src/Layout.tsx
+import { NavLink, Outlet } from 'react-router-dom'
+import { useAuth } from './auth/AuthContext'
+import { useSyncQueue } from './offline/useSyncQueue'
+
+function navLinkClass({ isActive }: { isActive: boolean }): string {
+  return isActive ? 'text-blue-600 font-medium text-sm' : 'text-gray-600 hover:text-gray-900 text-sm'
+}
+
+export function Layout() {
+  const { user, logout } = useAuth()
+  useSyncQueue()
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <nav className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <span className="font-semibold text-gray-900">Atlas Field Force</span>
+          <NavLink to="/" end className={navLinkClass}>Tracking</NavLink>
+          <NavLink to="/visit" className={navLinkClass}>Visit</NavLink>
+          <NavLink to="/tasks" className={navLinkClass}>Tasks</NavLink>
+          <NavLink to="/goals" className={navLinkClass}>Goals</NavLink>
+        </div>
+        <div className="flex items-center gap-4">
+          <span className="text-sm text-gray-500">{user?.email}</span>
+          <button onClick={logout} className="text-sm text-gray-600 hover:text-gray-900">
+            Sign out
+          </button>
+        </div>
+      </nav>
+      <main>
+        <Outlet />
+      </main>
+    </div>
+  )
+}
+```
+
+- [ ] **Step 4: Wire everything into `src/App.tsx`**
+
+Read the current file first. Replace its contents:
+
+```tsx
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { AuthProvider } from './auth/AuthContext'
+import { LoginPage } from './auth/LoginPage'
+import { ProtectedRoute } from './auth/ProtectedRoute'
+import { Layout } from './Layout'
+import { TrackingToggle } from './location/TrackingToggle'
+import { CheckInOutScreen } from './visits/CheckInOutScreen'
+import { TaskListScreen } from './tasks/TaskListScreen'
+import { GoalProgressScreen } from './goals/GoalProgressScreen'
+
+function App() {
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            element={
+              <ProtectedRoute>
+                <Layout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/" element={<TrackingToggle />} />
+            <Route path="/visit" element={<CheckInOutScreen />} />
+            <Route path="/tasks" element={<TaskListScreen />} />
+            <Route path="/goals" element={<GoalProgressScreen />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  )
+}
+
+export default App
+```
+
+(Same nested-route shape as `dashboard/src/App.tsx` — `ProtectedRoute` is children-based, not `Outlet`-based, so wrapping `Layout` inside it and letting `Layout` itself render `<Outlet />` for the nested routes is the established, working pattern, verified by reading the dashboard's real current `App.tsx` before writing this step.)
+
+- [ ] **Step 5: Verify the web layer**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/tablet
+npm run typecheck
+npm run build
+npx vitest run
+```
+
+- [ ] **Step 6: Verify the native layer — a real APK still builds**
+
+```bash
+export JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+cd /Users/taha/Documents/atlas-fieldforce/tablet
+npx cap sync android
+cd android
+./gradlew clean assembleDebug
+ls -la app/build/outputs/apk/debug/app-debug.apk
+```
+
+Expected: `BUILD SUCCESSFUL`, a real non-trivially-sized `.apk` (this task adds no new native plugin — `@capacitor/network` was already verified compiling in Task 3 — this is confirming the new screens/routing didn't break the native build). Use `clean assembleDebug` specifically (not a bare `assembleDebug`) — 8a's Task 4 review found a stale-local-build-state trap where a non-clean build's reported size didn't reproduce fresh; `clean` is now this project's established standard for any APK-size/build claim.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add tablet/
+git commit -m "feat(tablet): task list, goal progress view, nav shell wiring everything together
+
+This completes PLAN 8.3/8.4 -- the tablet app now has all four rep-facing
+screens (tracking, check-in/out, tasks, goals) and durable offline
+queueing for every write path.
+
+Refs PLAN 8.3, PLAN 8.4"
+```
+
+---
+
+## After this plan — controller verification (not a task, not delegated)
+
+Same standard as 8a's end-of-plan check: after all 5 tasks are individually reviewed and merged to a feature branch, the controller runs the FULL pipeline one more time from a clean state:
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+uv run --directory backend pytest -q && uv run --directory backend ruff check backend
+cd tablet
+npm run typecheck && npm run build && npx vitest run
+export JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+npx cap sync android
+cd android && ./gradlew clean assembleDebug
+ls -la app/build/outputs/apk/debug/app-debug.apk
+```
+
+Additionally, since this phase's whole point is offline correctness and that can't be proven by a type-checker: write one small throwaway script (not committed) that exercises `flushQueue`'s ordering guarantee against a fake queue with a check-in immediately followed by a check-out for the same not-yet-real visit id, confirming the check-out attempt never fires before the check-in one succeeds — this is the single most important behavior in the whole plan and deserves a direct empirical check beyond what the mocked unit tests already assert, mirroring how 8a's reviewers went beyond trusting a reported build size and independently reproduced things by hand.
+
+Then update `PROGRESS.md` (mirroring the detail level of every prior phase's entry — the auto-detect-zone backend change, the 401-must-not-drop correctness property, the deliberate check-out-requires-synced-check-in scope decision, and the goals-are-online-only scope-cut, are all worth naming explicitly since each was a real decision point, not an obvious default), tick PLAN.md 8.3/8.4 (completing Phase 8 in full), a final whole-branch review, then merge. Per the standing "move on, don't stop until v1 is tested and deployable" instruction, continue immediately into Phase 9 (backend perf tests; the CI workflow item is already done — see the `tablet` CI job added on `main` ahead of this plan) and Phase 10 (deployability: Dockerfile/compose, README quickstart, the punch list of what needs real customer/infra input).

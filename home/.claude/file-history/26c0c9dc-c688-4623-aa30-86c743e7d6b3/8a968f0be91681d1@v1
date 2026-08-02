@@ -1,0 +1,209 @@
+# Loop 3 — Copy
+
+**Goal:** every string that will appear on the site, written in the customer's words,
+mapped to the message hierarchy, with every factual claim checked against
+`EVIDENCE.md`.
+
+**Input:** `BRIEF.md` (message hierarchy, objection ladder, VOC extract, voice),
+`EVIDENCE.md`, `DIRECTION.md` (so the copy fits the design that exists).
+
+**Output:** `COPY.md`.
+
+---
+
+## Why this comes before Build
+
+Design built around placeholder text breaks when real text arrives. A hero designed
+for six words gets a fourteen-word headline, a feature card designed for two lines
+gets five, and the fix is either worse copy or a redesign — and under deadline it is
+always worse copy.
+
+On a marketing site this matters more than anywhere else, because **the copy is the
+product.** A visitor does not experience the layout; they read a sentence and decide.
+Design serves that sentence.
+
+## The rule that governs this loop
+
+`§5`: **write in the customer's words, not the company's.** The VOC extract in
+`BRIEF.md` is not decoration. Open it, and use those phrases for problems, symptoms,
+and outcomes. The company register from `POSITIONING.md §11` governs tone; the
+customer lexicon governs nouns and verbs.
+
+The single most common failure: a hero line describing what the software *is*, in the
+vocabulary of the roadmap, to a visitor who came looking for a solution to a symptom.
+
+## The headline
+
+Top-tier work, and the conductor writes it rather than a worker. It is one line
+carrying the positioning, the customer's language, and the top objection at once, and
+it is the highest-leverage sentence on the site.
+
+Write at least eight. Then test each against four checks:
+
+| Check | Fails when |
+|---|---|
+| **Substitution** | A named competitor could put their name on it and it stays true |
+| **Category** | A visitor cannot tell what kind of thing this is |
+| **Language** | The main noun or verb came from the roadmap, not the VOC file |
+| **Forwarding** | The champion cannot paste it into Slack and have it make sense alone |
+
+Bring three survivors to the client, not one. And note: the best headline is often a
+customer's sentence with two words removed.
+
+## Page by page
+
+Dispatch `page-writer`, one agent per page, in parallel. Each writes to the message
+hierarchy and to the approved design image, and each checks every claim against
+`EVIDENCE.md`.
+
+Every page states, at the top of its section in `COPY.md`:
+
+- **The one job** — the single action it exists to cause (`§7`)
+- **Who lands here**, and from where
+- **Which hierarchy levels it carries**
+- **Which objections it answers**, in order
+
+### The home page
+
+Routes rather than explains. Its job is to make the right visitor go one level deeper,
+not to say everything. The most common failure is a home page trying to be the product
+page, the about page, and the pricing page at once.
+
+Structure follows the objection ladder, not convention. If the top objection is trust,
+proof comes before features. If it is fit, the vertical evidence comes before
+anything.
+
+### Product and service pages
+
+One per genuinely distinct offering. Lead with the outcome in the customer's words,
+then the mechanism, then the proof. Features are the third thing on the page, never
+the first — a feature list answers "what is it" for someone who has already decided
+they want it.
+
+Show the product (`§11`). The copy's job is to frame the screenshot, not to substitute
+for it.
+
+### Pricing
+
+Per `CONVERSION.md §5`. Tiers named for who they are for. The recommended one
+obviously recommended, with an honest reason. Every inclusion claim checked (`§6`) —
+"unlimited" had better be unlimited. An FAQ under the table answering overages, seats,
+notice period, and what happens to the data if they leave.
+
+### Case studies
+
+Five beats, and the fourth is the one everyone cuts:
+
+**Problem** — what was wrong before, in the customer's words
+**Constraint** — what made it hard, and why the obvious fix did not work
+**Decision** — the call, and what it gave up
+**What broke** — the thing that went wrong. Keep this beat
+**Outcome** — sourced, dated, ranked (`§6`)
+
+Named customer, named person, real numbers, cleared (`§25`). The customer's own words
+wherever you have them. A case study with no friction in it reads as marketing,
+because it is.
+
+Under NDA: write the class of problem instead of the instance. "A payments platform
+processing nine figures a year" carries the weight; the logo does not. Anonymized
+still has to be true, and it traces to `EVIDENCE.md` exactly as a named claim does.
+
+### Comparison pages
+
+The highest-value page most sites do not have, and the highest-risk one
+(`COMPLIANCE.md §2`). Every claim about the competitor sourced, dated, and linked to
+their own material. Compare on dimensions a buyer weighs. **Say where they are
+genuinely better** — a table where one column wins every row is read as marketing
+rather than information, and it converts worse for exactly that reason.
+
+### About
+
+Answers the trust objection, and on an agency site it is frequently the second most
+visited page. Real people with real names and real photographs (`§25` — never
+generated). What the company is for, what it refuses, who is accountable. Not a
+founding-myth paragraph about a problem the founders noticed.
+
+### The small print
+
+Nav labels, buttons, form labels and help text, validation errors in plain words,
+empty states, the success state, the autoresponder email, the 404 page, the footer,
+and the legal pages' plain-language summaries. This is where sites reveal whether
+anyone was paying attention.
+
+Error messages are copy. "Something went wrong" is an unwritten string.
+
+## Objections, placed
+
+`§9`: place the answer where the objection occurs, not collected in a bottom FAQ.
+
+Walk the objection ladder from `BRIEF.md` and assign each one a location in a specific
+page at a specific point. The `COPY.md` template has a table for it. An objection with
+no location assigned has not been answered — it has been listed.
+
+An FAQ section is still useful for the long tail and for search. It is not where the
+top three objections live.
+
+## Calls to action
+
+Per `CONVERSION.md §3`. Say what happens, not what to do. State the cost next to the
+ask. One primary per page. Never "Submit".
+
+Write the microcopy under the button too — "No card. Two minutes." removes the
+objection at the exact point of decision, and it is three words.
+
+## The prose pass
+
+Three passes, in order, on everything:
+
+1. **`stop-slop`** — strip the AI tells: the "not X, but Y" contrast, the em-dash tic,
+   the reflexive three-item list, the hollow superlative (`§20`)
+2. **`copywriting`** — clarity, specificity, rhythm, the promise in the first line
+3. **`ogilvy`** — does it sell, and would the reader act
+
+Then read it aloud. Anything you stumble on is a sentence a visitor will skim.
+
+Note in `COPY.md` anything the passes changed materially — it is a useful signal about
+whether the source material was thin.
+
+## The evidence check
+
+Before `COPY.md` is done, cross-reference every factual statement against
+`EVIDENCE.md` (`§6`, hard):
+
+- Every number has a source and a date
+- Every superlative has substantiation, or it is cut
+- Every comparison links to the competitor's own material
+- Every testimonial has an approval on file
+- Every logo has a written permission (`§25`)
+- Every certification claim matches an actual certificate — "in progress" is never
+  "compliant"
+
+Anything failing goes back to the client as a question, not out as a silent cut. They
+frequently have the source and did not know you needed it.
+
+## Reading level and length
+
+Write for the person who will forward this, on a phone, between meetings. Short
+sentences. The claim first, the qualification second. No paragraph over four lines on
+mobile.
+
+Length follows the decision, not a rule: a £40k contract needs more page than a £19
+subscription, and both need every line to earn its place. Cut anything that does not
+map to a hierarchy level.
+
+## Localization
+
+If the site ships in more than one language (`§26`), copy is written per locale, not
+translated at the end. A translated hero with an English CTA is worse than an English
+site. Number and date formats, name order, and address shapes are copy decisions too.
+
+## Skip cost
+
+Skipping copy means the design gets built around placeholder lengths and then breaks,
+and the client writes the words at the last minute in their own vocabulary — which
+undoes `§5` and most of Loop 1 with it.
+
+Skipping the objection mapping means the answers collect in a bottom FAQ, where
+objections go to be ignored.
+
+Skipping the evidence check is not available (`§6`).

@@ -1,0 +1,66 @@
+// Text-to-speech for text memos (spec §3.3, §8.4): a DeafBlind user posts a
+// text memo; it is read aloud into the audio stream by synthetic voice so blind
+// users still hear it. Announced as "Text memo, read by synthetic voice." Only
+// generic voices — user voices are never cloned.
+//
+// Production uses Piper (open, 35+ languages, edge-runnable). Dev uses macOS
+// `say`. Both env-gated; same interface.
+
+export interface TtsResult {
+  audio: Uint8Array;
+  mime: string;
+}
+export type TtsSynthesizer = (text: string, lang?: string) => Promise<TtsResult | null>;
+
+async function shellToWav(cmd: string, args: (out: string) => string[]): Promise<TtsResult | null> {
+  const { execFile } = await import("node:child_process");
+  const { promisify } = await import("node:util");
+  const { mkdtemp, readFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const run = promisify(execFile);
+  const dir = await mkdtemp(join(tmpdir(), "tew-tts-"));
+  const out = join(dir, "tts.wav");
+  try {
+    await run(cmd, args(out));
+    return { audio: new Uint8Array(await readFile(out)), mime: "audio/wav" };
+  } catch {
+    return null;
+  } finally {
+    await rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/** macOS `say` (dev). 16 kHz mono WAV. */
+export function makeSayTts(): TtsSynthesizer {
+  return async (text) => {
+    if (!text.trim()) return null;
+    return shellToWav("say", (out) => ["-o", out, "--data-format=LEI16@16000", text]);
+  };
+}
+
+/** Piper (production): `piper --model <voice.onnx> --output_file <out.wav>`,
+ *  text on stdin. Env-gated via index.ts. Same result shape. */
+export function makePiperTts(opts: { binPath: string; modelPath: string }): TtsSynthesizer {
+  return async (text) => {
+    if (!text.trim()) return null;
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const { mkdtemp, readFile, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const run = promisify(execFile);
+    const dir = await mkdtemp(join(tmpdir(), "tew-tts-"));
+    const out = join(dir, "tts.wav");
+    try {
+      const child = run(opts.binPath, ["--model", opts.modelPath, "--output_file", out]);
+      child.child.stdin?.end(text);
+      await child;
+      return { audio: new Uint8Array(await readFile(out)), mime: "audio/wav" };
+    } catch {
+      return null;
+    } finally {
+      await rm(dir, { recursive: true, force: true }).catch(() => {});
+    }
+  };
+}

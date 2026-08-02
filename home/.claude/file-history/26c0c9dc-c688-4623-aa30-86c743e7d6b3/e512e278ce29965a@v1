@@ -1,0 +1,213 @@
+# Craft
+
+How you render it. `STYLES.md` decides what it looks like; this decides what it is
+made of.
+
+The mandate is `§2` and `§3`: advanced technique is the floor, not the ceiling. Look
+anything up. Pull any library via CDN while prototyping. Build things this pipeline
+has never built. The arsenal below is a starting position.
+
+Three rules hold it honest, and they are the same three every loop enforces:
+
+1. **Every technique gets a runnable prototype** before the design depends on it
+   (Loop 2b). A technique that fails in a prototype is cut cheaply; the same failure
+   in Loop 4 costs a rebuild.
+2. **Every technique ships three states** — full, designed reduced-motion, and a
+   no-WebGL or no-JS fallback (`§17`).
+3. **Name the thing this technique makes the buyer understand.** No answer means
+   remove it. On a company site the bar is higher than on a portfolio: impressive and
+   irrelevant is not neutral, it is scroll depth the converting section needed.
+
+And one that is specific to this pipeline: **the technique never delays the ask.**
+Everything heavy lazy-loads after first paint and outside the LCP path (`§19`).
+
+---
+
+## The commercial test
+
+Before any technique goes in `DIRECTION.md`, answer three questions in one line each:
+
+| Question | Failure |
+|---|---|
+| What does this make the visitor **understand**? | "It looks impressive" — cut it |
+| Which **objection** does it answer, or which **proof** does it carry? | None — demote it to a decorative layer with a byte budget |
+| What does it cost in **bytes and main-thread time**? | Unknown — prototype it before it enters the design |
+
+A technique that answers all three is worth building at any complexity. One that
+answers none is worth nothing at any complexity.
+
+---
+
+## The arsenal
+
+### Showing the product
+
+The highest-value group on a company site (`§11`), and the most neglected.
+
+| Technique | What it is | Where it earns its place |
+|---|---|---|
+| Live embedded product | The real application, running, in an iframe or a sandbox | The strongest conversion asset that exists. Rung 0–1 on the friction ladder |
+| Scripted interactive demo | A faithful clickable replica driven by a script, not the real backend | When the real product needs auth or data. Much cheaper to maintain than it looks, and far better than video |
+| Annotated UI crop | Real screen, cropped to one job, with callouts | Explains a mechanism in one screen. Works in email and in a deck too |
+| Sequenced UI reveal | Screens stepping through a workflow on scroll or a timer | Shows a flow without a video's weight. Ship a paused, stepped fallback |
+| Before / after scrubber | Draggable divider between two real states | Instantly legible proof for anything visual: migrations, cleanups, redesigns |
+| Live data from the real system | A number, a chart, or a status pulled from production | Turns a rank-1 claim into something the visitor watches be true. Needs a designed offline state |
+| Synthetic-data replica | The real UI, populated with realistic, non-real records | The answer when the product is under NDA or the data is personal (`§25`) |
+| Video of the real thing | A real screen recording, short, poster-first, click to play | Never autoplay with sound. Poster image in the shell, player loaded on interaction |
+
+**Never fake a screen that implies a feature that does not exist** (`§6`). A mocked-up
+UI is allowed only when labeled as a concept, and on a marketing site it almost never
+should be.
+
+### Rendering and GPU
+
+| Technique | What it is | Where it earns its place |
+|---|---|---|
+| Raymarching + SDFs | Geometry as a distance function, marched per pixel | A hero form that could not be modeled. Infinite repetition, soft shadows, ambient occlusion free |
+| Domain warping (fbm) | Noise fed into the coordinates of more noise | Organic movement that never visibly loops. Atmosphere, ink, smoke, marble |
+| Metaballs / marching squares | Implicit blobs merging on a field | Anything that should feel alive rather than placed. Merging nav states, liquid identity |
+| Reaction-diffusion | Two chemicals competing on a grid | Growth over time. Strong for biotech, research, and anything that compounds |
+| Voronoi / Delaunay | Space partitioned by proximity | Territory, coverage maps, crystalline structure, a grid that is not a grid |
+| GPGPU particles | Particle state in textures, stepped in a shader | Millions of points at 60fps. Data made physical: transactions, users, deliveries |
+| Curl-noise flow fields | Divergence-free noise driving velocity | Fluid motion without a fluid solver. Networks, logistics, flow of anything |
+| Instanced geometry at 10k+ | One mesh, many transforms, one draw call | Scale as a statement. A field of the thing the client makes |
+| Feedback loops (ping-pong FBO) | A buffer reading its own previous frame | Trails, decay, persistence. The cheapest route to a signature look |
+| Caustics | Refracted light on a surface | Sells a scene as physical rather than drawn |
+| MSDF text in WebGL | Signed-distance glyph atlases | Type inside a 3D scene, at any scale, still crisp |
+| Procedural terrain | Mesh displaced by noise or real data | Topography, coverage, real geographic data as relief |
+| WebGPU compute + WebGL fallback | Compute where available, degrade cleanly | Simulation budgets WebGL cannot reach. Only with the fallback built |
+
+### Treatment and post-processing
+
+Where `§10`-style discipline pays off: generated imagery gets *treated* in-browser
+rather than placed raw, which is what makes it belong to this design instead of to a
+model.
+
+| Technique | What it is | Where it earns its place |
+|---|---|---|
+| Bloom | Bright regions bleeding into neighbors | Makes emissive things read as light rather than pale color |
+| Film grain | Animated noise over the composite | Kills banding, unifies CSS and canvas layers, adds material to flat gradients |
+| Displacement | One texture pushing another's UVs | Hover distortion, transitions, heat, liquid. The workhorse |
+| LUT grading | A 3D lookup applied to the final frame | One pass that makes every layer share a grade. The difference between colored and art-directed |
+| Duotone / posterize / halftone | Quantized tone with structure | Pulls stock-feeling or generated imagery into the brand palette. Cheap, and instantly proprietary |
+| Ordered dithering | Structured quantization | Print, plotter, early-computing registers. Compresses beautifully |
+| Depth-map parallax | A flat frame plus a depth map, displaced on pointer | Turns one generated image into a scene with volume. High payoff per byte |
+| Chromatic aberration | Channel separation at edges | Lens realism at rest, energy under motion. Scale with scroll velocity |
+| Edge detection / sobel | Gradient magnitude as outline | Blueprint and diagram registers. Pairs with posterize |
+| Vignette | Falloff toward the frame | Directs the eye. Invisible when right, obvious when missing |
+| Motion blur | Accumulated or velocity-buffer smear | Speed that reads as speed rather than strobe |
+
+### CSS and SVG native
+
+The cheapest wins in the file. Most of this costs nothing in bytes and nothing in
+main-thread time, which makes it the right first reach on a site with a performance
+budget (`§19`).
+
+| Technique | What it is | Where it earns its place |
+|---|---|---|
+| OKLCH color and gradients | Perceptual color space | Gradients with no gray dead zone. Use it everywhere and the palette improves for free |
+| `@property` | Typed, animatable custom properties | Gradients, angles, and colors that actually interpolate. CSS-only effects that used to need JS |
+| `animation-timeline` | Native scroll-driven animation | Scroll effects off the main thread with no library. Check support, fall back to a library |
+| View Transitions API | Native cross-document and same-document morphs | Continuity between pages. A pricing tier that becomes the signup form |
+| Container queries | Components responding to their own box | Real art direction per component. Correct for a card living in three contexts |
+| CSS anchor positioning | Elements tethered to other elements | Annotations, tooltips, and marginalia without JS measurement |
+| SVG filters | `feTurbulence`, `feDisplacementMap`, `feColorMatrix` | Procedural noise, warping, and duotone on live DOM. Text and images, no canvas |
+| The gooey filter | Blur into contrast matrix | Metaball merging on real HTML elements. Nav items that fuse |
+| Masks and clip-paths | Alpha, luminance, and geometric clipping | Non-rectangular layout. The fastest exit from the card grid |
+| `mix-blend-mode` | Compositing between stacked layers | Type that reacts to what passes behind it. Inverting cursors |
+| `backdrop-filter` | Filtering what sits behind an element | Real depth in sticky UI and nav |
+| Conic / repeating gradients | Gradient functions as pattern | Texture and moiré at zero byte cost |
+| Morphing SVG paths | Interpolation between path definitions | A logo that transforms into the product's core shape |
+| `text-wrap: balance` / `pretty` | Native line-break optimization | Headlines that break where a designer would. One declaration |
+| `:has()` | Parent and sibling selection | State-driven layout with no JS. Form states, filled-field styling, section adaptation |
+| Houdini paint worklets | Custom paint in a background image | Procedural texture inside CSS layout. Narrow support, always with a fallback |
+
+### Motion and input
+
+| Technique | What it is | Where it earns its place |
+|---|---|---|
+| Scrubbed scroll timelines | Progress tied to scroll position | Scroll as a scrub head. Use for one section, never a whole marketing page |
+| Spring and inertia physics | Motion resolved by simulation | Interfaces that respond to how the input arrived |
+| Magnetic elements | Targets attracted to the pointer | Weighted feel on the primary CTA. A few elements only |
+| Custom cursors | The pointer replaced or augmented | Signals a designed environment within a second. Desktop only — design mobile first |
+| Variable fonts on all axes | Scroll or pointer driving every axis | Optical size, width, grade, slant. **Weight alone is the amateur signal** — read the font's axis list |
+| Per-glyph transforms | Individual characters in 3D | Headlines that assemble and settle. High effort, high recall |
+| Split-text stagger | Sequencing at glyph or word level | Entrances with rhythm. The enabler for most of this group |
+| Scroll-velocity distortion | Scroll speed feeding a shader or filter | The site responds to how fast someone moves. Subtle, immediately felt |
+| Cursor-as-light-source | Pointer driving a mask or light position | Reveals and spotlights the visitor navigates by hand |
+| Pointer-tilt / device orientation | Gyroscope driving parallax | Depth on mobile where there is no hover. Permission-aware fallback |
+| Number roll-ups on reveal | Counting to a real figure | Only for rank-1 numbers, and only once per page. Otherwise it is a tic |
+
+### Whole-page moves
+
+| Technique | What it is | Where it earns its place |
+|---|---|---|
+| Designed preloader | A composed hold, not a spinner | Only when there is genuinely something to wait for. Never in front of a static page |
+| Cross-document View Transitions | Page-to-page continuity | A multi-page site that feels like one surface, with no framework |
+| Progressive disclosure | Depth revealed on demand | The committee problem: a skimmable page that a deep reader can open up |
+| Sticky section pinning | A section held while its content advances | One per page, maximum. Two is a tunnel |
+| Scroll-linked nav state | Nav adapting to position and direction | Keeps the CTA reachable without a permanent bar eating the viewport |
+| Print stylesheet | A real one | Procurement prints pricing pages. It costs 30 lines and someone will thank you |
+| Reduced-data mode | `prefers-reduced-data` respected | Drop the heavy layer entirely. Cheap, and honest |
+
+---
+
+## The cheap wins
+
+If a run only has budget for a handful of moves, these are the ones with the best
+return per byte on a commercial site:
+
+1. **Real product UI, well shot and annotated** (`§11`)
+2. **A visible price** — a design decision as much as a business one
+3. **OKLCH palette with a properly built neutral ramp** — makes everything else better
+4. **A real type system with one variable font on more than one axis**
+5. **`text-wrap: balance` on every headline** — one line, immediate
+6. **A 12-second real screen recording, poster-first**
+7. **Named, faced, sourced proof placed next to the claim it supports**
+8. **A form that is three fields and works** (`§18`)
+9. **Print stylesheet and a proper OG image** — both invisible until someone needs them
+10. **One collision-carrying signature moment**, prototyped, that no competitor has
+
+## Prototyping
+
+Loop 2b, one agent per technique, in `runs/<slug>/prototypes/`.
+
+Free rein while prototyping: any library, any CDN, any reference. That freedom ends
+at Loop 4, where everything gets downloaded, vendored, and committed (`§14`).
+
+Each prototype delivers: a standalone runnable HTML file, a screenshot, a measured
+frame rate under load on throttled hardware, the byte cost, and all three states.
+Then a verdict — ship, cut, or ship-with-caveat. **Report failure honestly**; failing
+cheap here is the entire point of the loop.
+
+## Performance discipline
+
+`§19`, restated as build rules:
+
+- Shell under 100KB. It paints something real with no JS at all
+- Heavy layer lazy-loaded after first paint, gated on intersection, never in the LCP
+  path. It declares its number at Gate B2
+- Hero image preloaded, correctly sized, modern format, explicit dimensions
+- Fonts self-hosted, subset, `font-display: swap`, and preloaded if they are in the
+  LCP element
+- Every third-party tag deferred and consented (`§15`, `§16`)
+- No layout shift after paint. Reserve space for everything that arrives late,
+  including the cookie banner
+- Measure on a throttled mid-range Android, not on the machine you built it on
+
+A technique that cannot be deferred has to justify its bytes at Gate B2, in front of
+the client, against the conversion goal.
+
+## The three states, always
+
+Every technique, every time (`§17`):
+
+| State | What it is |
+|---|---|
+| **Full** | The designed experience |
+| **Reduced motion** | An **art-directed still** — a composed frame someone designed. Never `animation: none` |
+| **Fallback** | No WebGL, no JS, old GPU, blocked script. A real page, never an apology |
+
+The fallback is not a degraded mode; it is a design deliverable. On a company site it
+is also a commercial one, because the visitor on locked-down corporate hardware with
+scripts restricted is frequently the enterprise buyer.

@@ -1,0 +1,9 @@
+{
+  "id": "8",
+  "subject": "Phase 7: Re-wire ops + final verify",
+  "description": "Backup cron -> docker exec pg_dump. Autodeploy -> git pull + docker compose up -d --build + smoke/rollback. Confirm host hardening intact. Reboot test: restart:unless-stopped brings stack back, sites 200. RAM within budget.",
+  "activeForm": "Re-wiring ops and final verification",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

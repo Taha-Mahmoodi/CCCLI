@@ -1,0 +1,141 @@
+import * as THREE from "three";
+import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import { mulberry32, type Project } from "./data";
+
+// By-user view (per the vision + spec): every team member's knowledge base
+// as its own visual body — scale and activity visible, content never.
+// A user's orb includes personal/unconnected notes; nobody can enter it.
+
+export interface TeamUser {
+  id: string;
+  name: string;
+  /** total notes across contributions + personal unconnected notes */
+  mass: number;
+  projectsTouched: number;
+  /** days since last activity */
+  idleDays: number;
+}
+
+const USER_NAMES = [
+  "Taha", "Said", "Wafa", "Leyla", "Arman", "Dara", "Mina", "Kian",
+  "Sara", "Navid", "Rana", "Omid", "Yasmin", "Farhad",
+];
+
+/** Deterministic team derived from the project universe. */
+export function mockUsers(projects: Project[], seed = 61): TeamUser[] {
+  const rnd = mulberry32(seed);
+  return USER_NAMES.map((name, i) => {
+    // each user touches a deterministic subset of projects
+    const touched = projects.filter(() => rnd() < 0.22);
+    const shared = touched.reduce(
+      (s, p) => s + Math.floor(p.noteCount * (0.05 + rnd() * 0.2)),
+      0,
+    );
+    const personal = Math.floor(rnd() * 400); // unconnected private notes
+    return {
+      id: `u${i}`,
+      name,
+      mass: shared + personal,
+      projectsTouched: touched.length,
+      idleDays: rnd() < 0.25 ? rnd() * 40 : rnd() * 4,
+    };
+  });
+}
+
+export interface UserOrb {
+  group: THREE.Group;
+  user: TeamUser;
+  mat: THREE.PointsMaterial;
+  nucleusMat: THREE.SpriteMaterial;
+  radius: number;
+  hitSphere: THREE.Mesh;
+  label: CSS2DObject;
+}
+
+const ACTIVE = new THREE.Color(0xffd9a0);
+const IDLE = new THREE.Color(0x77719a);
+
+/** A person's knowledge as a dense private orb — no arms, no interior
+ *  structure readable from outside. Deliberately unlike project galaxies. */
+export function buildUserOrb(user: TeamUser, sprite: THREE.Texture): UserOrb {
+  const rnd = mulberry32(user.id.length * 991 + user.mass);
+  const radius = 6 + Math.cbrt(user.mass) * 1.6;
+  const count = Math.min(900 + user.mass * 3, 5200);
+  const activity = Math.max(0, 1 - user.idleDays / 45);
+  const tint = IDLE.clone().lerp(ACTIVE, activity);
+
+  const pos = new Float32Array(count * 3);
+  const col = new Float32Array(count * 3);
+  const c = new THREE.Color();
+  for (let i = 0; i < count; i++) {
+    // gaussian-ish ball, denser toward the core
+    const r = radius * Math.pow(rnd(), 0.45);
+    const u = rnd() * 2 - 1;
+    const th = rnd() * Math.PI * 2;
+    const s = Math.sqrt(1 - u * u);
+    pos.set([s * Math.cos(th) * r, u * r * 0.85, s * Math.sin(th) * r], i * 3);
+    c.copy(tint).multiplyScalar(0.5 + 0.7 * (1 - r / radius));
+    col.set([c.r, c.g, c.b], i * 3);
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  const mat = new THREE.PointsMaterial({
+    size: 1.5,
+    map: sprite,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    sizeAttenuation: true,
+  });
+
+  const group = new THREE.Group();
+  group.add(new THREE.Points(geo, mat));
+
+  // same luminous-core anatomy as galaxies: a person's universe has a heart
+  const nucleusMat = new THREE.SpriteMaterial({
+    map: sprite,
+    color: tint,
+    transparent: true,
+    opacity: 0,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const nucleus = new THREE.Sprite(nucleusMat);
+  nucleus.scale.setScalar(radius * 1.1);
+  group.add(nucleus);
+
+  const hitSphere = new THREE.Mesh(
+    new THREE.SphereGeometry(radius * 1.1, 10, 10),
+    new THREE.MeshBasicMaterial({ visible: false }),
+  );
+  hitSphere.userData.userId = user.id;
+  group.add(hitSphere);
+
+  const el = document.createElement("div");
+  el.className = "yz-label";
+  el.textContent = user.name;
+  const label = new CSS2DObject(el);
+  label.position.set(0, radius + 5, 0);
+  group.add(label);
+
+  group.visible = false;
+  return { group, user, mat, nucleusMat, radius, hitSphere, label };
+}
+
+/** Two calm concentric rings — deliberately unlike the project sky's
+ *  organic sprawl, so the mode switch reads instantly. */
+export function layoutUserOrbs(orbs: UserOrb[]): void {
+  const sorted = [...orbs].sort((a, b) => b.user.mass - a.user.mass);
+  sorted.forEach((orb, i) => {
+    const ring = i < 6 ? 0 : 1;
+    const idx = ring === 0 ? i : i - 6;
+    const per = ring === 0 ? Math.min(6, sorted.length) : sorted.length - 6;
+    const a = (idx / Math.max(per, 1)) * Math.PI * 2 + ring * 0.5;
+    const r = ring === 0 ? 120 : 230;
+    orb.group.position.set(Math.cos(a) * r, (ring === 0 ? 1 : -1) * 12, Math.sin(a) * r);
+  });
+}

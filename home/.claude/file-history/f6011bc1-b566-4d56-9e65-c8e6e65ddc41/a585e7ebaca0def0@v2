@@ -1,0 +1,136 @@
+"use client";
+
+import * as React from "react";
+import { Play, Pause } from "lucide-react";
+import { t } from "@/lib/i18n";
+import { useToast } from "@/components/ui/Toast";
+
+export interface VoicePlayerProps {
+  name: string;
+  /** Transcript text shown (the "voice intro" content). */
+  intro: string;
+  /** Larger layout with visible transcript (used on the profile screen). */
+  big?: boolean;
+  /** Optional signed URL to real audio. When absent, playback is simulated. */
+  audioUrl?: string | null;
+}
+
+/** Deterministic bar heights — reads as a voice, not random noise. */
+const BARS = [7, 14, 10, 19, 12, 22, 15, 9, 18, 13, 20, 11, 16, 8, 14, 10];
+
+/**
+ * Decorative waveform. Bars are always visible (the "this is a voice" cue);
+ * they only move while playing. Static under prefers-reduced-motion via the
+ * global kill switch.
+ */
+function Waveform({ playing, big }: { playing: boolean; big?: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={["inline-flex items-center gap-[3px]", big ? "h-7" : "h-[22px]"].join(" ")}
+    >
+      {BARS.map((h, i) => (
+        <span
+          key={i}
+          className={[
+            "w-[3px] rounded-[2px]",
+            playing ? "bg-accent" : "bg-accent/50",
+          ].join(" ")}
+          style={{
+            height: big ? h * 1.3 : h,
+            animation: playing
+              ? `wf 0.9s var(--ease-warm) ${i * 0.07}s infinite alternate`
+              : undefined,
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
+/**
+ * Voice-intro player — the signature interaction of the product: you hear a
+ * person before you see anything about them. Plays real audio when a signed
+ * URL is provided, otherwise simulates playback. Always shows a transcript on
+ * the big layout so the content is fully available to screen-reader users.
+ */
+export function VoicePlayer({ name, intro, big, audioUrl }: VoicePlayerProps) {
+  const [playing, setPlaying] = React.useState(false);
+  const { announce } = useToast();
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+
+  const toggle = () => {
+    const next = !playing;
+    setPlaying(next);
+    if (audioUrl && audioRef.current) {
+      if (next) void audioRef.current.play();
+      else audioRef.current.pause();
+    }
+    announce(
+      next ? t("ui.announcePlaying", { name }) : t("ui.announcePaused"),
+    );
+  };
+
+  const diameter = big ? 72 : 52;
+
+  return (
+    <div
+      className={[
+        "rounded-tile bg-surface-sunk",
+        big ? "flex flex-col items-stretch gap-4 p-5" : "flex flex-row items-center gap-3.5 p-3",
+      ].join(" ")}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-3.5">
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label={
+            playing
+              ? t("ui.pauseVoiceIntro", { name })
+              : t("ui.playVoiceIntro", { name })
+          }
+          aria-pressed={playing}
+          className={[
+            "grid flex-none place-items-center rounded-pill bg-primary text-surface shadow-sm",
+            "transition-[background-color,transform] duration-200 ease-[cubic-bezier(0.33,0.1,0.25,1)]",
+            "hover:bg-primary-dark active:scale-[0.96] aria-pressed:bg-primary-dark",
+          ].join(" ")}
+          style={{ width: diameter, height: diameter }}
+        >
+          {playing ? (
+            <Pause size={big ? 30 : 22} strokeWidth={2} aria-hidden="true" />
+          ) : (
+            <Play size={big ? 30 : 22} strokeWidth={2} aria-hidden="true" className="translate-x-[1px]" />
+          )}
+        </button>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="truncate text-base font-bold text-ink">
+            {t("ui.voiceIntroOf", { name })}
+          </span>
+          <span className="flex items-center gap-2.5 text-sm text-ink-soft">
+            <Waveform playing={playing} big={big} />
+            <span className="whitespace-nowrap">
+              {playing ? t("ui.playingNow") : t("ui.tapToListen")}
+            </span>
+          </span>
+        </div>
+      </div>
+      {big ? (
+        <p className="border-t border-border pt-4 text-base leading-body text-ink">
+          <span className="mb-1 block text-xs font-extrabold uppercase tracking-[0.12em] text-ink-soft">
+            {t("ui.transcript")}
+          </span>
+          {intro}
+        </p>
+      ) : null}
+      {audioUrl ? (
+        <audio
+          ref={audioRef}
+          src={audioUrl}
+          onEnded={() => setPlaying(false)}
+          className="sr-only"
+        />
+      ) : null}
+    </div>
+  );
+}

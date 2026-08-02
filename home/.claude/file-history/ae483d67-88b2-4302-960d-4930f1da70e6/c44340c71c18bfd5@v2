@@ -1,0 +1,72 @@
+// IVR dial-in (spec §10.4): reach for basic phones with no data plan. The
+// caller navigates memos by keypad (DTMF). This is a Twilio-compatible TwiML
+// server — fully testable over HTTP; only binding a real phone number needs a
+// telephony provider (Twilio number → webhook → these endpoints).
+import type { Context, Hono } from "hono";
+import type { Db, MemoRowRaw } from "./db";
+
+type Vars = { Variables: { moderatorId: string; dmUser: string } };
+type Ctx = Context<Vars>;
+
+const escape = (s: string) =>
+  s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const twiml = (body: string) => `<?xml version="1.0" encoding="UTF-8"?>\n<Response>${body}</Response>`;
+const say = (t: string) => `<Say>${escape(t)}</Say>`;
+const redirect = (path: string) => `<Redirect method="POST">${escape(path)}</Redirect>`;
+
+export function registerIvr(app: Hono<Vars>, db: Db, publicBaseUrl: string) {
+  const timeline = (limit = 100): MemoRowRaw[] =>
+    db
+      .prepare("SELECT * FROM memos ORDER BY created_at DESC LIMIT ?")
+      .all(limit) as unknown as MemoRowRaw[];
+
+  const xmlResponse = (c: Ctx, body: string) =>
+    c.body(twiml(body), 200, { "content-type": "text/xml" });
+
+  const playMemo = (c: Ctx, index: number) => {
+    const memos = timeline();
+    if (index < 0 || index >= memos.length) {
+      return xmlResponse(c, say("No more memos. Returning to the menu.") + redirect("/ivr/welcome"));
+    }
+    const m = memos[index];
+    const audio = `${publicBaseUrl}/audio/${m.id}`;
+    return xmlResponse(
+      c,
+      say(`Memo ${index + 1} of ${memos.length}.`) +
+        `<Play>${escape(audio)}</Play>` +
+        `<Gather input="dtmf" numDigits="1" action="/ivr/nav?i=${index}" method="POST">` +
+        say("Press 1 for the next memo, 2 to repeat, or 0 for the menu.") +
+        `</Gather>` +
+        redirect(`/ivr/nav?i=${index}`),
+    );
+  };
+
+  // Entry point Twilio hits when a call connects.
+  app.post("/ivr/welcome", (c) =>
+    xmlResponse(
+      c,
+      `<Gather input="dtmf" numDigits="1" action="/ivr/menu" method="POST">` +
+        say(
+          "Welcome to Third Eye World. Press 1 to listen to the latest memos. Press 0 to hear this menu again.",
+        ) +
+        `</Gather>` +
+        redirect("/ivr/welcome"),
+    ),
+  );
+
+  app.post("/ivr/menu", async (c) => {
+    const form = await c.req.parseBody();
+    const digit = String(form.Digits ?? "");
+    if (digit === "1") return playMemo(c, 0);
+    return xmlResponse(c, redirect("/ivr/welcome"));
+  });
+
+  app.post("/ivr/nav", async (c) => {
+    const index = Number(c.req.query("i") ?? 0);
+    const form = await c.req.parseBody();
+    const digit = String(form.Digits ?? "");
+    if (digit === "1") return playMemo(c, index + 1);
+    if (digit === "2") return playMemo(c, index);
+    return xmlResponse(c, redirect("/ivr/welcome"));
+  });
+}

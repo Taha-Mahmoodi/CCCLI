@@ -1,0 +1,51 @@
+"""Seed one demo tenant + full-access admin user for local runs.
+ponytail: dev-only, reuses real services; grants the ENTIRE permission catalog."""
+import asyncio
+
+import app.core.bootstrap  # noqa: F401 — import side effect: registers every module's permission keys
+from app.core.db import build_session_factory, engine
+from app.core.models import User
+from app.core.rbac import catalog_keys, sync_permission_catalog
+from app.core.tenancy import system_context
+from app.modules.admin.models import Tenant
+from app.modules.admin.service import assign_role, create_role, provision_tenant, provision_user
+from sqlalchemy import select
+
+TENANT, EMAIL, PASSWORD = "acme", "owner@acme.test", "correct-horse-battery"
+
+
+async def main() -> None:
+    session_factory = build_session_factory(engine)
+    async with session_factory() as db:
+        with system_context():
+            tenant = (
+                await db.execute(select(Tenant).where(Tenant.slug == TENANT))
+            ).scalar_one_or_none()
+        if tenant is None:
+            tenant = await provision_tenant(db, slug=TENANT, name=TENANT.title())
+
+        with system_context():
+            user = (
+                await db.execute(
+                    select(User).where(User.tenant_id == tenant.id, User.email == EMAIL)
+                )
+            ).scalar_one_or_none()
+        if user is None:
+            user = await provision_user(db, tenant.id, email=EMAIL, password=PASSWORD)
+
+        with system_context():
+            await sync_permission_catalog(db)
+
+        role = await create_role(
+            db, tenant.id, "Superuser", sorted(catalog_keys()), is_system=True
+        )
+        await assign_role(db, tenant.id, user.id, role.id, token_version=user.token_version)
+        await db.commit()
+    print(
+        f"seeded: tenant={TENANT} email={EMAIL} password={PASSWORD} "
+        f"role=Superuser perms={len(catalog_keys())}"
+    )
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

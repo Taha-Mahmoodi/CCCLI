@@ -1,0 +1,131 @@
+"use client";
+
+// Voice control — the second of the three routes to every action (#5).
+// OFF by default and explicitly opt-in: voice is biometric data (#7), so we
+// never hold the microphone open without a deliberate choice.
+//
+// Slice 0 covers the playback commands. ponytail: "record" / "comment" by voice
+// arrive with the recorder/comment slices — they need state this component
+// doesn't own yet.
+
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Mic, MicOff } from "lucide-react";
+import { usePlayer } from "@/stores/player";
+import { announce } from "@/lib/a11y";
+import { getRecognitionCtor, type Recognition } from "@/lib/speech";
+import { Button } from "@/components/ui/button";
+
+const noopSubscribe = () => () => {};
+
+export function VoiceCommands() {
+  // Feature-detect via useSyncExternalStore: false on the server (no window),
+  // resolved on the client — no setState-in-effect, no hydration mismatch.
+  const supported = useSyncExternalStore(
+    noopSubscribe,
+    () => getRecognitionCtor() !== null,
+    () => false,
+  );
+  const [on, setOn] = useState(false);
+  const recRef = useRef<Recognition | null>(null);
+  const onRef = useRef(false);
+
+  const handle = useCallback((transcript: string) => {
+    const t = transcript.toLowerCase();
+    const p = usePlayer.getState();
+    const said = (...words: string[]) => words.some((w) => t.includes(w));
+
+    if (said("next", "skip", "forward")) return act("Next", () => p.next());
+    if (said("previous", "back", "last")) return act("Previous", () => p.previous());
+    if (said("replay", "again", "repeat")) return act("Replay", () => p.replay());
+    if (said("pause", "stop")) return act("Pause", () => p.pause());
+    if (said("play", "resume", "start")) return act("Play", () => p.play());
+    if (said("like", "love", "heart")) {
+      const cur = p.memos[p.currentIndex];
+      if (cur) return act("Liked", () => p.toggleLike(cur.id));
+    }
+  }, []);
+
+  const startRecognition = useCallback(() => {
+    const Ctor = getRecognitionCtor();
+    if (!Ctor) return;
+    const rec = new Ctor();
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.lang = typeof navigator !== "undefined" ? navigator.language || "en-US" : "en-US";
+    rec.onresult = (e) => {
+      const last = e.results[e.results.length - 1];
+      if (last && last.isFinal) handle(last[0].transcript);
+    };
+    rec.onerror = (e) => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+        setOn(false);
+        onRef.current = false;
+        announce("Microphone access is blocked, so voice control is off.", true);
+      }
+    };
+    rec.onend = () => {
+      // Some browsers auto-stop; restart while the user still wants it on.
+      if (onRef.current) {
+        try {
+          rec.start();
+        } catch {
+          /* already started */
+        }
+      }
+    };
+    recRef.current = rec;
+    try {
+      rec.start();
+    } catch {
+      /* ignore */
+    }
+  }, [handle]);
+
+  const toggle = useCallback(() => {
+    setOn((prev) => {
+      const nextOn = !prev;
+      onRef.current = nextOn;
+      if (nextOn) {
+        startRecognition();
+        announce("Voice control on. Say next, previous, play, pause, replay, or like.");
+      } else {
+        recRef.current?.stop();
+        recRef.current = null;
+        announce("Voice control off.");
+      }
+      return nextOn;
+    });
+  }, [startRecognition]);
+
+  useEffect(() => {
+    return () => {
+      onRef.current = false;
+      recRef.current?.stop();
+    };
+  }, []);
+
+  if (!supported) return null;
+
+  return (
+    <Button
+      type="button"
+      variant={on ? "default" : "outline"}
+      className="h-11 gap-2 rounded-full px-4"
+      aria-pressed={on}
+      aria-label={
+        on
+          ? "Turn voice control off"
+          : "Turn voice control on. This opens your microphone to listen for commands."
+      }
+      onClick={toggle}
+    >
+      {on ? <Mic className="size-4" aria-hidden="true" /> : <MicOff className="size-4" aria-hidden="true" />}
+      <span>{on ? "Voice control on" : "Voice control"}</span>
+    </Button>
+  );
+}
+
+function act(label: string, fn: () => void) {
+  fn();
+  announce(label);
+}

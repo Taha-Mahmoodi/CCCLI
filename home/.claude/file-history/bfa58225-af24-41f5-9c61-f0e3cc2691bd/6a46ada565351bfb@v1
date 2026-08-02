@@ -1,0 +1,24 @@
+# tablet
+
+Capacitor + React + TypeScript Android app.
+
+## Building the Android app
+
+Capacitor's synced artifacts (`android/app/src/main/assets/public`, the
+generated `capacitor.config.json`/`capacitor.plugins.json`, and
+`android/capacitor-cordova-android-plugins/`) are gitignored on purpose —
+they're build output, not source. Running `./gradlew assembleDebug` directly
+on a fresh clone fails with `Could not read script
+'.../capacitor-cordova-android-plugins/cordova.variables.gradle' as it does
+not exist` because that sync step hasn't run yet.
+
+Always run `npx cap sync android` before building natively:
+
+```bash
+npm install
+npm run build
+npx cap sync android
+cd android && ./gradlew assembleDebug
+```
+
+APK output: `android/app/build/outputs/apk/debug/app-debug.apk`.

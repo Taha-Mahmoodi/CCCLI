@@ -1,0 +1,89 @@
+import json, base64, subprocess, sys
+
+OWNER = "CyborgTech-co"
+
+# (repo, readme_file, pr_title)
+JOBS = [
+    ("ROI", "ROI.md", "docs: polish README for ROI"),
+    ("canin", "canin.md", "docs: add project README"),
+    ("HDU-WordPress", "HDU-WordPress.md", "docs: add project README"),
+    ("zaryab_backend", "zaryab_backend.md", "docs: add project README"),
+    ("zaryab", "zaryab.md", "docs: replace default README with project README"),
+    ("hdu", "hdu.md", "docs: replace default README with project README"),
+]
+
+def gh(args, body=None):
+    r = subprocess.run(["gh", "api"] + args, input=body, capture_output=True, text=True)
+    if r.returncode != 0:
+        return None, r.stderr.strip()
+    return r.stdout, None
+
+def gh_json(args, body=None):
+    out, err = gh(args, body)
+    if err:
+        return None, err
+    try:
+        return json.loads(out), None
+    except Exception:
+        return out, None
+
+for repo, fname, title in JOBS:
+    print(f"\n===== {repo} =====")
+    # default branch + head sha
+    meta, err = gh_json([f"repos/{OWNER}/{repo}"])
+    if err:
+        print("  FAIL meta:", err); continue
+    base = meta["default_branch"]
+    ref, err = gh_json([f"repos/{OWNER}/{repo}/git/ref/heads/{base}"])
+    if err:
+        print("  FAIL ref:", err); continue
+    head_sha = ref["object"]["sha"]
+
+    branch = "docs/readme"
+    # create branch (delete if it already exists from a prior run)
+    payload = json.dumps({"ref": f"refs/heads/{branch}", "sha": head_sha})
+    out, err = gh([f"repos/{OWNER}/{repo}/git/refs", "-X", "POST", "--input", "-"], body=payload)
+    if err and "Reference already exists" in err:
+        gh([f"repos/{OWNER}/{repo}/git/refs/heads/{branch}", "-X", "DELETE"])
+        gh([f"repos/{OWNER}/{repo}/git/refs", "-X", "POST", "--input", "-"], body=payload)
+    elif err:
+        print("  FAIL branch:", err); continue
+
+    # existing README.md sha on the branch, if any
+    existing, _ = gh_json([f"repos/{OWNER}/{repo}/contents/README.md?ref={branch}"])
+    file_sha = existing["sha"] if isinstance(existing, dict) and "sha" in existing else None
+
+    with open(f"/private/tmp/claude-501/-Users-taha/51b90afe-944f-4f8c-a234-21ade39239a8/scratchpad/readmes/{fname}", "rb") as fh:
+        content_b64 = base64.b64encode(fh.read()).decode()
+
+    put = {"message": title, "content": content_b64, "branch": branch}
+    if file_sha:
+        put["sha"] = file_sha
+    out, err = gh([f"repos/{OWNER}/{repo}/contents/README.md", "-X", "PUT", "--input", "-"], body=json.dumps(put))
+    if err:
+        print("  FAIL commit:", err); continue
+
+    # open PR
+    pr_body = json.dumps({
+        "title": title,
+        "head": branch,
+        "base": base,
+        "body": "Adds/updates the project README with an accurate description, tech stack, structure, and setup.",
+    })
+    pr, err = gh_json([f"repos/{OWNER}/{repo}/pulls", "-X", "POST", "--input", "-"], body=pr_body)
+    if err:
+        print("  FAIL pr:", err); continue
+    num = pr["number"]
+    print(f"  PR #{num} opened: {pr['html_url']}")
+
+    # merge PR (squash)
+    merge, err = gh_json([f"repos/{OWNER}/{repo}/pulls/{num}/merge", "-X", "PUT", "--input", "-"],
+                         body=json.dumps({"merge_method": "squash"}))
+    if err:
+        print("  FAIL merge:", err); continue
+    print(f"  merged: {merge.get('merged')} ({merge.get('sha','')[:10]})")
+
+    # delete the branch after merge
+    gh([f"repos/{OWNER}/{repo}/git/refs/heads/{branch}", "-X", "DELETE"])
+
+print("\nDONE")

@@ -1,0 +1,123 @@
+# Feature gap audit — 2026-07-25
+
+Requested by the user after installing the release APK: "a lot of functionalities
+that we decided it will have is missing... editing a zone, deleting a zone...
+adding a rep... and there was a decision that what we need from Atlas-erp we
+will borrow from it." This audits both claims against the actual code in
+`atlas-fieldforce` and `atlas-erp`, not against memory or assumption.
+
+## 1. Confirmed CRUD gaps inside atlas-fieldforce itself
+
+Checked every router against its own data model. Real gaps, verified by
+reading the actual endpoint lists (`backend/app/*/router.py`) and dashboard
+routes (`dashboard/src/App.tsx`, `dashboard/src/Layout.tsx`):
+
+| Entity | Have | Missing |
+|---|---|---|
+| **Zones** | create, list, get, assign rep, list assignments | **update** (no `PATCH`, no `ZoneUpdate` schema at all — `backend/app/zones/schemas.py` has no update model), **delete**, **unassign a rep from a zone** (no `DELETE /zones/{id}/assignments/{assignment_id}`) |
+| **Reps/users** | self-service `POST /auth/register` (anyone with a tenant ID can register as `rep` *or* `manager` — no gate), read-only `GET /api/v1/users` | **no manager-initiated "add a rep" flow**, no way to deactivate/remove a rep, **no Reps page in the dashboard at all** — no nav link, no route in `App.tsx`/`Layout.tsx` |
+| **Goals** | create, list, get, progress, log-value | **update** (no way to fix a wrong target/period without deleting — and there's no delete either) |
+| **Tasks** | create, list, get, **update** (title/due_date/priority), complete, cancel | — none, this one's actually complete (cancel is the intentional soft-delete) |
+| **Violations** | list (read-only) | **no manual resolve** — a violation only closes when a new in-zone ping arrives; a rep whose device dies mid-violation leaves it stuck open forever with no manager override |
+
+The dashboard's `ZonesPage.tsx` does render `leaflet-draw`'s edit toolbar
+(`edit: { featureGroup: drawnItems }`), but since there's no backend `PATCH`
+endpoint for zones, that toolbar has nothing to save to — worth checking
+directly in the browser whether "editing" a zone silently does nothing or
+errors, since the UI affordance exists but the API doesn't.
+
+**Root cause, not just a list of holes:** every one of these entities got
+exactly the CRUD verbs its *own* plan task asked for and no more — `PLAN.md`
+never had a task that said "and update/delete." This wasn't corner-cutting
+under time pressure; it's that manager-side entity editing was never scoped
+as its own requirement in `docs/design.md` or `PLAN.md` in the first place.
+The gap is real, but it's a scoping gap, not a build-quality gap.
+
+## 2. The "borrow from atlas-erp" decision
+
+**No written record of this decision exists in either repo.** Checked:
+
+- `atlas-erp/DECISIONS.md` in full (62 recorded decisions, `D-001`-`D-062`)
+  — zero mentions of "fieldforce," "field force," or a merge/borrow plan.
+- Every doc in `atlas-fieldforce` (`docs/design.md`, `PLAN.md`, `README.md`,
+  `PROGRESS.md`, `docs/research/`) — zero mentions of "borrow."
+- `docs/design.md:11` references a "Merge path" section ("see 'Merge path'
+  below") that **does not exist** in the document — a dangling reference to
+  content that was apparently planned but never written.
+
+If this was decided, it was decided verbally and never captured — worth
+writing down now regardless of what we do with it, so it doesn't get lost
+again.
+
+**What *is* real and available to actually borrow from, if we build the
+integration:**
+
+- **`atlas-erp`'s HR module** (`backend/app/modules/hr/`) is complete and
+  production-grade: an `Employee` model (`hr_employees` — code, name,
+  department/position/manager FKs, masked compensation/PII) with full CRUD
+  at `/api/v1/hr/employees`, org chart, leave, timesheets, payroll. This is
+  exactly the "HR system" the user recalled, and it exists.
+- **`atlas-erp`'s Inventory/Items module** is complete: an `Item` model
+  (`inv_items` — atlas-erp's own term is "item," not "product") with CRUD
+  at `/api/v1/inventory/items`, categories, multi-UoM, lot/serial tracking,
+  costing. This is the "list of products" the user recalled.
+- **`atlas-erp`'s Sales + CRM modules** are also both complete: quotes →
+  orders → deliveries → billing, leads → opportunities pipeline. This is
+  what would give `goals.metric_type = SALES_VALUE` a real number instead
+  of a rep manually typing one in, and would let `tasks.external_reference`
+  / `visits.external_reference` point at a real CRM lead instead of free
+  text.
+
+**What's missing for any of this to be actionable: an integration
+mechanism.** Searched `atlas-erp` for webhooks, a public API, API keys, or
+any service-account/machine-to-machine auth path — none exist. `atlas-erp`
+only has its own internal JWT-authenticated REST API, built for its own
+frontend. To borrow anything today, `atlas-fieldforce` would need to either:
+
+1. Call `atlas-erp`'s internal endpoints as a real, logged-in `atlas-erp`
+   user (its JWT/tenant model, not fieldforce's) — nothing about this is
+   built on either side, and it couples fieldforce's runtime to atlas-erp's
+   auth system in a way `docs/design.md`'s "own repo, database, and deploy"
+   principle explicitly avoided.
+2. Build a sync/ETL job that periodically copies employee/item/sales data
+   from atlas-erp's database into fieldforce's own tables — also entirely
+   unbuilt on either side.
+
+Neither is close to existing. "Borrow from atlas-erp" is accurate as a
+*direction*, but today it's a from-scratch integration project, not a
+switch to flip.
+
+**One more thing worth knowing:** an early, since-reverted attempt actually
+built a native "Phase 18 — Field Force Tracking" module *inside* atlas-erp
+(before the standalone-repo decision was made) — CRM/Sales-linked visits,
+HR-employee-linked rep profiles, in-field order capture creating real Sales
+quotes. It was unwound as an out-of-process duplicate
+(`atlas-fieldforce/PROGRESS.md:7`, atlas-erp PR #143 / issue #142), but the
+design sketch is still recoverable from atlas-erp's git history
+(`git show 9de9e8b:docs/research/fieldforce-tracking-design-spec.md` in
+`atlas-erp`) and covers almost exactly the CRM/HR-linking gap above — worth
+reading as prior art before designing this integration from scratch, even
+though the code itself was reverted.
+
+**Also worth knowing:** `atlas-erp` itself isn't at v1.0.0. Its backend is
+complete and stable (`origin/main` tag `v0.3.0`), but its frontend is only
+through Phase 15.7 of 17 phases — Manufacturing/Quality/HR/Projects+CRM/
+Reporting+Admin UI, plus seed data and final assembly, are all still ahead
+of it. The backend modules above are real and callable today; the rest of
+atlas-erp is still being built.
+
+## 3. Recommendation
+
+Two genuinely separate pieces of work, worth not conflating:
+
+- **Section 1's gaps are small, contained, and immediately buildable** —
+  zone update/delete, a Reps management page + backend endpoint, goal
+  update, manual violation resolve. This is a normal follow-up phase, no
+  design questions, could be planned and built the same way every other
+  phase in this project has been.
+- **Section 2 (the atlas-erp integration) is a real design decision that
+  needs to happen before any code gets written** — which integration
+  mechanism (live API calls vs. a sync job), what auth model bridges the
+  two tenant systems, and whether it's worth doing before atlas-erp itself
+  reaches v1.0.0. This isn't a coding task yet; it's a "let's actually
+  decide and write it down this time" conversation.

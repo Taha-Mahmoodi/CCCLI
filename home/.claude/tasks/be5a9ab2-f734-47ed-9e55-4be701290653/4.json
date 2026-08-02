@@ -1,0 +1,9 @@
+{
+  "id": "4",
+  "subject": "Phase 3: Postgres container + restore + verify",
+  "description": "Bring up postgres:18, create role/DBs, restore both dumps into pgdata volume. Gate: per-table COUNT(*) in container == source for both DBs.",
+  "activeForm": "Restoring DB into container and verifying parity",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

@@ -1,0 +1,9 @@
+{
+  "id": "1",
+  "subject": "Slice 4: Commons features",
+  "description": "Profile + a11y control center, updates feed + reactions, waitlist, contributor onboarding, dossier reader. Accessible, tested. PR by Said. (Slices 0-3 done: repo, scaffold, data+auth, marketing.)",
+  "activeForm": "Building Commons features",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

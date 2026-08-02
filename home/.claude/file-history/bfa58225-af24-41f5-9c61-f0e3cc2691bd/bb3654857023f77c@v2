@@ -1,0 +1,761 @@
+# Tablet App 8a — Scaffold, Rep Auth, API Client, Background Location + Ping Posting
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** First half of PLAN.md 8.1/8.2 — a Capacitor+React+TS+Tailwind Android app with rep login, a typed API client, and background location tracking that posts pings to the backend. Second half (offline queue, sync-on-reconnect, check-in/out, task list, goal progress view — PLAN.md 8.3/8.4) is a separate plan, `2026-07-21-tablet-8b-*.md`, mirroring the dashboard's 7a/7b split.
+
+**Verification model, and why it differs from both prior client phases:** `docs/design.md`'s v1 bar is explicit: *"tablet APK buildable"* — not "verified on a device," not "verified in an emulator." Phase 10.3 separately lists *"real-device GPS testing"* as a punch-list item needing customer/user infrastructure, not something this phase attempts. Per-task gates are `npm run typecheck` + `npm run build` (the web layer) + `npx cap sync android && cd android && ./gradlew assembleDebug` (the native layer — genuinely producing a `.apk` file, not just trusting Gradle's exit code). The controller's end-of-plan verification (mirroring the dashboard's real-browser check) is: confirm a real, non-empty `app-debug.apk` exists after the final task. There is no emulator or physical device available in this environment, and per design.md's own scoping that's a legitimate, named-in-advance limitation, not a shortcut — do not attempt to install/boot an Android emulator to "go further" than the stated bar.
+
+**Environment facts, verified empirically before this plan was written (do not skip or "improve" these — they were found the hard way):**
+- **JDK 21 is required**, not JDK 17. Capacitor 8's Android Gradle module targets Java source/target compatibility 21; building with JDK 17 fails with `error: invalid source release: 21` at the very first native compile step. `brew install openjdk@21` (not the `openjdk` formula/cask, which installs a different version and needs `sudo` for the cask). Every command in this plan that touches `android/` needs `JAVA_HOME` set to the JDK 21 install.
+- **Gradle's default HTTP timeout is too short for this network** — a large (~50MB) dependency (`kotlin-compiler` from Google's Maven repo, pulled in transitively by Capacitor's Android annotation-extraction step) reproducibly truncates mid-download with Gradle's default timeouts (confirmed twice, at two different truncation points — not a one-off blip; confirmed via a direct `curl` of the same URL succeeding cleanly, proving the network path itself is fine). Every `android/gradle.properties` in this project needs these four lines appended (Task 1 does this once; it's inherited by every later task since they all build on the same `android/` project):
+  ```
+  systemProp.org.gradle.internal.http.connectionTimeout=180000
+  systemProp.org.gradle.internal.http.socketTimeout=180000
+  systemProp.http.socketTimeout=180000
+  systemProp.https.socketTimeout=180000
+  ```
+- **The full pipeline (Vite scaffold → `cap init` → `cap add android` → `./gradlew assembleDebug`) was verified end-to-end in a throwaway spike and produces a real, installable `.apk`.** `@capacitor-community/background-geolocation@1.2.26`'s own README compatibility table only lists Capacitor up to v7 — this was independently verified NOT to be a real blocker: the plugin's native Android code was spiked against Capacitor 8.4.2 with this exact toolchain and built cleanly (`BUILD SUCCESSFUL`, real `.apk` produced). One informational-only deprecation warning appeared ("incompatible with Gradle 9.0") — harmless today since Capacitor 8's generated project pins Gradle 8.14.3, worth a one-line awareness note for whoever eventually bumps Gradle, not a fix needed now.
+- **First-time `cap add android` + Gradle sync is slow** (~7 minutes observed: Gradle wrapper download + first dependency resolution). Subsequent builds are fast (under a minute) once Gradle's cache is warm. Don't assume a hang; a background/long-running Bash call with a generous timeout is the right tool for the first sync specifically.
+- Environment variables needed for every Android-touching command in this plan:
+  ```bash
+  export JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
+  export ANDROID_HOME="$HOME/Library/Android/sdk"
+  export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+  ```
+  (The Android SDK itself — platform-tools, `platforms;android-34`, `build-tools;34.0.0` — is already installed at `~/Library/Android/sdk` in this environment; no need to reinstall it.)
+
+## Global Constraints
+
+- **Directory**: `tablet/` at the repo root, sibling to `backend/` and `dashboard/`. Same stack as the dashboard otherwise (Vite + React 18 + TypeScript strict + Tailwind CSS v4 via `@tailwindcss/vite`), `npm` as the package manager.
+- **Backend contract, verified against the real routers before writing this plan (do not re-derive, use as given):**
+  - `POST /api/v1/auth/login` needs `X-Tenant-Id` header (only call that does); `POST /api/v1/auth/refresh` and `GET /api/v1/auth/me` use `Authorization: Bearer` alone. Identical to the dashboard's already-proven contract.
+  - `POST /api/v1/pings` — rep-only, body `{recorded_at, latitude, longitude, accuracy?, idempotency_key}`.
+  - `POST /api/v1/visits/check-in` — rep-only, body `{idempotency_key, zone_id?, latitude, longitude, notes?, external_reference?}` — **`idempotency_key` is REQUIRED** (added in the `feat/tablet-backend-prereqs` branch specifically so this app can queue-and-retry check-ins safely; do not build this app against an assumption that predates that fix).
+  - `POST /api/v1/visits/{id}/check-out` — rep-only, no body.
+  - `GET /api/v1/tasks` — rep sees own tasks only (server-side filter, no client-side filtering needed); `POST /api/v1/tasks/{id}/complete` — rep-only, no body.
+  - `GET /api/v1/goals` — rep sees own goals only; `GET /api/v1/goals/{id}/progress` — open to both roles; `POST /api/v1/goals/{id}/log-value` — rep-only, body `{value}` (for `SALES_VALUE` goals only, 409s on `VISIT_COUNT`/`TASK_COUNT`).
+- **After login, reject non-rep accounts at the UI layer** — mirror image of the dashboard's reject-non-manager check. If `/auth/me` returns `role !== 'rep'`, show a clear error ("this app is for field reps") and don't persist the session.
+- **Token storage**: same deliberate simplification as the dashboard — `refresh_token` in `@capacitor/preferences` (Capacitor's cross-platform key-value store, the mobile equivalent of `localStorage`), `access_token` in memory only. Using `@capacitor/preferences` instead of raw `localStorage` because this is a native app where `localStorage` inside the WebView is less durable/reliable across app updates than Capacitor's own storage plugin — this is the one place mobile and web diverge in the auth pattern.
+- **The API client (`client.ts`) is functionally identical to the dashboard's** — same 401-refresh-retry-once logic, same `ApiError` class, same `erasableSyntaxOnly` field-assignment workaround if this project's `tsconfig` also enables that flag (check; don't assume, but don't be surprised either). The only difference is the token-read/write calls go through `@capacitor/preferences` instead of `localStorage`. Do not redesign this logic from scratch — port it.
+- **Idempotency keys are generated client-side per queued/sent item** via `crypto.randomUUID()` (available natively in any modern WebView Capacitor targets, no extra dependency needed) — every ping and every check-in this app ever sends carries a freshly generated one. This task doesn't yet need offline-queue durability for these keys (that's Phase 8b) — for 8a, a key is generated and used immediately in the same request, not persisted for later replay.
+- **Background location posts on a fixed timer, not on every GPS callback.** `@capacitor-community/background-geolocation`'s `addWatcher` callback can fire far more often than the 15-60s cadence `docs/design.md` specifies for ping posting — store only the LATEST location from the watcher callback (a ref, not state that triggers re-renders on every GPS tick), and a separate `setInterval` posts whatever the latest stored location is every `PING_POST_INTERVAL_MS` (30 seconds, the middle of design.md's 15-60s range, as a named constant). If no location has been received yet when the timer fires, skip that tick (don't post `null`/undefined coordinates).
+- **`addWatcher`'s `backgroundMessage`/`backgroundTitle` options are required for background operation on Android** (the plugin's own docs: without them, updates are only guaranteed in the foreground) — always pass both, with a real, honest message ("Atlas Field Force is tracking your location for field visits"), not a placeholder. `requestPermissions: true` so the OS permission prompt fires automatically on first use rather than requiring a separate manual permission-request step.
+- No test-file scope creep: same calibration as the dashboard — `npm run typecheck` + `npm run build` (+ the Gradle build) are the primary gates; a small number of targeted vitest tests only for genuinely new logic (the ping-poster's timer/latest-value behavior is the one piece worth it here, mirroring the dashboard's `usePolling` test).
+
+---
+
+## File Structure
+
+```
+tablet/
+  index.html
+  package.json
+  tsconfig.json, tsconfig.app.json, tsconfig.node.json
+  vite.config.ts
+  capacitor.config.ts
+  .env.example                    # VITE_API_BASE_URL=http://localhost:8000
+  .gitignore                      # node_modules, dist, .env, android/ (generated, see Task 1 note)
+  android/                        # generated by `cap add android` — DO commit this (Capacitor's own convention; unlike node_modules, the native project is meant to be version-controlled, only its own build/ output is gitignored)
+  src/
+    main.tsx
+    App.tsx
+    auth/
+      AuthContext.tsx
+      LoginPage.tsx
+      ProtectedRoute.tsx
+      preferencesStore.ts            # the @capacitor/preferences-backed equivalent of the dashboard's tokenStore.ts
+    api/
+      client.ts
+      client.test.ts
+      types.ts
+      pings.ts
+      visits.ts
+      tasks.ts
+      goals.ts
+    location/
+      backgroundLocation.ts           # addWatcher wiring
+      usePingPoster.ts                  # the timer-based latest-location-flush hook
+      usePingPoster.test.ts
+      TrackingToggle.tsx                 # start/stop UI + status display
+```
+
+**Interfaces summary:**
+- `src/auth/preferencesStore.ts` — `setTokens(access: string | null, refresh: string | null): Promise<void>`, `getAccessToken(): string | null`, `getRefreshToken(): Promise<string | null>` (async because Preferences reads are async, unlike the dashboard's synchronous `localStorage`-backed `tokenStore.ts` — this is a real, load-bearing API difference between the two platforms, not a stylistic one; `client.ts`'s refresh-retry logic needs to `await` the refresh token read).
+- `src/api/client.ts` — `apiFetch<T>(path, options?): Promise<T>`, same contract as the dashboard.
+- `src/location/usePingPoster.ts` — `usePingPoster(getLatestLocation: () => Location | null, intervalMs: number): void` — no return value needed (it's a fire-and-forget side-effecting poster, not a data-fetching hook like the dashboard's `usePolling`).
+
+---
+
+### Task 1: Capacitor + React + TS + Tailwind scaffold, Android platform, verified real APK
+
+**Files:** everything under `tablet/` except `src/auth/`, `src/api/`, `src/location/` (later tasks).
+
+- [ ] **Step 1: Scaffold the Vite project**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+npm create vite@latest tablet -- --template react-ts
+cd tablet
+npm install
+```
+
+- [ ] **Step 2: Add Tailwind CSS v4** (identical to the dashboard's Task 1 — same two commands, same `vite.config.ts`/`index.css` shape)
+
+```bash
+npm install tailwindcss @tailwindcss/vite
+```
+
+`vite.config.ts`:
+```ts
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+})
+```
+
+`src/index.css`: replace entirely with `@import "tailwindcss";`
+
+- [ ] **Step 3: Clean up the scaffold's default template clutter and any auto-added lint tool**
+
+The dashboard's Task 1 hit two real issues from a newer `npm create vite` template than this plan anticipated: an auto-generated `oxlint` setup (a second linting tool nobody asked for — `dashboard/.oxlintrc.json`, an `"lint": "oxlint"` script, an `oxlint` devDependency) and dead default-template files (`App.css`, `src/assets/hero.png`/`react.svg`/`vite.svg`, a boilerplate `README.md`). Check for the same things here before proceeding:
+- If `package.json` has a `"lint"` script backed by `oxlint` (or any linter) and an `.oxlintrc.json`/similar config exists: remove the config file, the script, and the devDependency, then `npm install` to regenerate the lockfile clean.
+- Replace `src/App.tsx` with a minimal placeholder (real routing comes in Task 2):
+  ```tsx
+  function App() {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8">
+        <h1 className="text-2xl font-semibold text-gray-900">Atlas Field Force — Rep App</h1>
+      </div>
+    )
+  }
+
+  export default App
+  ```
+- Delete any now-unreferenced default template files this leaves behind (`App.css`, `src/assets/*`, boilerplate `README.md`) — grep first to confirm each is genuinely unreferenced before deleting, exactly as the dashboard's Task 1 fix round did.
+
+- [ ] **Step 4: Env var + gitignore**
+
+`.env.example`:
+```
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+Create `.env` with the same content (gitignored, for local dev).
+
+- [ ] **Step 5: Verify the web layer builds**
+
+```bash
+npx tsc -b
+npm run build
+```
+
+Add a `"typecheck": "tsc -b"` script to `package.json` now (not as an afterthought — the dashboard's Phase 7a final review found that a bare `npx tsc --noEmit` against a solution-style root `tsconfig.json` silently checks zero files; use `tsc -b` from the start here). Also add `"strict": true` to `tsconfig.app.json`'s `compilerOptions` now, for the same reason the dashboard's final review had to retrofit it — don't repeat that gap.
+
+- [ ] **Step 6: Add Capacitor and initialize**
+
+```bash
+npm install @capacitor/core @capacitor/cli @capacitor/android
+npx cap init "Atlas Field Force" "com.atlas.fieldforce" --web-dir dist
+```
+
+- [ ] **Step 7: Add the Android platform**
+
+```bash
+export JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+npx cap add android
+```
+
+Expected: takes several minutes on first run (Gradle wrapper download + sync) — this is normal, not a hang. If running this via a tool that enforces a request timeout, run it as a background/long-running process rather than assuming failure.
+
+- [ ] **Step 8: Apply the Gradle HTTP timeout fix**
+
+Append to `android/gradle.properties` (this file is generated by Step 7 — edit it after, don't try to pre-seed it):
+
+```
+systemProp.org.gradle.internal.http.connectionTimeout=180000
+systemProp.org.gradle.internal.http.socketTimeout=180000
+systemProp.http.socketTimeout=180000
+systemProp.https.socketTimeout=180000
+```
+
+- [ ] **Step 9: Verify a real debug APK builds**
+
+```bash
+export JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+cd android
+./gradlew assembleDebug
+```
+
+Expected: `BUILD SUCCESSFUL`. Then confirm the artifact actually exists and is non-trivially sized (a real APK, not an empty/corrupt file):
+
+```bash
+ls -la app/build/outputs/apk/debug/app-debug.apk
+```
+
+Expected: a file several MB in size exists. If the build fails with `error: invalid source release: 21`, `JAVA_HOME` is pointing at the wrong JDK — re-check Step 8's env vars are actually exported in the same shell invocation as the `./gradlew` call, not a prior one (each new shell needs them re-exported, per this plan's Environment facts section). If the build fails with a truncated-download error on a large dependency, re-run `./gradlew assembleDebug` again once or twice before concluding it's a real problem — this was observed to succeed on retry once the timeout fix from Step 8 was in place, and a single retry is cheap.
+
+- [ ] **Step 10: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add tablet/
+git commit -m "feat(tablet): Capacitor+React+TS+Tailwind scaffold, Android platform, verified debug APK build
+
+Refs PLAN 8.1"
+```
+
+Note: `tablet/android/` IS committed (Capacitor's own convention — the native project is source, not a build artifact; only `tablet/android/app/build/` and similar Gradle output directories are gitignored, which `cap add android` already sets up correctly via its own generated `.gitignore` files inside `android/`). Do not `git add` a `dist/` or Gradle `build/` directory — check `git status` before committing and if either shows up, something's wrong with the gitignore setup, not something to force-add past.
+
+---
+
+### Task 2: Rep auth (login, token storage, protected routes)
+
+**Files:**
+- Create: `tablet/src/auth/preferencesStore.ts`, `tablet/src/auth/AuthContext.tsx`, `tablet/src/auth/LoginPage.tsx`, `tablet/src/auth/ProtectedRoute.tsx`
+- Modify: `tablet/src/App.tsx`, `tablet/package.json` (add `@capacitor/preferences`, `react-router-dom`)
+
+**Interfaces:** per the plan header's Interfaces summary.
+
+- [ ] **Step 1: Install dependencies**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/tablet
+npm install @capacitor/preferences react-router-dom
+```
+
+- [ ] **Step 2: Write `src/auth/preferencesStore.ts`**
+
+```ts
+// tablet/src/auth/preferencesStore.ts
+import { Preferences } from '@capacitor/preferences'
+
+const REFRESH_TOKEN_KEY = 'atlas_refresh_token'
+
+let currentAccessToken: string | null = null
+
+export function setAccessToken(token: string | null): void {
+  currentAccessToken = token
+}
+
+export function getAccessToken(): string | null {
+  return currentAccessToken
+}
+
+export async function setRefreshToken(token: string | null): Promise<void> {
+  if (token === null) {
+    await Preferences.remove({ key: REFRESH_TOKEN_KEY })
+  } else {
+    await Preferences.set({ key: REFRESH_TOKEN_KEY, value: token })
+  }
+}
+
+export async function getRefreshToken(): Promise<string | null> {
+  const { value } = await Preferences.get({ key: REFRESH_TOKEN_KEY })
+  return value
+}
+
+export async function setTokens(access: string | null, refresh: string | null): Promise<void> {
+  setAccessToken(access)
+  await setRefreshToken(refresh)
+}
+```
+
+Note this is a real, load-bearing API difference from the dashboard's `tokenStore.ts`: `Preferences.get`/`.set`/`.remove` are all async (they cross the native bridge), unlike `localStorage`'s synchronous API. `setTokens` here is `async` where the dashboard's is not. Every caller in this app (in `AuthContext.tsx` and later in `client.ts`) must `await` it.
+
+- [ ] **Step 3: Write `src/auth/AuthContext.tsx`**
+
+Port the dashboard's `AuthContext.tsx` (from `dashboard/src/auth/AuthContext.tsx`) with these changes:
+- Replace all `localStorage.getItem/setItem/removeItem(REFRESH_TOKEN_KEY)` calls with `await getRefreshToken()` / `await setTokens(access, refresh)` / `await setRefreshToken(null)` from `./preferencesStore`.
+- Replace the manager-role check (`me.role !== 'manager'`) with a rep-role check (`me.role !== 'rep'`), and the error message with `"this app is for field reps"`.
+- The mount-effect and `login()` function both become slightly more `await`-heavy due to the async storage, but the overall shape (check for a stored refresh token on mount, exchange it, verify role, set state) is identical logic to the dashboard's proven version — do not redesign it, port it.
+
+Read the actual current `dashboard/src/auth/AuthContext.tsx` file to get the exact starting point before porting — don't reconstruct it from memory/description.
+
+- [ ] **Step 4: Write `src/auth/LoginPage.tsx`**
+
+Same shape as the dashboard's `LoginPage.tsx` (tenant ID, email, password fields, calls `useAuth().login(...)`, shows the thrown error, navigates to `/` on success) — implementer's discretion on exact markup, per the dashboard's precedent, keep it simple.
+
+- [ ] **Step 5: Write `src/auth/ProtectedRoute.tsx`**
+
+Port verbatim from `dashboard/src/auth/ProtectedRoute.tsx` — this component has no platform-specific logic (it only reads `useAuth()`'s already-resolved `user`/`isLoading` state), so it's identical between the dashboard and this app.
+
+- [ ] **Step 6: Wire routing into `src/App.tsx`**
+
+Same shape as the dashboard's Task 2 `App.tsx` (before the dashboard's later Layout-route restructure in 7b — this app doesn't need a nav-bar Layout yet, that's Task 4's `TrackingToggle` UI and 8b's later screens): `/login` → `LoginPage`, `/` → `ProtectedRoute`-wrapped placeholder `Home` (to be replaced by Task 4's real tracking screen).
+
+- [ ] **Step 7: Verify**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/tablet
+npm run typecheck
+npm run build
+```
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add tablet/
+git commit -m "feat(tablet): rep auth (login, Preferences-backed token storage, protected routes)
+
+Refs PLAN 8.1"
+```
+
+---
+
+### Task 3: Typed API client
+
+**Files:**
+- Create: `tablet/src/api/client.ts`, `tablet/src/api/client.test.ts`, `tablet/src/api/types.ts`, `tablet/src/api/pings.ts`, `tablet/src/api/visits.ts`, `tablet/src/api/tasks.ts`, `tablet/src/api/goals.ts`
+- Modify: `tablet/src/auth/AuthContext.tsx` (if needed — check whether it already reads through `preferencesStore` correctly per Task 2, or needs a small refactor to write through it consistently, mirroring the dashboard's Task 3 which had to retrofit `AuthContext` to write through the newly-extracted `tokenStore`)
+- Modify: `tablet/package.json` (add `vitest`)
+
+**Interfaces:** per the plan header's Interfaces summary.
+
+- [ ] **Step 1: Install vitest**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/tablet
+npm install -D vitest
+```
+
+Add `"test": "vitest run"` to `package.json`'s scripts.
+
+- [ ] **Step 2: Write the failing test for the refresh-retry-once behavior**
+
+Port `dashboard/src/api/client.test.ts` — read it first. The test structure (mock `fetch`, assert exactly-one-refresh-and-retry, assert no-loop-on-second-401, assert refresh-failure-clears-tokens-and-throws) is identical; only the import path for the token store changes (`../auth/preferencesStore` instead of `../auth/tokenStore`), and since `preferencesStore`'s `setAccessToken`/`getAccessToken` are still synchronous (only the refresh-token half is async), the test's use of a synchronous `setTokens`-equivalent setup needs adjusting — use `setAccessToken(...)` directly plus an awaited `setRefreshToken(...)` in the test's `beforeEach`, rather than a single synchronous `setTokens(...)` call like the dashboard's test uses.
+
+- [ ] **Step 3: Run test to verify it fails**
+
+```bash
+npx vitest run src/api/client.test.ts
+```
+
+Expected: FAIL — module `./client` doesn't exist yet.
+
+- [ ] **Step 4: Write `src/api/client.ts`**
+
+Port `dashboard/src/api/client.ts`, with `getRefreshToken()` now `await`ed (it's async here) and `setTokens(...)` in `refreshAccessToken` similarly awaited:
+
+```ts
+// tablet/src/api/client.ts
+import { getAccessToken, getRefreshToken, setTokens } from '../auth/preferencesStore'
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL as string
+
+export class ApiError extends Error {
+  status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.status = status
+  }
+}
+
+async function doFetch(path: string, options: RequestInit, accessToken: string | null): Promise<Response> {
+  const headers = new Headers(options.headers)
+  if (accessToken) headers.set('Authorization', `Bearer ${accessToken}`)
+  if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  return fetch(`${API_BASE}${path}`, { ...options, headers })
+}
+
+async function refreshAccessToken(): Promise<string> {
+  const refreshToken = await getRefreshToken()
+  if (!refreshToken) throw new ApiError(401, 'no refresh token available')
+
+  const response = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  })
+  if (!response.ok) {
+    await setTokens(null, null)
+    throw new ApiError(401, 'refresh failed')
+  }
+  const tokens = await response.json()
+  await setTokens(tokens.access_token, tokens.refresh_token)
+  return tokens.access_token
+}
+
+export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  let response = await doFetch(path, options, getAccessToken())
+
+  if (response.status === 401) {
+    const newAccessToken = await refreshAccessToken()
+    response = await doFetch(path, options, newAccessToken)
+  }
+
+  if (!response.ok) {
+    throw new ApiError(response.status, `request to ${path} failed with ${response.status}`)
+  }
+
+  if (response.status === 204) return undefined as T
+  return response.json()
+}
+```
+
+(The `ApiError` class already uses the explicit-field-assignment form the dashboard had to switch to for `erasableSyntaxOnly` — written that way here from the start rather than needing a fix-round retrofit. Check `tablet/tsconfig.app.json` for whether `erasableSyntaxOnly` is actually set in this project's generated tsconfig before assuming it matters here — if it's not set, the parameter-property form would also work, but there's no cost to using the explicit form either way, so just use it as written above.)
+
+- [ ] **Step 5: Run test to verify it passes**
+
+```bash
+npx vitest run src/api/client.test.ts
+```
+
+- [ ] **Step 6: Write `src/api/types.ts`**
+
+Hand-written TS interfaces mirroring the backend's Pydantic schemas — read `backend/app/pings/schemas.py`, `backend/app/visits/schemas.py`, `backend/app/tasks/schemas.py`, `backend/app/goals/schemas.py`, `backend/app/auth/schemas.py` directly (do not guess field names). At minimum: `Ping` (matches `PingOut`), `Visit` (matches `VisitOut`), `Task` (matches `TaskOut`), `Goal`/`GoalProgress` (matches `GoalOut`/`GoalProgress`), `AuthUser` (matches `UserOut`, or reuse whatever shape `AuthContext.tsx` already defined for its own `AuthUser` type in Task 2 — don't duplicate it under a different name in this file, import/re-export instead if a duplicate would otherwise result).
+
+- [ ] **Step 7: Write the per-resource API modules**
+
+```ts
+// tablet/src/api/pings.ts
+import { apiFetch } from './client'
+import type { Ping } from './types'
+
+export interface PingCreateInput {
+  recorded_at: string
+  latitude: number
+  longitude: number
+  accuracy?: number | null
+  idempotency_key: string
+}
+
+export function submitPing(input: PingCreateInput): Promise<Ping> {
+  return apiFetch<Ping>('/api/v1/pings', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+```
+
+Write `visits.ts` (`checkIn(input)` → `POST /api/v1/visits/check-in` with the required `idempotency_key`; `checkOut(visitId)` → `POST /api/v1/visits/{id}/check-out`), `tasks.ts` (`getTasks(limit=50, offset=0)` → `GET /api/v1/tasks`; `completeTask(taskId)` → `POST /api/v1/tasks/{id}/complete`), and `goals.ts` (`getGoals(limit=50, offset=0)` → `GET /api/v1/goals`; `getGoalProgress(goalId)` → `GET /api/v1/goals/{id}/progress`; `logGoalValue(goalId, value)` → `POST /api/v1/goals/{id}/log-value`) analogously — read the real backend router files for each to get exact paths/methods/body shapes right, matching the dashboard's own established practice of verifying against the real backend rather than guessing.
+
+This task only needs `pings.ts`'s `submitPing` actually consumed by anything yet (Task 4's ping poster) — `visits.ts`/`tasks.ts`/`goals.ts` exist now so 8b can use them without rebuilding the client from scratch, with zero call sites for now, exactly matching the dashboard's precedent of building the full client ahead of the UI that consumes it.
+
+- [ ] **Step 8: Verify**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/tablet
+npm run typecheck
+npm run build
+npx vitest run
+```
+
+- [ ] **Step 9: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add tablet/
+git commit -m "feat(tablet): typed API client with 401-refresh-retry-once (Preferences-backed)
+
+Refs PLAN 8.1"
+```
+
+---
+
+### Task 4: Background location + ping posting
+
+**Files:**
+- Create: `tablet/src/location/backgroundLocation.ts`, `tablet/src/location/usePingPoster.ts`, `tablet/src/location/usePingPoster.test.ts`, `tablet/src/location/TrackingToggle.tsx`
+- Modify: `tablet/src/App.tsx` (swap the placeholder `Home` for `TrackingToggle`)
+- Modify: `tablet/package.json` (add `@capacitor-community/background-geolocation`, `@testing-library/react` for the poster hook's test)
+
+**Interfaces:** per the plan header's Interfaces summary.
+
+- [ ] **Step 1: Install the plugin**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/tablet
+npm install @capacitor-community/background-geolocation
+npm install -D @testing-library/react jsdom
+```
+
+(`jsdom` + `@testing-library/react`'s `renderHook` needed for the same reason as the dashboard's `usePolling` test — testing a hook's timer/cleanup behavior in isolation, not a component's rendered output. Add `test: { environment: 'jsdom' }` to `vite.config.ts` if it's not already there from an earlier task.)
+
+- [ ] **Step 2: Write `src/location/backgroundLocation.ts`**
+
+```ts
+// tablet/src/location/backgroundLocation.ts
+import { registerPlugin } from '@capacitor/core'
+
+export interface GeoLocation {
+  latitude: number
+  longitude: number
+  accuracy: number
+  time: number | null
+}
+
+interface WatcherOptions {
+  backgroundMessage?: string
+  backgroundTitle?: string
+  requestPermissions?: boolean
+  stale?: boolean
+  distanceFilter?: number
+}
+
+interface BackgroundGeolocationPlugin {
+  addWatcher(
+    options: WatcherOptions,
+    callback: (position?: GeoLocation, error?: Error) => void,
+  ): Promise<string>
+  removeWatcher(options: { id: string }): Promise<void>
+  openSettings(): Promise<void>
+}
+
+const BackgroundGeolocation = registerPlugin<BackgroundGeolocationPlugin>('BackgroundGeolocation')
+
+export async function startWatching(onLocation: (location: GeoLocation) => void): Promise<string> {
+  return BackgroundGeolocation.addWatcher(
+    {
+      backgroundMessage: 'Atlas Field Force is tracking your location for field visits.',
+      backgroundTitle: 'Atlas Field Force',
+      requestPermissions: true,
+      stale: false,
+      distanceFilter: 0,
+    },
+    (position, error) => {
+      if (error) {
+        console.error('Background location error:', error)
+        return
+      }
+      if (position) onLocation(position)
+    },
+  )
+}
+
+export async function stopWatching(watcherId: string): Promise<void> {
+  await BackgroundGeolocation.removeWatcher({ id: watcherId })
+}
+```
+
+This hand-rolls the plugin's own TypeScript interfaces (`WatcherOptions`, `GeoLocation`, `BackgroundGeolocationPlugin`) rather than importing them from `@capacitor-community/background-geolocation`'s own type exports, deliberately — its published `definitions.d.ts` exports `WatcherOptions`/`Location`/`BackgroundGeolocationPlugin` under those exact names, but `Location` collides with the DOM global `Location` type (the browser's `window.location` type), which causes confusing shadowing errors in a project that also uses the real DOM `Location` anywhere. Defining a locally-scoped `GeoLocation` alias sidesteps that collision entirely. The shapes above were copied from the installed package's real `definitions.d.ts` at plan-writing time (verified by installing the package and reading it directly, not guessed) — if `npm run typecheck` reports a mismatch against the actually-installed version, trust the installed `.d.ts` over this plan's copy and adjust minimally, don't fight it by suppressing the error.
+
+- [ ] **Step 3: Write the failing test for `usePingPoster`**
+
+```ts
+// tablet/src/location/usePingPoster.test.ts
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { renderHook } from '@testing-library/react'
+import { usePingPoster } from './usePingPoster'
+import type { GeoLocation } from './backgroundLocation'
+
+describe('usePingPoster', () => {
+  beforeEach(() => vi.useFakeTimers())
+  afterEach(() => vi.useRealTimers())
+
+  it('posts the latest location on each interval tick', () => {
+    const locations: GeoLocation[] = [
+      { latitude: 1, longitude: 1, accuracy: 5, time: 1000 },
+      { latitude: 2, longitude: 2, accuracy: 5, time: 2000 },
+    ]
+    let callIndex = 0
+    const getLatestLocation = vi.fn(() => locations[Math.min(callIndex, locations.length - 1)])
+    const onPost = vi.fn()
+
+    renderHook(() => usePingPoster(getLatestLocation, 1000, onPost))
+
+    vi.advanceTimersByTime(1000)
+    expect(onPost).toHaveBeenCalledWith(locations[0])
+
+    callIndex = 1
+    vi.advanceTimersByTime(1000)
+    expect(onPost).toHaveBeenCalledWith(locations[1])
+    expect(onPost).toHaveBeenCalledTimes(2)
+  })
+
+  it('skips a tick when no location is available yet', () => {
+    const getLatestLocation = vi.fn(() => null)
+    const onPost = vi.fn()
+
+    renderHook(() => usePingPoster(getLatestLocation, 1000, onPost))
+
+    vi.advanceTimersByTime(1000)
+    expect(onPost).not.toHaveBeenCalled()
+  })
+
+  it('stops posting after unmount', () => {
+    const getLatestLocation = vi.fn(() => ({ latitude: 1, longitude: 1, accuracy: 5, time: 1000 }))
+    const onPost = vi.fn()
+
+    const { unmount } = renderHook(() => usePingPoster(getLatestLocation, 1000, onPost))
+    unmount()
+
+    vi.advanceTimersByTime(5000)
+    expect(onPost).not.toHaveBeenCalled()
+  })
+})
+```
+
+(This test's `usePingPoster` signature takes an explicit `onPost` callback rather than calling `submitPing` directly, so the test can assert on posted values without mocking `fetch` — the real `TrackingToggle` component in Step 5 supplies `onPost` as a function that calls `submitPing` with a freshly generated idempotency key.)
+
+- [ ] **Step 4: Write `src/location/usePingPoster.ts`**
+
+```ts
+// tablet/src/location/usePingPoster.ts
+import { useEffect, useRef } from 'react'
+import type { GeoLocation } from './backgroundLocation'
+
+export function usePingPoster(
+  getLatestLocation: () => GeoLocation | null,
+  intervalMs: number,
+  onPost: (location: GeoLocation) => void,
+): void {
+  const getLatestLocationRef = useRef(getLatestLocation)
+  getLatestLocationRef.current = getLatestLocation
+  const onPostRef = useRef(onPost)
+  onPostRef.current = onPost
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const location = getLatestLocationRef.current()
+      if (location) onPostRef.current(location)
+    }, intervalMs)
+    return () => clearInterval(id)
+  }, [intervalMs])
+}
+```
+
+- [ ] **Step 5: Run test to verify it passes**
+
+```bash
+npx vitest run src/location/usePingPoster.test.ts
+```
+
+- [ ] **Step 6: Write `src/location/TrackingToggle.tsx`**
+
+```tsx
+// tablet/src/location/TrackingToggle.tsx
+import { useRef, useState } from 'react'
+import { startWatching, stopWatching } from './backgroundLocation'
+import { usePingPoster } from './usePingPoster'
+import { submitPing } from '../api/pings'
+import type { GeoLocation } from './backgroundLocation'
+
+const PING_POST_INTERVAL_MS = 30_000
+
+export function TrackingToggle() {
+  const [isTracking, setIsTracking] = useState(false)
+  const [lastPostedAt, setLastPostedAt] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const watcherIdRef = useRef<string | null>(null)
+  const latestLocationRef = useRef<GeoLocation | null>(null)
+
+  usePingPoster(
+    () => (isTracking ? latestLocationRef.current : null),
+    PING_POST_INTERVAL_MS,
+    (location) => {
+      submitPing({
+        recorded_at: new Date(location.time ?? Date.now()).toISOString(),
+        latitude: location.latitude,
+        longitude: location.longitude,
+        accuracy: location.accuracy,
+        idempotency_key: crypto.randomUUID(),
+      })
+        .then(() => setLastPostedAt(new Date().toLocaleTimeString()))
+        .catch((err) => setError(err instanceof Error ? err.message : 'Failed to send location'))
+    },
+  )
+
+  async function handleToggle() {
+    setError(null)
+    if (isTracking) {
+      if (watcherIdRef.current) await stopWatching(watcherIdRef.current)
+      watcherIdRef.current = null
+      setIsTracking(false)
+      return
+    }
+    try {
+      const id = await startWatching((location) => {
+        latestLocationRef.current = location
+      })
+      watcherIdRef.current = id
+      setIsTracking(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start location tracking')
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-8">
+      <h1 className="text-2xl font-semibold text-gray-900 mb-4">Atlas Field Force</h1>
+      <button
+        onClick={handleToggle}
+        className={`px-4 py-2 rounded text-white ${isTracking ? 'bg-red-600' : 'bg-blue-600'}`}
+      >
+        {isTracking ? 'Stop tracking' : 'Start tracking'}
+      </button>
+      {lastPostedAt && <p className="mt-4 text-sm text-gray-600">Last location sent: {lastPostedAt}</p>}
+      {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+    </div>
+  )
+}
+```
+
+- [ ] **Step 7: Wire `TrackingToggle` into `App.tsx`**
+
+Read the current file first. Replace the placeholder `Home` component/route with `TrackingToggle` from `./location/TrackingToggle`.
+
+- [ ] **Step 8: Verify the web layer**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/tablet
+npm run typecheck
+npm run build
+npx vitest run
+```
+
+Expected: all succeed, 4 total tests (3 from Task 3's client tests + ... check the actual count from Task 3's report — this plan's Interfaces summary implies client.ts has 3 tests like the dashboard's, plus this task's 3 new `usePingPoster` tests).
+
+- [ ] **Step 9: Verify the native layer — a real APK still builds with this new code**
+
+```bash
+export JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+cd /Users/taha/Documents/atlas-fieldforce/tablet
+npx cap sync android
+cd android
+./gradlew assembleDebug
+ls -la app/build/outputs/apk/debug/app-debug.apk
+```
+
+Expected: `npx cap sync android` picks up the newly-added `@capacitor-community/background-geolocation` plugin (should print `Found 1 Capacitor plugin for android` or similar), the Gradle build succeeds, and a real `.apk` exists. This is the task where the plugin's native Android code first actually gets compiled into the project — if this fails in a way Task 1's plain scaffold build didn't, the plugin (not the base toolchain) is the suspect; this plan's Environment facts section already confirmed the plugin builds cleanly in isolation, so a fresh failure here likely means something in how it's wired (e.g. a missing `AndroidManifest.xml` permission entry the plugin's own install docs mention) rather than a toolchain problem — check the plugin's `README.md` (in `node_modules/@capacitor-community/background-geolocation/README.md`) for any required native manifest/gradle setup steps beyond the plain `npm install` + `cap sync`.
+
+- [ ] **Step 10: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add tablet/
+git commit -m "feat(tablet): background location tracking + periodic ping posting
+
+Refs PLAN 8.2"
+```
+
+---
+
+## After this plan — controller verification (not a task, not delegated)
+
+Mirrors the dashboard's real-browser check, adapted for a platform with no available emulator/device: after all 4 tasks are individually reviewed and merged to a feature branch, the controller (not a subagent) runs the FULL pipeline one more time from a clean state as the final proof this phase actually works, not just that each task's own build succeeded in isolation:
+
+```bash
+export JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+cd /Users/taha/Documents/atlas-fieldforce/tablet
+npm run typecheck && npm run build && npx vitest run
+npx cap sync android
+cd android && ./gradlew assembleDebug
+ls -la app/build/outputs/apk/debug/app-debug.apk
+```
+
+Confirm a real, non-trivially-sized `.apk` exists at the end. This is the tablet app's equivalent of the dashboard's "does it actually render in a browser" check — for a platform with no available runtime to exercise, "does it actually produce a real native artifact via the real toolchain" is the deepest verification available, and per design.md's own stated v1 bar, is the correct and sufficient one. Do not report this phase complete on `npm run typecheck`/`build` alone — the Gradle build is the check that matters most here, exactly as the real-browser check mattered most for the dashboard.
+
+Then update `PROGRESS.md`, tick PLAN.md 8.1/8.2, a final whole-branch review, merge, and write the Phase 8b plan (offline queue, sync-on-reconnect, check-in/out, task list, goal progress view) against this now-working foundation.

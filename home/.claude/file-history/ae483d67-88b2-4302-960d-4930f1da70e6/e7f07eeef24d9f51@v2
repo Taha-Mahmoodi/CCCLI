@@ -1,0 +1,18 @@
+/** "0:07", "1:32" — milliseconds → m:ss for compact display. */
+export function formatDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+/** Screen-reader-friendly: "7 seconds", "1 minute 32 seconds". */
+export function spokenDuration(ms: number): string {
+  const totalSeconds = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  const parts: string[] = [];
+  if (m > 0) parts.push(`${m} minute${m === 1 ? "" : "s"}`);
+  parts.push(`${s} second${s === 1 ? "" : "s"}`);
+  return parts.join(" ");
+}

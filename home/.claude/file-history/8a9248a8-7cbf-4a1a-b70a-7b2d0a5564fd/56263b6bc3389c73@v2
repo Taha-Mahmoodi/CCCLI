@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "portfolio.me",
+  "description": "Forge a one-of-a-kind personal portfolio site — interview, strategy, design, build, deploy, verify, with human gates. No templates.",
+  "owner": {
+    "name": "PIIIX",
+    "url": "https://github.com/PIIIX-org"
+  },
+  "plugins": [
+    {
+      "name": "portfolio.me",
+      "description": "Pipeline + skill + seven worker agents to research, position, design, build, and deploy a personal portfolio site to any of nine targets.",
+      "source": "./",
+      "category": "productivity"
+    }
+  ]
+}

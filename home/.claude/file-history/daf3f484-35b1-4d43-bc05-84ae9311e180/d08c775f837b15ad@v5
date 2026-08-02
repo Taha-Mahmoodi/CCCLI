@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Yildizim</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='3.2' fill='%23ffe3b8'/><circle cx='8' cy='8' r='6.4' fill='none' stroke='%237fa8f4' stroke-width='0.9' opacity='0.7'/></svg>" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; background: #070911; }
+    canvas { display: block; }
+    #wordmark {
+      position: fixed; top: 28px; left: 32px;
+      font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+      font-size: 13px; font-weight: 600; letter-spacing: 0.42em;
+      color: rgba(255, 227, 184, 0.82);
+      user-select: none; pointer-events: none;
+      text-transform: uppercase;
+    }
+    #wordmark span { color: rgba(174, 203, 255, 0.55); }
+
+    /* proximity-fade labels — opacity driven per-frame from camera distance */
+    .yz-label {
+      font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+      font-size: 11px; font-weight: 500; letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: rgba(255, 240, 214, 0.9);
+      text-shadow: 0 0 8px rgba(7, 9, 17, 0.9);
+      pointer-events: none; user-select: none;
+      transition: opacity 120ms linear;
+    }
+
+    /* hover info panel — stats live here, never floating in the scene */
+    #yz-panel {
+      position: fixed; top: 24px; right: 28px; width: 240px;
+      padding: 18px 20px 16px;
+      font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+      color: rgba(255, 240, 214, 0.92);
+      background: rgba(10, 13, 24, 0.72);
+      border: 1px solid rgba(255, 227, 184, 0.14);
+      border-radius: 6px;
+      backdrop-filter: blur(10px);
+      opacity: 0; transition: opacity 160ms ease;
+      pointer-events: none;
+    }
+    #yz-panel .yz-name { font-size: 17px; font-weight: 600; letter-spacing: 0.04em; }
+    #yz-panel .yz-stage {
+      font-size: 10px; font-weight: 600; letter-spacing: 0.3em;
+      text-transform: uppercase; color: rgba(174, 203, 255, 0.75);
+      margin: 4px 0 10px;
+    }
+    #yz-panel .yz-row { font-size: 12px; color: rgba(255, 240, 214, 0.68); line-height: 1.5; }
+    #yz-panel .yz-decay { color: rgba(255, 157, 92, 0.85); }
+    #yz-panel .yz-hint {
+      margin-top: 12px; padding-top: 10px;
+      border-top: 1px solid rgba(255, 227, 184, 0.1);
+      font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+      color: rgba(255, 240, 214, 0.4);
+    }
+
+    /* stardust balance, under the wordmark */
+    #yz-stardust {
+      position: fixed; top: 52px; left: 32px;
+      font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+      font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+      color: rgba(255, 227, 184, 0.6);
+      user-select: none; pointer-events: none;
+    }
+    #yz-stardust span { color: rgba(255, 227, 184, 0.9); }
+
+    /* badge earning moment */
+    .yz-toast {
+      position: fixed; bottom: 36px; left: 50%;
+      transform: translate(-50%, 24px); opacity: 0;
+      width: 280px; padding: 16px 20px 14px; text-align: center;
+      font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+      color: rgba(255, 240, 214, 0.92);
+      background: rgba(10, 13, 24, 0.82);
+      border: 1px solid; border-radius: 6px;
+      backdrop-filter: blur(10px);
+      transition: opacity 380ms ease, transform 380ms ease;
+      pointer-events: none;
+    }
+    .yz-toast-in { opacity: 1; transform: translate(-50%, 0); }
+    .yz-toast-tier {
+      font-size: 9px; font-weight: 600; letter-spacing: 0.3em;
+      text-transform: uppercase; margin-bottom: 6px;
+    }
+    .yz-toast-name { font-size: 17px; font-weight: 600; letter-spacing: 0.04em; }
+    .yz-toast-desc { font-size: 11px; color: rgba(255, 240, 214, 0.6); margin-top: 3px; }
+    .yz-toast-dust { font-size: 11px; color: rgba(255, 227, 184, 0.85); margin-top: 9px; }
+
+    /* badge shelf drawer */
+    #yz-shelf {
+      position: fixed; top: 0; right: -320px; width: 288px; height: 100%;
+      padding: 28px 24px; overflow-y: auto;
+      font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+      color: rgba(255, 240, 214, 0.92);
+      background: rgba(8, 10, 19, 0.9);
+      border-left: 1px solid rgba(255, 227, 184, 0.12);
+      backdrop-filter: blur(12px);
+      transition: right 320ms ease;
+    }
+    #yz-shelf.yz-shelf-open { right: 0; }
+    .yz-shelf-title { font-size: 17px; font-weight: 600; letter-spacing: 0.04em; }
+    .yz-shelf-sub {
+      font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+      color: rgba(255, 240, 214, 0.45); margin: 6px 0 18px;
+    }
+    .yz-badge {
+      display: flex; gap: 12px; align-items: baseline;
+      padding: 10px 0; opacity: 0.38;
+      border-top: 1px solid rgba(255, 227, 184, 0.07);
+    }
+    .yz-badge.yz-held { opacity: 1; }
+    .yz-badge-dot {
+      width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+      position: relative; top: -1px;
+    }
+    .yz-badge-name { font-size: 13px; font-weight: 600; }
+    .yz-badge-desc { font-size: 11px; color: rgba(255, 240, 214, 0.55); margin-top: 2px; }
+    .yz-shelf-hint {
+      margin-top: 16px; font-size: 9px; letter-spacing: 0.2em;
+      text-transform: uppercase; color: rgba(255, 240, 214, 0.35);
+    }
+
+    /* signature customization drawer (left) */
+    #yz-custom {
+      position: fixed; top: 0; left: -320px; width: 288px; height: 100%;
+      padding: 28px 24px; overflow-y: auto;
+      font-family: "Avenir Next", "Helvetica Neue", sans-serif;
+      color: rgba(255, 240, 214, 0.92);
+      background: rgba(8, 10, 19, 0.9);
+      border-right: 1px solid rgba(255, 227, 184, 0.12);
+      backdrop-filter: blur(12px);
+      transition: left 320ms ease;
+    }
+    #yz-custom.yz-custom-open { left: 0; }
+    .yz-sig {
+      display: flex; gap: 12px; align-items: baseline;
+      padding: 12px 8px; margin: 0 -8px; cursor: pointer;
+      border-top: 1px solid rgba(255, 227, 184, 0.07);
+      border-radius: 4px;
+    }
+    .yz-sig:hover { background: rgba(255, 227, 184, 0.06); }
+    .yz-sig-current { background: rgba(255, 227, 184, 0.09); }
+  </style>
+</head>
+<body>
+  <div id="wordmark">Yildizim<span> — first light</span></div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

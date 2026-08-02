@@ -1,0 +1,29 @@
+## Description
+Slice 2: the data layer and authentication. **Stacked on #1** (base is `feature/scaffold`).
+
+## Changes
+- Prisma 6 schema + init migration + grounded seed (User, Profile, Update, Reaction, WaitlistEntry, ContributorInterest)
+- Auth.js (NextAuth v5) Credentials provider; JWT sessions carry `id` + `role`
+- argon2id password hashing (`@node-rs/argon2`)
+- Signup (with role selection) + login + sign-out
+- `/app` auth boundary via a server-component layout — no Edge middleware, keeps Prisma in the Node runtime
+- Zod validation; server actions for signup/login
+- CI: Postgres service + `prisma generate/migrate/seed` for the e2e job
+
+## Testing (sandbox)
+- [x] `type-check`, `lint` — pass
+- [x] Unit (argon2 hash/verify) — pass
+- [x] Build — pass (routes: `/app`, `/app/login`, `/app/signup`, `/api/auth/*`)
+- [x] E2E — pass: signup → sign out → sign in; unauthenticated `/app` redirects to login
+- [x] Seed runs against Postgres (team user + 3 dossier-grounded updates)
+
+## Notes
+- **Prisma pinned to 6.x on purpose:** Prisma 7 replaced the classic `url`-in-schema + `new PrismaClient()` model with a new config-file + driver-adapter architecture — added complexity for no benefit here.
+- Email verification intentionally deferred (accounts usable immediately) per the spec.
+- Seed runs via `tsx` so it works across Node 20/22/24/26 and the Docker migrate step.
+- GitHub retargets this PR's base to `dev` once #1 merges. Please review — no auto-merge.
+
+## Checklist
+- [x] Follows folder/naming conventions
+- [x] Self-reviewed
+- [x] No breaking changes

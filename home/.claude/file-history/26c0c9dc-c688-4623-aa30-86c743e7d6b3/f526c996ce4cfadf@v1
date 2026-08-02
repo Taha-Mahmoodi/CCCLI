@@ -1,0 +1,255 @@
+# Styles
+
+What it looks like. Thirty starting positions, what each one signals to a buyer, and
+what it costs.
+
+`§3` is the rule that governs this file: these are a **starting position, never a
+destination**. Ship a named style unmodified and the run failed. Every entry below is
+something to collide, subvert, or push past — the collision table and the subversion
+section are the actual work.
+
+The commercial difference from a personal site: a style here is read as a claim about
+the company. A visitor decides whether this looks like a business that can handle
+their contract before reading a word, and they are not wrong to. Style choice is a
+trust decision as much as a taste one.
+
+---
+
+## Picking one
+
+The style shortlist comes from the translation table in `BRIEF.md`, not from taste:
+
+1. **Category cluster** (`POSITIONING.md §5`) — what every competitor already looks
+   like. That is the fence, not the field
+2. **The empty position** — what nobody in the category looks like, that this client
+   could credibly be
+3. **Anti-positioning** — styles banned outright. Honor absolutely
+4. **The buyer's risk appetite** — a procurement committee buying infrastructure and
+   a founder buying a design sprint tolerate different amounts of strangeness
+5. **What the brand already owns** (`POSITIONING.md §12`) — load-bearing elements are
+   constraints, not suggestions
+
+Never one answer. Bring three families to Gate B1 (`§4`).
+
+---
+
+## Authority and institutional
+
+Styles that say *this company will still exist in five years*. Reach for these when
+the ranking objection is trust, when the contract is large, or when the buyer is a
+committee.
+
+| Style | What it is | Signals | Costs |
+|---|---|---|---|
+| **Swiss / International** | Strict grid, one grotesk, generous whitespace, flush-left everything | Rigor, seriousness, engineering culture | The most crowded style in B2B. Unmodified, it is invisible |
+| **Editorial** | Magazine structure: measure, drop caps, marginalia, pull quotes, a real type hierarchy | Thoughtfulness, expertise, something worth reading | Wants real copy. Fails hard with placeholder-length text |
+| **Corporate modernist** | Institutional grotesk, restrained palette, photography as evidence | Scale and permanence | Slides into the beige default if nothing is pushed |
+| **Archival / documentary** | Records, dates, indexes, tabular listings, serif captions | A body of work that exists and was catalogued | Needs actual volume. Thin content reads as pretension |
+| **Blueprint / technical drawing** | Line weights, dimension rules, annotation callouts, hairline grid | Precision. Excellent for anything engineered or manufactured | Reads cold. Pair with warmth somewhere |
+| **Legal-formal** | Justified columns, small caps, footnotes, near-monochrome | Gravity, discretion, professional service | Almost no room for delight. Deliberate choice only |
+
+## Product and clarity
+
+Styles built to make software legible. The register of most SaaS marketing, which is
+exactly why the unmodified versions are the least distinguishing choice available.
+
+| Style | What it is | Signals | Costs |
+|---|---|---|---|
+| **Product-first** | The real UI at working resolution, annotated, carrying the page | Confidence — the product is the argument (`§11`) | Only as good as the UI. Ugly product, honest problem |
+| **Bento** | Modular tiles of varying size, each carrying one idea | Feature breadth without a wall of text | The most imitated layout of the decade. Unmodified it dates the site instantly |
+| **Diagrammatic** | The page explains a system: flows, nodes, before-and-after | Comprehension for anything with a non-obvious mechanism | Needs a real diagram, not decoration with arrows |
+| **Dashboard-native** | Marketing site borrowing the product's own visual language | Continuity from site to trial | Confusing when the site and product diverge later |
+| **Comparison-led** | The page is a table, and the table is the argument | Fearlessness, when the client genuinely wins | Legal exposure (`COMPLIANCE.md`). Every cell is a claim |
+| **Instructional** | Numbered steps, worked example, real data | Removes the switching-cost objection by showing the work | Long. Earn the scroll |
+
+## Craft and material
+
+Styles that make a page feel made rather than assembled. Strong for agencies, studios,
+and premium positioning where the work itself is the product.
+
+| Style | What it is | Signals | Costs |
+|---|---|---|---|
+| **Risograph / print artifact** | Misregistration, limited spot inks, halftone, paper grain | A hand and a press. Warmth, craft, a physical object | Reads indie. Wrong for enterprise infrastructure |
+| **Letterpress / debossed** | Physical impression, subtle relief, ink spread | Heritage and permanence | Contrast traps. See the accessibility table |
+| **Collage** | Cut edges, mixed media, overlapping registration, deliberate mess | Creative capability, editorial voice | Hard to keep legible and harder to keep on-brand across pages |
+| **Ink and gesture** | Brush strokes, wet edges, one human mark against structure | A person made a decision here | One gesture. Two is decoration |
+| **Textile / material substrate** | Weave, fibre, stitched edges, tactile fills | Handmade, sustainable, physical-goods brands | Heavy assets unless generated (`§14`, `CRAFT.md`) |
+| **Photographic-led** | Real photography carrying the design, type as a quiet layer | Reality, scale, people | Only with real, licensed, non-stock photography. Otherwise it is the laughing-at-a-laptop failure |
+
+## Atmosphere and depth
+
+Styles with a mood. Effective for premium positioning and for products whose value is
+felt rather than enumerated. Dangerous when the buyer needs to read a spec.
+
+| Style | What it is | Signals | Costs |
+|---|---|---|---|
+| **Cinematic dark** | Single key light, deep falloff, grade, grain, vignette | Premium, considered, high production value | Contrast discipline required. Body copy suffers in the falloff |
+| **Aurora / mesh gradient** | Soft multi-stop fields, slow drift | Depth and modernity at almost no cost | **The single most exhausted style in SaaS.** Only heavily subverted |
+| **Glass / refractive** | Blur, refraction, layered translucency, real depth | Sophistication, layered systems | Text contrast changes with what scrolls behind it |
+| **Spatial / 3D world** | A navigable scene with depth and camera | Ambition, and a product with a physical or spatial dimension | Expensive, and a fallback is mandatory (`§17`) |
+| **Volumetric light** | Rays, participating media, atmosphere | Air in the scene. Turns flat into a place | Easy to overcook into a stock render |
+| **Nocturne** | Near-black substrate, one saturated accent, high restraint | Focus. Everything else falls away | Every element must earn its light |
+
+## Structural and typographic
+
+Styles where the layout and the type *are* the design. Cheap to build, fast, and
+frequently the strongest differentiator available in a category full of gradients.
+
+| Style | What it is | Signals | Costs |
+|---|---|---|---|
+| **Radical minimalism** | Almost nothing. One idea per screen, enormous whitespace | Confidence. Nothing to hide behind | Only works with a genuinely strong message. Weak copy is naked here |
+| **Typographic-led** | Type at display scale doing the work of imagery | Voice, editorial confidence, zero asset weight | Needs a real type system and real headline writing |
+| **Brutalist / raw** | Exposed structure, system fonts, unstyled defaults made deliberate | Anti-marketing honesty. Strong for developer tools | Reads as unfinished to a non-technical buyer |
+| **Neo-brutalist** | Hard borders, flat shadows, clashing color, oversized controls | Energy, irreverence, a challenger stance | Now a template of its own. Requires real subversion |
+| **Grid-broken** | An established grid, deliberately violated at chosen moments | Control — you only break a rule you can keep | Random-looking if the underlying grid is not visible first |
+| **Modular scale-extreme** | Enormous ratio between display and body | Hierarchy you can read across a room | Mobile needs a separate scale, not a scaled-down one |
+| **Terminal / monospace** | Fixed cells, monospace, command-line register | Native credibility with developers | Instantly wrong for anyone who is not one |
+
+## Motion-native and interactive
+
+Styles where the behavior is the design. Powerful and expensive, and each one needs
+its designed reduced-motion state (`§17`).
+
+| Style | What it is | Signals | Costs |
+|---|---|---|---|
+| **Scroll-cinema** | Scroll as scrub head; the page is a sequence the visitor drives | Narrative control, high production value | Hostile to skimmers, and buyers skim. Never on a pricing page |
+| **Kinetic typography** | Words as the animated subject | Voice, energy, memorability | Slow to read. Headline only |
+| **Physics / spring world** | Elements with weight, inertia, collision | Playfulness, a product that feels responsive | Novelty wears off in eight seconds. It cannot carry a page |
+| **Interactive demo-led** | The hero *is* the product, usable without signup | The strongest conversion move available (`CONVERSION.md`) | Real engineering, and a maintenance liability |
+| **Data-live** | Real numbers from the real system, moving | Proof rendered as motion. Rank 1 or 2, made visible | Needs an endpoint, and a designed state for when it is down |
+| **Cursor-driven** | The pointer reveals, distorts, or lights the page | A designed environment, within one second | Mobile has no cursor. Design that case first, not last |
+
+## Category clichés — the fence, not the field
+
+What the visitor has already seen five times this morning. `§2` and `§3` mean these
+are not available unmodified. Check the client's category before Gate B1.
+
+| Category | The cliché | Why it persists | The opening |
+|---|---|---|---|
+| **B2B SaaS** | Purple-to-blue gradient, isometric illustration, centered hero, three cards, logo bar | Every template ships it | Real product UI (`§11`), editorial structure, visible pricing |
+| **Agency / studio** | Full-bleed dark video, oversized rotating type, a horizontal case-study rail, a cursor dot | It signals membership in the agency club | Work at depth, the process, a stated refusal, actual results with numbers |
+| **AI product** | Purple glow, particle mesh, gradient orb, "powered by AI", a chat bubble | The category is 20 months old and copies itself | Show the output. The demo is the differentiator, and almost nobody ships one |
+| **Fintech** | Blue, a phone mockup at an angle, abstract nodes, a padlock icon | Trust-by-convention | Real numbers, real regulation named, real screens |
+| **Developer tool** | Dark terminal hero, a code block, monospace everything | Native credibility, and now noise | Show the failure it prevents. Benchmark honestly. Docs as the marketing site |
+| **Healthcare** | Stock clinician, soft blue-green, rounded everything, hands | Regulatory caution flattened into blandness | Specificity about the condition, the workflow, the outcome |
+| **Ecommerce brand** | Hero lifestyle shot, three-up product grid, a countdown bar | Platform themes | Product at obsessive resolution, the making, the material |
+| **Professional services** | Handshake photo, a serif wordmark, "trusted advisors" | Risk aversion | Named people, named outcomes, an opinion someone could disagree with |
+| **Local service** | Template with a stock van, five-star widget, a phone number in a banner | Whoever built it charged £400 | Real photos of real work, a real person, real prices |
+
+Being the only site in the category that shows a price, ships a working demo, or
+names a person is worth more than any visual move on this page.
+
+---
+
+## Collision
+
+`§3` in practice. Two styles, one carrying structure and one carrying surface,
+producing something neither has alone. Every run states its collision in one sentence
+in `DIRECTION.md`.
+
+| Collision | What it produces that neither parent has |
+|---|---|
+| **Editorial structure over live product data** | Magazine columns and a real measure, with the numbers inside them pulled from the running system. The article makes an argument and the argument updates itself, so the proof is not a screenshot of a claim but the claim still being true |
+| **Blueprint substrate under photographic product shots** | The dimension rules and callouts assert measurement; the photograph asserts the thing exists. Together they read as a specification of a real object, which is what a manufacturing buyer is actually looking for |
+| **Risograph texture on a Swiss grid** | The grid asserts machine order, the misregistration asserts a press and a hand. It reads as a printed object rather than a rendered page, and the grid stops looking like every other B2B site because it is visibly ink |
+| **Terminal chrome around a physics world** | Monospace frames promise determinism and fixed cells; the contents obey springs and collide. A frame that cannot bend around contents that will not sit still is the whole idea |
+| **Archival index with cinematic case-study reveals** | The list is a dry catalogue with dates and reference numbers; opening one drops into a graded, lit scene. The restraint of the index makes the reveal cost something |
+| **Brutalist structure with a luxury type system** | Raw exposed layout and system-font honesty, set in a licensed high-contrast serif at enormous scale. The tension says expensive and unpretentious at once, which is exactly what a good agency is |
+| **Radical minimalism holding one interactive demo** | An almost empty page whose single object is the working product. Nothing competes with it, so the demo carries the entire argument (`§11`) |
+| **Instructional layout in a nocturne palette** | Numbered steps and worked examples, lit like a darkroom. Teaching without the classroom register that makes senior buyers feel handled |
+| **Data-brutalism with one ink gesture** | Dense tabular numbers with a single brush stroke across them. The gesture asserts a person read these and had a view, which a table cannot say and a painting cannot evidence |
+| **Diagrammatic system over textile substrate** | Nodes and flows on woven material. For anything bridging software and physical goods, it says both without a split-screen |
+
+Rule for building one: **name which parent is structural and which is surface.** A
+collision where both fight for structure is a mess, and it is the most common way this
+technique fails.
+
+## Subversion
+
+The other route to `§3`. Take one style and break exactly one of its laws.
+
+| Style | Its law | The subversion |
+|---|---|---|
+| Swiss | The grid is never violated | Violate it once, on the one section carrying the offer. The violation becomes the CTA |
+| Radical minimalism | Nothing is decorated | One object, obsessively rendered, in an otherwise empty page |
+| Bento | Tiles are equal citizens | One tile is thirty times the size of the others and contains the product |
+| Cinematic dark | Everything is graded | One section is a flat, bright, unstyled document. The contrast reads as candor |
+| Brutalist | Nothing is designed | The type is impeccable. Raw layout, perfect typography |
+| Editorial | Text is the content | The article's illustrations are live, interactive, and manipulable |
+| Terminal | Monospace, fixed grid | The body copy is a humanist serif at a generous measure. Technical frame, human voice |
+| Corporate modernist | Photography is aspirational | The photography is unstaged, badly lit, and real. It reads as honesty |
+| Glass | Depth via blur | Depth via refraction of the actual page content behind it, so the surface distorts real information |
+| Aurora gradient | Soft, drifting, decorative | The gradient is generated from the client's live data and changes with it |
+
+One law. Break two and the style stops being legible, and the subversion stops
+meaning anything.
+
+## The guardrails
+
+Creativity is the baseline (`§2`), and these are the places where being clever costs
+the client money. None of them is a reason to be boring; each is a place to be
+inventive *within* a constraint.
+
+| Never | Why |
+|---|---|
+| Make the primary CTA hard to find | The site has one job (`§7`) |
+| Hide pricing behind a style choice | Visitors leave rather than hunt |
+| Sacrifice body legibility for a look | The buyer is 47 and reading on a phone in a taxi |
+| Animate the hero copy in on scroll | It is above the fold. It is already visible. Now it is not |
+| Use motion to gate information | A skimmer who cannot skim leaves |
+| Autoplay audio, ever | — |
+| Let a style prevent the product being seen (`§11`) | The product is the argument |
+| Build a nav nobody can operate on a phone | Most B2B traffic is now mobile, including the committee's first look |
+| Ship a style that fails contrast and call it art direction | `§17` is hard |
+| Reproduce the category cliché unmodified | `§3` |
+
+## Style and conversion
+
+Which styles fight the job, and the fix that keeps both. This is the table that
+separates a company site from a portfolio.
+
+| Style | What it fights | The fix that ships |
+|---|---|---|
+| **Scroll-cinema** | Buyers skim; a scrubbed narrative punishes skimming | Use it for one section, never the whole page. Never on pricing. Ship a paginated equivalent that carries the same content in the same order |
+| **Radical minimalism** | Objection answers need words, and there is no room | Minimal above the fold, dense and generous below. The restraint is a hook, not a policy |
+| **Cinematic dark** | Long-form reading, form legibility, and printing | Content sections lift to a lighter substrate. Forms are never in the falloff |
+| **Interactive demo-led** | The visitor plays instead of converting | Time-box it, and put the ask at the moment of success — the second the demo works is the highest-intent moment on the site |
+| **Physics / kinetic** | Perceived seriousness, for a large contract | One moment of it, early, then stop. Playfulness as a signature, not a personality |
+| **Brutalist / terminal** | Non-technical members of the buying committee | The champion's pages can be raw; the page they forward to finance and security is legible and calm |
+| **Bento** | Everything looks equally important | One tile dominates. Hierarchy is the whole job of the layout |
+| **Aurora / mesh** | Distinctiveness — it looks like everyone | Generate it from something real (`CRAFT.md`), or do not use it |
+| **Collage** | Trust and scannability | Collage the atmosphere; keep the proof and the ask on a clean substrate |
+| **Photographic-led** | Load time, and stock-photo distrust | Real photography only, art-directed, modern formats, sized properly (`§19`) |
+
+## Style and accessibility
+
+`§17` is hard. Each of these fails a specific criterion by default; each has a fix
+that keeps the style.
+
+| Style | What it fights | The fix that ships |
+|---|---|---|
+| **Glass / refractive** | Text contrast changes with whatever scrolls behind it | An opaque or near-opaque scrim behind every text run, measured against the *worst* frame of the moving substrate, never a still |
+| **Cinematic dark / nocturne** | Vignette, grade, and grain push small type below threshold | Measure contrast on the rendered pixels after grade and grain. Body copy stays out of the falloff. Grain opacity drops on text layers |
+| **Letterpress / debossed** | Form is shadow on one hue, so nothing has a ratio | Extrusion for containers only. Every label and control state gets a real foreground token at ≥4.5:1. Focus is a hard visible ring, never a deeper shadow |
+| **Kinetic / physics / scroll-cinema** | Motion is the design, so removing motion removes the site | An art-directed still: a composed frame with type at rest that someone designed. Scroll-cinema degrades to a paginated document, same content, same order |
+| **Spatial / 3D** | Navigation depends on a camera and a GPU | Keyboard traversal between named places, a text route to every section, and a no-WebGL fallback that is a real page rather than an apology |
+| **Terminal** | Scanlines and curvature reduce legibility and can trigger | Curvature and scanline opacity behind `prefers-reduced-motion`, plus a visible toggle. Body text on the flat layer above the effect |
+| **Comparison / data-dense** | Density defeats zoom and reflow | Real table semantics with scoped headers, keyboard-reachable scroll containers, a stated minimum readable width, and a genuine mobile layout rather than a shrunken desktop one |
+| **Neo-brutalist** | Clashing color chosen for energy rather than ratio | Pick the clash in OKLCH and check every pair. Loud and 4.5:1 are compatible; loud and untested is not |
+| **Aurora / gradient fields** | Text over a moving gradient has no fixed ratio | Freeze the gradient behind text, or scrim it. Measure against the worst frame |
+| **Typographic-led** | Enormous display type reflowing at 320px | A real mobile type scale, not a scaled-down desktop one. Test at 320px and at 200% zoom |
+
+## Light and dark as two designs
+
+Art-direct both (`CRAFT.md`), never one inverted. Styles that collapse under naive
+inversion: cinematic dark, nocturne, glass, letterpress, aurora, risograph, and any
+photographic-led design whose images were graded for one substrate.
+
+For a company site there is a commercial dimension too: dark mode reads as
+technical-audience-native and light mode reads as broadly legible. When the buying
+committee spans both — an engineer champion and a finance approver — respect the
+system preference and make sure the pages the champion forwards are excellent in
+light.
+
+Decide per style which is canonical, design that one first, then design the other as
+its own artifact. Note in `DIRECTION.md` what differs beyond inversion.

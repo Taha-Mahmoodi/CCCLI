@@ -1,0 +1,44 @@
+from functools import lru_cache
+
+from pydantic import field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEFAULT_JWT_SECRET = "dev-secret-change-me-please-this-needs-to-be-at-least-32-bytes-long"
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
+    database_url: str = "sqlite+aiosqlite:///./dev.db"
+    jwt_secret: str = DEFAULT_JWT_SECRET
+    jwt_access_ttl_minutes: int = 15
+    jwt_refresh_ttl_days: int = 30
+    environment: str = "development"
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_claim_email: str = "mailto:admin@example.com"
+    cors_allowed_origins: str = "http://localhost:5173"
+
+    @field_validator("jwt_secret", mode="after")
+    @classmethod
+    def validate_jwt_secret_length(cls, value: str) -> str:
+        if len(value.encode("utf-8")) < 32:
+            raise ValueError("JWT secret must be at least 32 bytes long")
+        return value
+
+    @model_validator(mode="after")
+    def validate_jwt_secret_not_default_outside_development(self) -> "Settings":
+        # A field_validator on jwt_secret can't see environment (declared after
+        # it, and field validators only see earlier fields) - this needs the
+        # fully-built model, hence a model_validator instead.
+        if self.environment != "development" and self.jwt_secret == DEFAULT_JWT_SECRET:
+            raise ValueError(
+                "JWT_SECRET must be set to a non-default value when environment != 'development' "
+                "- the default is public in source and would let anyone forge tokens"
+            )
+        return self
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()

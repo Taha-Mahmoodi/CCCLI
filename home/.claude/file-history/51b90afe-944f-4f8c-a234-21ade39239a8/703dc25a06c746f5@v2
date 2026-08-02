@@ -1,0 +1,42 @@
+# Herat Dental Union — Front-end
+
+The **Herat Dental Union** website: a Next.js front-end that renders content from
+a headless WordPress backend, with motion and interaction built in.
+
+> A [Cyborg Tech Creative Agency](https://github.com/CyborgTech-co) project.
+> Backend: [`HDU-WordPress`](https://github.com/CyborgTech-co/HDU-WordPress).
+
+---
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Framework | Next.js (App Router) |
+| UI | React |
+| Motion | GSAP (`@gsap/react`), Framer Motion |
+| Styling | styled-components |
+| Icons | lucide-react, react-icons |
+| Data | Headless WordPress REST API |
+
+## Getting started
+
+```bash
+npm install
+npm run dev
+```
+
+Then open [http://localhost:3000](http://localhost:3000).
+
+Set the WordPress API base URL in the project's environment config so the
+front-end can reach the [`HDU-WordPress`](https://github.com/CyborgTech-co/HDU-WordPress)
+content API.
+
+## Scripts
+
+| Command | Does |
+|---|---|
+| `npm run dev` | Start the dev server |
+| `npm run build` | Production build |
+| `npm start` | Serve the production build |
+| `npm run lint` | Lint the project |

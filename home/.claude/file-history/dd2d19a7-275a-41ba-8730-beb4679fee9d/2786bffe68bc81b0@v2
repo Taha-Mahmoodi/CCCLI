@@ -1,0 +1,14 @@
+---
+name: github-accounts
+description: Taha has two GitHub accounts — Taha-Mahmoodi (main) and wafa-khairi-1020 (learning); keep wafa out of main-account repos
+metadata: 
+  node_type: memory
+  type: user
+  originSessionId: dd2d19a7-275a-41ba-8730-beb4679fee9d
+---
+
+Main GitHub account: **Taha-Mahmoodi**. Second account **wafa-khairi-1020** is only for learning and must never appear in main-account repos (as author, committer, collaborator, or reviewer).
+
+**Why:** He wants a clean separation; wafa attribution leaked into main repos because the Mac's global git config was set to wafa's identity (fixed 2026-07-03 to Taha-Mahmoodi / 85902429+Taha-Mahmoodi@users.noreply.github.com).
+
+**How to apply:** If commits ever show wafa again, check `git config user.email` (global and per-repo) first. Closed atlas-erp PRs #90–#122 permanently show wafa in their commit snapshots — known, accepted limitation. `gh` CLI has both accounts logged in; active one should be Taha-Mahmoodi.

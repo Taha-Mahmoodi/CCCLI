@@ -1,0 +1,8 @@
+{
+  "id": "6",
+  "subject": "RSS discoverability UI",
+  "description": "RSS is required 3x over as a build artifact but never as something a visitor sees/clicks. Give it a human-facing treatment.",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

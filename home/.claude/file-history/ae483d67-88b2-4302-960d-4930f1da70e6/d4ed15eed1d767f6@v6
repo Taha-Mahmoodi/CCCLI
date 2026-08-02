@@ -1,0 +1,56 @@
+import { test, expect } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
+
+// App tests run with the first-run onboarding already dismissed.
+test.describe("app", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem("tew:onboarded", "true");
+      } catch {
+        /* ignore */
+      }
+    });
+  });
+
+  test("home page has zero axe violations", async ({ page }) => {
+    await page.goto("/");
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(results.violations).toEqual([]);
+  });
+
+  test("skip link and the single h1 are present", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("link", { name: /skip to content/i })).toBeAttached();
+    const h1s = page.getByRole("heading", { level: 1 });
+    await expect(h1s).toHaveCount(1);
+    await expect(h1s).toHaveText("Your radio");
+  });
+
+  test("the record control is labelled and reachable", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("button", { name: /record a voice memo/i })).toBeVisible();
+  });
+
+  test("the radio player is a labelled region", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("region", { name: /radio player/i })).toBeVisible();
+  });
+
+  test("empty state guides the first recording", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByText(/your radio is quiet/i)).toBeVisible();
+  });
+});
+
+// First-run onboarding (fresh visit, no prior dismissal).
+test("first-run onboarding is on-screen and axe-clean, and dismisses", async ({ page }) => {
+  await page.goto("/");
+  const dialog = page.getByRole("dialog", { name: /welcome to third eye world/i });
+  await expect(dialog).toBeVisible();
+  await expect(page.getByText(/feel less alone/i)).toBeVisible(); // norms are on screen, not voice-only
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations).toEqual([]);
+  await page.getByRole("button", { name: /start listening/i }).click();
+  await expect(dialog).toBeHidden();
+});

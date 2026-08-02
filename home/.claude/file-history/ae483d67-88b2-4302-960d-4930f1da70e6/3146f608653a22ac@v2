@@ -1,0 +1,18 @@
+# Backend API (Hono). Runs on tsx (no build step). Node 26 for stable
+# node:sqlite (the DB has no native dependency — it's built into Node).
+# Build context is the repo root: `docker build -f services/api/Dockerfile .`
+
+FROM node:26-slim AS api
+RUN npm install -g pnpm@11.13.1
+WORKDIR /repo
+COPY . .
+RUN pnpm install --frozen-lockfile --filter @tew/api...
+
+WORKDIR /repo/services/api
+ENV NODE_ENV=production
+ENV PORT=4000
+# SQLite file + uploaded audio live here — mount a volume so they survive
+# container restarts.
+ENV TEW_DATA_DIR=/data
+EXPOSE 4000
+CMD ["pnpm", "start"]

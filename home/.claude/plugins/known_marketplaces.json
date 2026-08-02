@@ -1,0 +1,50 @@
+{
+  "claude-plugins-official": {
+    "source": {
+      "source": "github",
+      "repo": "anthropics/claude-plugins-official"
+    },
+    "installLocation": "/Users/taha/.claude/plugins/marketplaces/claude-plugins-official",
+    "lastUpdated": "2026-08-02T13:17:44.626Z"
+  },
+  "ponytail": {
+    "source": {
+      "source": "github",
+      "repo": "DietrichGebert/ponytail"
+    },
+    "installLocation": "/Users/taha/.claude/plugins/marketplaces/ponytail",
+    "lastUpdated": "2026-07-02T08:41:46.466Z"
+  },
+  "gsap-skills": {
+    "source": {
+      "source": "github",
+      "repo": "greensock/gsap-skills"
+    },
+    "installLocation": "/Users/taha/.claude/plugins/marketplaces/gsap-skills",
+    "lastUpdated": "2026-07-02T09:44:43.703Z"
+  },
+  "diagram-design": {
+    "source": {
+      "source": "github",
+      "repo": "cathrynlavery/diagram-design"
+    },
+    "installLocation": "/Users/taha/.claude/plugins/marketplaces/diagram-design",
+    "lastUpdated": "2026-07-07T11:52:03.296Z"
+  },
+  "git-a-profile": {
+    "source": {
+      "source": "github",
+      "repo": "PIIIX-org/git-a-profile"
+    },
+    "installLocation": "/Users/taha/.claude/plugins/marketplaces/git-a-profile",
+    "lastUpdated": "2026-07-24T09:22:45.918Z"
+  },
+  "portfolio.me": {
+    "source": {
+      "source": "github",
+      "repo": "PIIIX-org/portfolio.me"
+    },
+    "installLocation": "/Users/taha/.claude/plugins/marketplaces/portfolio.me",
+    "lastUpdated": "2026-07-26T11:40:34.612Z"
+  }
+}

@@ -1,0 +1,56 @@
+import * as React from "react";
+import { type LucideIcon } from "lucide-react";
+
+type Variant = "primary" | "amber" | "ghost" | "danger" | "quiet";
+
+const VARIANTS: Record<Variant, string> = {
+  primary: "bg-primary text-surface hover:bg-primary-dark border-transparent",
+  amber: "bg-accent text-surface hover:bg-accent-dark border-transparent",
+  ghost: "bg-transparent text-primary border-border-strong hover:bg-primary-tint",
+  danger: "bg-alert text-surface hover:brightness-95 border-transparent",
+  quiet:
+    "bg-transparent text-primary underline underline-offset-[3px] hover:text-primary-dark border-transparent min-h-0 px-1.5 py-2",
+};
+
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: Variant;
+  /** Optional leading icon. Always paired with the button's text label. */
+  icon?: LucideIcon;
+  full?: boolean;
+}
+
+/**
+ * Accessible button primitive. ≥48px tap target, visible focus ring (from
+ * globals.css), text label always present — never icon-only (see SPEC §10).
+ * v2: pill silhouette, heavier label, tactile press (scale) feedback.
+ */
+export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  function Button(
+    { variant = "primary", icon: Icon, full, className = "", children, type = "button", ...rest },
+    ref,
+  ) {
+    const isQuiet = variant === "quiet";
+    return (
+      <button
+        ref={ref}
+        type={type}
+        className={[
+          "inline-flex items-center justify-center gap-2.5 whitespace-nowrap rounded-pill border font-body font-extrabold leading-tight",
+          "text-base transition-[background-color,color,transform,box-shadow] duration-200 ease-[cubic-bezier(0.33,0.1,0.25,1)]",
+          "active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:active:scale-100",
+          isQuiet ? "" : "min-h-12 px-6 py-2.5",
+          full ? "w-full" : "",
+          VARIANTS[variant],
+          className,
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        {...rest}
+      >
+        {Icon ? <Icon size={20} strokeWidth={2} aria-hidden="true" /> : null}
+        {children}
+      </button>
+    );
+  },
+);

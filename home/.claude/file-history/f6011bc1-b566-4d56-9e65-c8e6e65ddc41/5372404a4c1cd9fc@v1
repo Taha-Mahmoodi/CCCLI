@@ -1,0 +1,32 @@
+import * as React from "react";
+import { ChevronDown } from "lucide-react";
+
+export const Select = React.forwardRef<
+  HTMLSelectElement,
+  React.SelectHTMLAttributes<HTMLSelectElement>
+>(function Select({ className = "", children, ...rest }, ref) {
+  return (
+    <div className="relative">
+      <select
+        ref={ref}
+        className={[
+          "min-h-12 w-full appearance-none rounded-btn border border-border-strong bg-surface",
+          "px-3.5 py-2.5 pr-11 text-base text-ink",
+          "aria-[invalid=true]:border-2 aria-[invalid=true]:border-alert",
+          className,
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        {...rest}
+      >
+        {children}
+      </select>
+      <ChevronDown
+        size={20}
+        strokeWidth={2}
+        aria-hidden="true"
+        className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-ink-soft"
+      />
+    </div>
+  );
+});

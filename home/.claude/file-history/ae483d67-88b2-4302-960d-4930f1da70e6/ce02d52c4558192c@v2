@@ -1,0 +1,53 @@
+import Foundation
+
+public let allChannels = "all"
+
+/// Memos for a station: "all" plays everything, chronological.
+public func channelQueue(_ memos: [Memo], _ activeChannel: String) -> [Memo] {
+  activeChannel == allChannels ? memos : memos.filter { $0.channelId == activeChannel }
+}
+
+/// The final play-queue. Chronological when `shuffleOrder` is nil; otherwise the
+/// channel's memos reordered by it, with any not-yet-ordered memos appended.
+public func orderedQueue(_ memos: [Memo], _ activeChannel: String, _ shuffleOrder: [String]?)
+  -> [Memo]
+{
+  let base = channelQueue(memos, activeChannel)
+  guard let order = shuffleOrder else { return base }
+  let byId = Dictionary(base.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+  var out: [Memo] = []
+  var seen = Set<String>()
+  for id in order {
+    if let m = byId[id] {
+      out.append(m)
+      seen.insert(id)
+    }
+  }
+  for m in base where !seen.contains(m.id) { out.append(m) }
+  return out
+}
+
+public func slugify(_ name: String) -> String {
+  var s = ""
+  var lastDash = false
+  for ch in name.lowercased() {
+    if ch.isLetter || ch.isNumber {
+      s.append(ch)
+      lastDash = false
+    } else if !s.isEmpty && !lastDash {
+      s.append("-")
+      lastDash = true
+    }
+  }
+  while s.hasSuffix("-") { s.removeLast() }
+  return s.isEmpty ? "channel" : s
+}
+
+public func uniqueChannelId(_ name: String, _ existing: [Channel]) -> String {
+  let taken = Set(existing.map(\.id))
+  let base = slugify(name)
+  if !taken.contains(base) { return base }
+  var n = 2
+  while taken.contains("\(base)-\(n)") { n += 1 }
+  return "\(base)-\(n)"
+}

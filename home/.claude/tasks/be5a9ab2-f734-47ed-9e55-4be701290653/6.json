@@ -1,0 +1,9 @@
+{
+  "id": "6",
+  "subject": "Phase 5: Cutover to containers",
+  "description": "Pause pm2 autodeploy crons. pm2 stop apps, final delta dump->restore, re-verify counts. Stop aaPanel nginx, start Caddy on 80/443. Verify both domains serve HTTPS with data + Caddy LE cert. Staging first then prod. Rollback path: stop Caddy, start nginx + pm2 resurrect.",
+  "activeForm": "Cutting over traffic to containers",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

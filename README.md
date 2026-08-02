@@ -1,46 +1,46 @@
 # CCCLI
 
-My Claude Code setup, portable. Clone it on any Mac and Claude Code behaves like it does on my machine.
+My entire Claude Code state, portable. Clone on any Mac, run the installer, Claude Code is exactly as it is on my machine.
 
 ```bash
 git clone https://github.com/Taha-Mahmoodi/CCCLI.git ~/Documents/CCCLI
-cd ~/Documents/CCCLI
-cp .env.example .env      # fill in the two MCP keys (optional — unset servers are skipped)
-./install.sh
+cd ~/Documents/CCCLI && ./install.sh
+claude login
 ```
 
-Restart Claude Code. Done.
+> ⚠️ **This repo contains live secrets.** API keys, bearer tokens, browser session cookies, full conversation transcripts. Keep it private. If it is ever exposed, rotate everything in `home/.claude.json` and clear `home/.gstack/chromium-profile/`.
 
-## What it installs
+## Layout
 
-| Path | Goes to | What it is |
-|---|---|---|
-| `claude/CLAUDE.md` | `~/.claude/CLAUDE.md` | global instructions (gstack routing, skill list) |
-| `claude/settings.json` | `~/.claude/settings.json` | model `opus[1m]`, effort `xhigh`, dark-daltonized, fullscreen TUI, ponytail statusline, usage hook, enabled plugins + marketplaces |
-| `claude/settings.local.json` | `~/.claude/settings.local.json` | permission allowlist + impeccable PostToolUse hook |
-| `claude/skills/` | `~/.claude/skills/` | 84 skills (gstack's, higgsfield, impeccable, ui-ux-pro-max, brandkit, the writing set, …) |
-| `memory/` | `~/.claude/projects/<home-slug>/memory/` | persistent memory — projects, preferences, GitHub account rules |
-| `mcp/servers.json` | `claude mcp add-json -s user` | magic, n8n, shadcn, pollinations-images |
-| `claude-usage/collect.mjs` | `~/.claude-usage/` | the Stop hook that logs usage |
+`home/` mirrors `$HOME` one-to-one. `install.sh` rsyncs it in; `./install.sh --pull` rsyncs it back.
 
-Plus: clones [gstack](https://github.com/garrytan/gstack) to `~/.claude/skills/gstack` and runs its `./setup`, and installs the nine enabled plugins (ponytail, superpowers, diagram-design, gsap-skills, frontend-design, swift-lsp, legalzoom, git-a-profile, portfolio.me) from their marketplaces.
+| Path | What |
+|---|---|
+| `home/.claude/CLAUDE.md` | global instructions |
+| `home/.claude/settings.json` | model `opus[1m]`, effort `xhigh`, dark-daltonized, fullscreen TUI, ponytail statusline, usage hook, 9 enabled plugins + marketplaces |
+| `home/.claude/settings.local.json` | permission allowlist, impeccable PostToolUse hook |
+| `home/.claude/skills/` | 84 skills (gstack's, higgsfield, impeccable, ui-ux-pro-max, brandkit, writing set, …) |
+| `home/.claude/projects/-Users-taha/memory/` | 23 persistent memory files |
+| `home/.claude/projects/` | every conversation transcript (~973 MB, 5.4k files) |
+| `home/.claude/history.jsonl` | prompt history |
+| `home/.claude/{tasks,jobs,plans,backups,telemetry,cache,file-history,shell-snapshots}/` | task queue, background jobs, saved plans, file-edit history |
+| `home/.claude.json` | account id, per-project trust, **MCP servers with live API keys** |
+| `home/.claude-usage/` | usage collector + its data repo |
+| `home/.gstack/` | gstack config, browse audit logs, **Chromium profile with logged-in cookies** |
+| `home/.agents/skills/` | the 14 skills symlinked into `.claude/skills` |
+| `home/.zshrc`, `.gitconfig`, `.zprofile`, `.profile` | shell environment |
 
-Existing `CLAUDE.md` / `settings*.json` are backed up to `*.bak-<timestamp>` first. Skills are merged, never deleted.
+## What the installer does beyond copying
 
-## Keeping it current
+- Backs up existing `CLAUDE.md`, `settings*.json`, `.claude.json` to `*.bak-<timestamp>`.
+- Clones [gstack](https://github.com/garrytan/gstack) (1.1 GB, not vendored) to `~/.claude/skills/gstack` and runs its `./setup`.
+- Installs the 9 plugins from their marketplaces, then repoints the version-pinned ponytail statusline at whatever version landed.
+- If the new machine's home isn't `/Users/taha`, rewrites baked-in absolute paths and renames the `-Users-taha` transcript/memory directory to match.
 
-```bash
-./install.sh --pull       # machine -> repo
-git diff                  # check for secrets
-git commit -am "sync" && git push
-```
+## Not included
 
-## Not in here (on purpose)
-
-Secrets and machine state: `~/.claude.json` (OAuth account, per-project trust), `.credentials.json`, `history.jsonl`, `projects/` transcripts, `shell-snapshots/`, `file-history/`, the gstack clone (1.1 GB — `install.sh` clones it).
-
-MCP API keys live in `.env`, which is gitignored. `mcp/servers.json` ships with `${MAGIC_API_KEY}` / `${N8N_MCP_TOKEN}` placeholders.
+The Claude Code OAuth token — it lives in the macOS Keychain, not on disk, and rotates anyway. `claude login` once after installing.
 
 ## Requirements
 
-`git`, `python3`, `rsync`, `claude`, and [`bun`](https://bun.sh) (gstack only). All present on a stock Mac except bun.
+`git`, `python3`, `rsync`, `claude`, and [`bun`](https://bun.sh) for gstack.

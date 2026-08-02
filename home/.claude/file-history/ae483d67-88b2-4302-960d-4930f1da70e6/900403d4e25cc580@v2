@@ -1,0 +1,65 @@
+# Brief — Third Eye World
+
+> The north star. Read this before touching anything. If a decision conflicts with this file, this file wins (after the ten non-negotiables in §3).
+
+## What we are building
+
+A **voice-first, blind-first social network** for blind and low-vision (BLV) people. Nonprofit, free, open-source, no ads.
+
+Built *from sound first* — not a visual product with accessibility bolted on. **The rule that governs every ticket:** if it starts from "the screen shows…" and works backward to audio, it is rejected.
+
+## The problem (why this exists)
+
+**Loneliness — not engagement.** Vision impairment correlates strongly with social isolation (≈half of visually impaired adults report at least moderate loneliness). Success is measured against a validated loneliness instrument (UCLA Loneliness Scale), **never** time-on-app, streaks, or vanity counts.
+
+## The core loop (the entire product)
+
+1. Record a short **voice memo** — 90s soft cap, 3min hard cap.
+2. The timeline **plays memos back-to-back, like radio.**
+3. You can **like, comment (by voice), or skip.** That is the whole interaction set.
+
+**Deliberately absent:** follow graph · ranking/recommendation algorithm · follower/like/view counts · images/video · infinite scroll (the stream *ends*).
+
+## Delivery order (settled)
+
+**Web first → native iOS → native Android.** Private messaging (E2EE) ships with the phone apps, not the website.
+
+```
+Slice 0  Walking skeleton (web): record → radio timeline → 3-route controls, screen-reader-correct
+Slice 1  Transcripts (auto, correctable) + channels/stations + transcript search
+Slice 2  Auth (passkeys / magic link / phone OTP — equal status) + accessible moderator console
+Slice 3  Backend hardening: object storage, self-hosted Whisper (LID→ASR), Piper TTS
+Slice 4  Native iOS (SwiftUI) — full UIAccessibility, media-transport controls, audio ducking
+Slice 5  Native Android (Compose) — TalkBack, Media3 MediaSessionService
+Slice 6  E2EE DMs (libsignal) on phone apps — request queue, franking, scam interstitials
+Slice 7  IVR dial-in path (basic-phone reach) + data-saver mode
+```
+
+Each slice is a **vertical slice** that proves the ontology end-to-end, not a horizontal layer. Nothing is scaffolded ahead of the slice that needs it.
+
+## Success gates (go/no-go)
+
+- ≥90% task completion by real screen-reader users on core flows, across NVDA/JAWS/VoiceOver/TalkBack.
+- Zero unresolved critical accessibility defects.
+- Transcript label + correction loop working.
+- ≥99.5% crash-free sessions.
+- Loneliness instrument administrable accessibly, with consent.
+
+## The two hardest calls (recorded, not smoothed over)
+
+- **No sign-language video.** It would force video, breaking three commitments (no video, low-bandwidth reach, audio-only identity). Instead: **text memos are first-class**, read aloud into the stream by synthetic voice, readable on refreshable braille displays (serves the DeafBlind community). No signing avatars. Dissent recorded: for many culturally Deaf people text is a second language — the product does not claim text equals signing.
+- **Control scheme reversal.** Volume-button and whole-screen-tap controls are out (Apple policy / OS-inconsistent / screen-reader-intercepted). In: **media-transport controls + voice commands + screen-reader custom actions + plain on-screen buttons** — every action reachable three ways.
+
+## Source of truth
+
+Full v2.0 build specification (governs every decision):
+**https://github.com/sadeqisaidmohaddes-star/third-eye-world-paper**
+
+This brief is the distilled operating summary. When they disagree on detail, the paper is authoritative on *product* decisions; the docs in this folder are authoritative on *how we build*.
+
+## The rest of the operating manual
+
+- [`implementation.md`](./implementation.md) — the build prompt: performance law, project structure, tech stack, tooling.
+- [`handling-protocols.md`](./handling-protocols.md) — file/context/failure/multi-agent/test/token protocols.
+- [`github-workflow.md`](./github-workflow.md) — branch model and the PR → review → merge → promote loop.
+- [`../STATE.md`](../STATE.md) — the live progress ledger. Read it first on any resume.

@@ -1,0 +1,8 @@
+DATABASE_URL=postgresql+asyncpg://fieldforce:fieldforce@localhost:5432/fieldforce
+JWT_SECRET=change-me-to-a-random-64-char-value
+JWT_ACCESS_TTL_MINUTES=15
+JWT_REFRESH_TTL_DAYS=30
+ENVIRONMENT=development
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_CLAIM_EMAIL=mailto:admin@example.com

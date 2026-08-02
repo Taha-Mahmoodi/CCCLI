@@ -1,0 +1,50 @@
+# madeintaha.com — Taha Mahmoodi portfolio
+
+Static, self-contained personal portfolio. No build step, no runtime dependencies.
+Everything (fonts, images, icons, GSAP) is vendored locally, so it deploys to any
+static host and works offline.
+
+## Run locally
+
+```bash
+python3 -m http.server 8000
+# open http://localhost:8000
+```
+
+Or just open `index.html` in a browser.
+
+## Deploy
+
+Drop the whole folder on any static host:
+
+- **Netlify / Vercel / Cloudflare Pages** — point it at this directory, no build command.
+- **GitHub Pages** — push to a repo, enable Pages on the root.
+- **Any web server** — copy the files to the web root.
+
+Point `madeintaha.com` at the host once deployed.
+
+## Structure
+
+```
+index.html          markup + content
+css/style.css        design system (light + dark), all sections, responsive
+js/main.js           theme toggle, reveals, magnetic buttons, count-up (no scroll listeners)
+js/vendor/           GSAP + ScrollTrigger (hero parallax)
+fonts/               Cabinet Grotesk + General Sans, self-hosted woff2
+img/                 brand art (hero, about, work tiles) + icons/
+```
+
+## Swapping in real project images
+
+The three featured work tiles (`img/tile-brand.jpg`, `tile-product.jpg`,
+`tile-packaging.jpg`) are art-directed brand visuals in your palette, standing in
+for the real deliverables. Replace them with actual Figma exports / screenshots at
+roughly 1200x1000 (featured) to make the work section literal. The featured cards
+currently link to the contact section; point them at case-study pages when those exist.
+
+## Design notes
+
+- Palette: warm paper, deep petrol-teal ink, coral accent (extracted from your CV brand).
+- Type: Cabinet Grotesk (display) / General Sans (text).
+- Motion respects `prefers-reduced-motion`. Theme respects `prefers-color-scheme`
+  and remembers a manual toggle in `localStorage`.

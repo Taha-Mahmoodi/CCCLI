@@ -1,0 +1,20 @@
+---
+name: teww-redesign
+description: "TEWW-mono-backup night-first redesign — status, remaining work, local stack (paused 2026-07-04)"
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: f6011bc1-b566-4d56-9e65-c8e6e65ddc41
+---
+
+Full redesign of ~/Documents/TEWW-mono-backup (Third Eye Worldwide public site), "Sight Beyond Sight": night-first (indigo #100e17 + saffron gold #e8a33d + violet accent), Literata display + Manrope body, spec in repo `TEWW_REDESIGN_SPEC.md`. Same auto issue→PR→merge workflow as [[heard-redesign]]; user granted full authority incl. structure/colors/logo — only DATA is sacred (CMS SiteContent, contracts listed in spec §6).
+
+**Merged:** foundation #3 (tokens/fonts/CSS split into app/styles/*.css, default theme→dark), page PRs #11–#17 (projects, volunteers+donate, about, documents, system+assistant, media, home), QA #19 (StoryCard/TimelineRow RichText em fix, donate CTA gold). All issues closed. 75/75 frontend tests + typecheck green; all pages visually QA'd in night, Day + high-contrast spot-checked.
+
+**Remaining when resuming:**
+1. Imagery PR — pollinations MCP was down ALL session (`fetch failed`); user wants generated pictures. Retry `mcp__pollinations-images__generateImage`; wire into hero/projects when up. Design stands on CSS motifs meanwhile.
+2. `npm run build` (production, incl. bundle-frontend static export) never run — run before any deploy.
+3. /ad-min only HTTP-checked (308 alive); log in (admin@teww.local, seed) and eyeball CMS in all 3 themes.
+4. Mobile-width sweep not done.
+
+**Local stack:** postgres in docker `teww-pg` (port 5433, colima; DOCKER_HOST=unix://$HOME/.colima/default/docker.sock), env in frontend/.env + backend/.env, `npm run dev` = frontend :3000 + backend :3001. Browse-tool localStorage may pin `teww-theme` — clear it to see night default.

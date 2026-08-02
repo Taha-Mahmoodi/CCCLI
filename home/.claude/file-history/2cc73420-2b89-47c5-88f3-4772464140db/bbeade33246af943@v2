@@ -1,0 +1,25 @@
+"""Seed one demo tenant + admin user for local runs. ponytail: dev-only, reuses real services."""
+import asyncio
+
+from app.core.db import build_session_factory, engine
+from app.core.rbac import sync_permission_catalog
+from app.core.tenancy import system_context
+from app.modules.admin.service import grant_admin_role, provision_tenant, provision_user
+
+TENANT, EMAIL, PASSWORD = "acme", "owner@acme.test", "correct-horse-battery"
+
+
+async def main() -> None:
+    session_factory = build_session_factory(engine)
+    async with session_factory() as db:
+        tenant = await provision_tenant(db, slug=TENANT, name=TENANT.title())
+        user = await provision_user(db, tenant.id, email=EMAIL, password=PASSWORD)
+        with system_context():
+            await sync_permission_catalog(db)
+        await grant_admin_role(db, tenant.id, user.id, token_version=user.token_version)
+        await db.commit()
+    print(f"seeded: tenant={TENANT} email={EMAIL} password={PASSWORD}")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

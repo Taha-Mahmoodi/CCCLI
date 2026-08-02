@@ -1,0 +1,72 @@
+import type { Metadata, Viewport } from "next";
+import { Geist, Geist_Mono } from "next/font/google";
+import "./globals.css";
+import { AppHeader } from "@/components/AppHeader";
+import { RadioPlayer } from "@/components/RadioPlayer";
+import { RouteAnnouncer } from "@/components/RouteAnnouncer";
+import { PlayerHydrator } from "@/components/PlayerHydrator";
+import { PWARegister } from "@/components/PWARegister";
+import { LIVE_ASSERTIVE_ID, LIVE_POLITE_ID } from "@/lib/a11y";
+
+const geistSans = Geist({ variable: "--font-sans", subsets: ["latin"], display: "swap" });
+const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"], display: "swap" });
+
+export const metadata: Metadata = {
+  title: "Third Eye World",
+  description: "A voice-first, blind-first radio. Record a memo, hear the stream.",
+  applicationName: "Third Eye World",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Third Eye World" },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0a0a" },
+  ],
+};
+
+// Set the dark class before paint so system dark mode has no flash.
+const themeScript = `try{if(matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.classList.add('dark')}catch(e){}`;
+
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  return (
+    <html
+      lang="en"
+      dir="ltr"
+      suppressHydrationWarning
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+    >
+      <body className="flex min-h-full flex-col bg-background text-foreground">
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+
+        <a href="#main" className="skip-link">
+          Skip to content
+        </a>
+
+        <RouteAnnouncer />
+        <PlayerHydrator />
+        <PWARegister />
+
+        <AppHeader />
+
+        <main id="main" tabIndex={-1} className="flex flex-1 flex-col">
+          {children}
+        </main>
+
+        {/* Persistent radio — outside the routed tree so playback survives navigation. */}
+        <RadioPlayer />
+
+        {/* Screen-reader live regions (single instance for the whole app). */}
+        <div id={LIVE_POLITE_ID} aria-live="polite" aria-atomic="true" className="sr-only" />
+        <div
+          id={LIVE_ASSERTIVE_ID}
+          role="alert"
+          aria-live="assertive"
+          aria-atomic="true"
+          className="sr-only"
+        />
+      </body>
+    </html>
+  );
+}

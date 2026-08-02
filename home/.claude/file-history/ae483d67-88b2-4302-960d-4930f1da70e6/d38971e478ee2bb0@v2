@@ -1,0 +1,97 @@
+import Foundation
+
+// The v1 first-run wizard's script, in Core so web, iOS and Android teach the
+// same four moves in the same words — copy that drifts between platforms is how
+// an onboarding stops matching the app it onboards you to.
+//
+// A step with a `practice` prompt is hands-on: the user performs the action
+// before moving on. Practice is always optional to complete (every step is
+// skippable) — encouraging familiarity must never become a trap for someone who
+// cannot perform a given gesture.
+
+public enum OnboardingStepKind: String, Sendable, CaseIterable {
+  case welcome
+  case like
+  case skip
+  case likeNext
+  case record
+  case ready
+}
+
+public struct OnboardingStep: Sendable {
+  public let kind: OnboardingStepKind
+  public let title: String
+  public let body: String
+  /// Non-nil when the step asks the user to try the action.
+  public let practice: String?
+
+  public init(kind: OnboardingStepKind, title: String, body: String, practice: String? = nil) {
+    self.kind = kind
+    self.title = title
+    self.body = body
+    self.practice = practice
+  }
+}
+
+public let onboardingSteps: [OnboardingStep] = [
+  OnboardingStep(
+    kind: .welcome,
+    title: "Welcome to Third Eye World",
+    body: """
+      This is a voice-first place for blind and low-vision people — a stream of \
+      short voice memos, one card at a time. Let's learn the four moves. You can \
+      do each one by gesture, by button, or by screen reader — whatever suits \
+      you. Nothing here is timed, and you can skip any step.
+      """,
+  ),
+  OnboardingStep(
+    kind: .like,
+    title: "Like a memo",
+    body: """
+      When a card is one you like, swipe it to the right. Or press the Like \
+      button. Or use the Like action in your screen reader.
+      """,
+    practice: "Try it now: like this practice card.",
+  ),
+  OnboardingStep(
+    kind: .skip,
+    title: "Skip a memo",
+    body: """
+      Not for you? Swipe left to skip it and move on. Or press the Skip button. \
+      Or use the Skip action in your screen reader.
+      """,
+    practice: "Try it now: skip this practice card.",
+  ),
+  OnboardingStep(
+    kind: .likeNext,
+    title: "Like and move on",
+    body: """
+      To like a card and jump straight to the next, swipe right twice quickly. \
+      Or press the Like and next button, which has no timing at all.
+      """,
+    practice: "Try it now: like and go to the next.",
+  ),
+  OnboardingStep(
+    kind: .record,
+    title: "Record your own memo",
+    body: """
+      To speak, press and hold the record button while you talk, then let go. If \
+      holding is hard, a single tap starts and stops it instead — both work.
+      """,
+    practice: "Try it now: press and hold, or tap, to practise.",
+  ),
+  OnboardingStep(
+    kind: .ready,
+    title: "You're ready",
+    body: """
+      That's everything: like, skip, like and move on, and record. Your stream \
+      always has an end — no endless scroll. Be kind here; this is a place to \
+      feel less alone.
+      """,
+  ),
+]
+
+/// Steps that ask the user to actually perform the action.
+public var onboardingPracticeSteps: [OnboardingStep] {
+  onboardingSteps.filter { $0.practice != nil }
+}

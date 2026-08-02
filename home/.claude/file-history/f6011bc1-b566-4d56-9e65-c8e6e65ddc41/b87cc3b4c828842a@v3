@@ -1,0 +1,18 @@
+---
+name: teww-redesign
+description: "TEWW-mono-backup night-first redesign — complete, all merged (finished 2026-07-04)"
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: f6011bc1-b566-4d56-9e65-c8e6e65ddc41
+---
+
+Full redesign of ~/Documents/TEWW-mono-backup (Third Eye Worldwide public site) is **done**: "Sight Beyond Sight" — night-first (indigo #100e17 + saffron gold #e8a33d + violet accent), Literata display + Manrope body, spec in repo `TEWW_REDESIGN_SPEC.md`. Same auto issue→PR→merge workflow as [[heard-redesign]]; user granted full authority incl. structure/colors/logo — only CMS data was sacred.
+
+All PRs merged to main, zero open issues/PRs: foundation #3, seven page surfaces #11–#17, QA fixes #19 (CMS `<em>` leak in story cards, donate CTA color), generated imagery #21 (5 duotone photos wired into home hero / about mission / two project details / volunteers hero via new optional CMS fields).
+
+Verified before closing out: `npm run build` succeeds full monorepo (frontend static export + backend bundle); `/ad-min` CMS logs in and renders correctly in the new tokens (admin@teww.local / password in frontend/.env CMS_ADMIN_PASSWORD), fully isolated from the public redesign; all 7 public pages clean at 390px mobile width.
+
+Gotcha for next time: editing `frontend/data/seed.json` does NOT update the live site — it only seeds the DB via `npm run db:seed` (upsert, safe to rerun), and Next's fetch cache (tag `site-content`) needs the frontend process restarted to pick up a reseed done outside the CMS publish flow. Also: never re-serialize seed.json with `json.dump`/indent — reformats the whole file; always use targeted Edit insertions like [[heard-redesign]]'s en.json approach.
+
+Local stack: postgres in docker `teww-pg` (port 5433, colima; DOCKER_HOST=unix://$HOME/.colima/default/docker.sock), env in frontend/.env + backend/.env, `npm run dev` = frontend :3000 + backend :3001. Pollinations MCP is flaky under parallel calls (max 1 concurrent anonymous request) — go sequential with ~8s gaps, or use generateImage then re-fetch via curl to image.pollinations.ai if the MCP result isn't saved to disk.

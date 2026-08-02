@@ -1,0 +1,134 @@
+# Research: 3D Visualization & Gamification Precedents
+
+Deep-research pass (2026-07-15) to inform Yildizim's design. 105 agents,
+23 sources fetched, 96 claims extracted, 25 adversarially verified (15
+confirmed, 10 killed).
+
+**Read the caveats before the findings — several things that sound like
+established best practice were specifically tested and refuted.**
+
+## Summary
+
+Verified evidence is strongest for gamification/decay mechanics, moderate
+for game-derived 3D navigation conventions, and thin for existing
+knowledge-visualization tools. Two independent studies converge on: loss
+aversion tied to something a user has *earned* (not been handed) is a
+stronger behavioral lever than pure positive-points systems, but fixed/
+positive reward scores higher on self-reported enjoyment. Forest's
+tree-death is the closest real precedent for "decay, not block." Dark-
+pattern ethics literature places loss/urgency/scarcity framing on the
+edge of manipulative "social engineering" — arguing for transparent,
+player-visible decay timers, not surprise punishment.
+
+For 3D navigation, only small-scale interaction patterns survived
+verification (proximity-fading labels, hover-triggered side panels,
+dual schematic/to-scale views). **Every claim about solving visual
+hierarchy/clutter at true galaxy scale — Yildizim's central visual-design
+problem — was refuted**, in every tool tested. This is unsolved territory,
+not a place to copy a precedent from.
+
+## Confirmed findings
+
+1. **Proximity-fade labels** (medium, 2-1) — 3D graph tools fade labels in
+   as the camera nears a node, out as it retreats, rather than showing
+   everything at once. (Node size scaling by connection-degree as a
+   hierarchy mechanism was tested separately and **refuted**, 0-3 — don't
+   assume size alone solves legibility.)
+   Source: community.obsidian.md/plugins/3d-graph-new
+
+2. **Expose controls for power tools** (medium, 3-0) — Kinopio's creator:
+   at high engagement intensity, accessible buttons beat a clean hidden
+   menu (race-car/synthesizer principle). Relevant since Yildizim is used
+   repeatedly, not a one-off marketing surface.
+   Source: pketh.org/kinopio-qa.html
+
+3. **Loss aversion on earned status beats positive-only rewards** (high,
+   3-0/3-0/2-1) — 602-person RCT, fitness app: being at risk of losing an
+   *earned* gamification tier, and having a real chance to advance a
+   level, both beat a no-gamification control — but only when the
+   threatened status was earned through effort, not handed out free.
+   Source: journals.sagepub.com/doi/abs/10.1089/g4h.2021.0130
+
+4. **...but fixed reward wins on enjoyment** (medium, 3-0/3-0) — a second,
+   independent study (cybersecurity training, n=27) corroborates the
+   direction but adds: loss-aversion framing produced better outcomes,
+   fixed positive reward scored higher on self-reported enjoyment. Neither
+   is universally better — context-dependent.
+   Source: link.springer.com/chapter/10.1007/978-3-031-94924-1_8
+
+5. **Loss/urgency/scarcity framing risks being a dark pattern** (high,
+   3-0/3-0/3-0) — UX-ethics literature defines exploiting fear-of-loss to
+   control behavior as "social engineering," directly borrowed from
+   e-commerce manipulation tactics. Gamification designers are argued to
+   have an ethical duty toward transparency over manipulation.
+   Sources: ncbi.nlm.nih.gov/pmc/articles/PMC10927902,
+   researchgate.net/publication/339487229
+
+6. **Forest = closest real "decay if neglected" precedent** (medium, 2-1)
+   — a tree that visibly withers and dies if the user leaves the app
+   before a timer completes. Psychological loss/guilt, not a technical
+   block.
+   Source: en.wikipedia.org/wiki/Forest_(application)
+
+7. **No Man's Sky's zoom is a staged pipeline, not literal magic** (medium,
+   mixed votes) — voxel generation → polygonization → texturing →
+   simulation. A real level-of-detail pattern. Its "seamless, no loading
+   break" framing was **refuted** (1-2) — plan for some visible transition
+   cost, not a free seamless zoom.
+   Source: gdcvault.com/play/1024265
+
+8. **Elite Dangerous's single-system UI conventions** (medium,
+   3-0/3-0/2-1) — stats live in a hover-triggered side panel, gated behind
+   "discovered" data, not always-on scene text; a toggle between a
+   simplified schematic map and a to-scale "Orrery" view; nested zoom from
+   system down to a landable surface, with an explicit zoom-out to return.
+   **Note**: this is confirmed at single-system scale only — the same
+   game's galaxy-map-scale claims (color-coding, hover-only decluttering
+   across thousands of systems) were refuted below.
+   Sources: elite-dangerous.fandom.com/wiki/Galaxy_Map,
+   .../wiki/System_Map
+
+## Explicitly refuted (do not treat as fact)
+
+- Node size scaled by connection-degree as an automatic hierarchy
+  mechanism (Obsidian 3D plugin).
+- No Man's Sky's space-to-surface transition being seamless/loading-free.
+- Elite Dangerous's Galaxy Map avoiding clutter via hover-only reveal and
+  category color-coding at full galaxy scale.
+- Infinite canvases needing a bounded "page" concept to preserve a sense
+  of scale (tested re: infinite-canvas tools generally).
+- Muse's four-constraint spatial-memory model (anchored boards, content-
+  sized, no scroll-into-empty, single zoom level).
+- Kinopio's "memory palace" cognitive justification for spatial UI.
+
+## Open — genuinely unanswered by this research pass
+
+- **How any existing tool manages visual clutter at true galaxy scale**
+  (hundreds/thousands of nodes) — this is Yildizim's central visual-design
+  problem, and it has no verified precedent anywhere this research
+  looked, including in the game explicitly built around a galaxy map.
+- **What specific art-direction techniques** (lighting, material, color
+  grading, motion) separate a "premium/breathtaking" 3D space UI from the
+  generic AI dark-background-glowing-nodes cliché. No source addressed
+  this directly despite being explicitly asked.
+- **The sharing/virality half of gamification** — Duolingo streaks,
+  GitHub's contribution graph, Strava kudos/segments. Zero claims
+  survived verification; this is entirely open.
+- TheBrain, Kumu, VR/AR knowledge-mapping tools, are.na, Muse, tldraw —
+  every claim about how these actually work at scale was either refuted
+  or never found. Treat their internals as unknown, not as precedent.
+
+## Implication for Yildizim
+
+The gamification/decay mechanic can be built on real, verified footing —
+threaten earned state, keep decay transparent (a visible timer, not a
+surprise), balance loss-framing with a positive counterweight, and Forest
+is a legitimate reference point for the feeling to aim for.
+
+The core visual-design challenge — making a galaxy of hundreds or
+thousands of orbiting bodies read clearly and beautifully, not like
+clutter — is **not a solved problem anywhere researched**. This has to be
+original design work, validated through actual prototyping and iteration,
+not precedent-following. That's consistent with the goal of not looking
+like a generic AI-designed neural network: if it looked like something
+that already exists, it wouldn't be original.

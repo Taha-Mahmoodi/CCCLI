@@ -1,0 +1,32 @@
+# Skips — Said Mohaddes Sadeqi · sadeqi.me
+
+Every step left out, what it would have caught, and the reason. Read by Loop 7 when
+grading. Not everything here was the human's choice — tooling failures are recorded
+the same way, because the grade has to mean something either way.
+
+| Step | Reason given | What it would have caught |
+|---|---|---|
+| **2a design images (generated)** | **Tooling failure, not a human choice.** Magnific returned a hard credit block ("Not enough credits… Do not retry"); Pollinations silently degraded to returning one cached placeholder for a magic string and erroring on every real prompt. Verified independently by the conductor after a worker reported it. | Concepts 2 (FIELD REPORT) and 3 (THE ROUTE) were never rendered — the human chose Concept 1 from written description alone. **Mitigation:** Concept 1 was built as a real coded HTML comp and screenshotted in Chrome at 390/1440 in both colour modes, which is *more* accurate than a generated image for a typographic concept and carries forward into Loop 4 rather than being discarded. The residual loss is the visual comparison across concepts at Gate B1. |
+| **1c contributor repos** | Subject asked to include "the repos I'm a contributor at" but has not yet named them; zero found across all 8 PIIIX-org repos. | Any rank-3 contribution credit. Still open; blocking for Loop 3 copy. |
+
+## Mode
+
+Full pipeline. No express mode, no gates collapsed. Gate A held and decided
+(archetype reading A). Gate B1 held on coded comps rather than generated images.
+
+## Session tier
+
+Conductor: **Opus (top tier)** throughout — interview, synthesis, concepts, technique
+assignment, and every gate ran at the tier `MODELS.md` assigns them. No de-escalation.
+
+Workers dispatched per `MODELS.md`: `evidence-miner` and `peer-analyst` at **mid**
+(escalated from low, because `§5`/thin-portfolio work is explicitly listed as an
+escalation trigger and a fabricated evidence line is the worst failure available to
+this pipeline); `section-designer` and `technique-prototyper` at **mid**.
+
+## Grade ceiling
+
+**A.** Nothing the human chose to skip. The one degradation is the generated-image
+tooling failure, which was mitigated with coded comps rather than waved through — it
+costs the cross-concept comparison at B1 and nothing downstream. Loop 7 should grade
+against that and not above it if the live checks pass.

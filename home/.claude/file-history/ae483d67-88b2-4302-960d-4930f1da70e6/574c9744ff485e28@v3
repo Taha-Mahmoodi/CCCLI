@@ -1,0 +1,92 @@
+// Transcription pipeline: language identification (LID) BEFORE ASR — a
+// mandatory step (spec §8.3): ASR is measurably biased, so routing everything
+// through one English model systematically mis-transcribes the users the
+// platform most needs to serve.
+//
+// ponytail: real ASR (self-hosted Whisper large-v3 via faster-whisper on GPU,
+// whisper.cpp for batch) is wired at deploy. This stub keeps the pipeline shape
+// identical so the swap is a one-file change. For TTS memos the source text is
+// authoritative and never machine-guessed.
+
+export interface TranscriptionInput {
+  audio: Uint8Array;
+  mime: string;
+  hintLang?: string; // client already ran LID (voice picker / locale)
+  sourceText?: string; // present for typed/TTS memos
+}
+
+export interface TranscriptionResult {
+  lang: string;
+  text: string;
+  engine: string;
+  confidence: number;
+  isMachine: boolean;
+}
+
+export type Transcriber = (input: TranscriptionInput) => Promise<TranscriptionResult>;
+
+export const stubTranscriber: Transcriber = async (input) => {
+  const lang = input.hintLang && input.hintLang.trim() ? input.hintLang.trim() : "und";
+  if (input.sourceText && input.sourceText.trim()) {
+    return { lang, text: input.sourceText.trim(), engine: "tts-source", confidence: 1, isMachine: false };
+  }
+  // No real ASR wired — empty machine transcript, honestly labeled.
+  return { lang, text: "", engine: "stub", confidence: 0, isMachine: true };
+};
+
+// Real ASR via self-hosted whisper.cpp on CPU (no GPU required — the GPU in the
+// spec's faster-whisper is for THROUGHPUT, not capability). Any input format is
+// converted to 16 kHz mono WAV by ffmpeg first. Enabled when TEW_WHISPER_BIN +
+// TEW_WHISPER_MODEL are set; otherwise the API uses the stub.
+export function makeWhisperTranscriber(opts: {
+  binPath: string;
+  modelPath: string;
+  ffmpegPath?: string;
+}): Transcriber {
+  const ffmpeg = opts.ffmpegPath || "ffmpeg";
+  return async (input) => {
+    if (input.sourceText && input.sourceText.trim()) {
+      return {
+        lang: input.hintLang || "und",
+        text: input.sourceText.trim(),
+        engine: "tts-source",
+        confidence: 1,
+        isMachine: false,
+      };
+    }
+    if (input.audio.length === 0) {
+      return { lang: input.hintLang || "und", text: "", engine: "whisper.cpp", confidence: 0, isMachine: true };
+    }
+    const { execFile } = await import("node:child_process");
+    const { promisify } = await import("node:util");
+    const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const run = promisify(execFile);
+
+    const dir = await mkdtemp(join(tmpdir(), "tew-asr-"));
+    const inFile = join(dir, "in");
+    const wav = join(dir, "audio.wav");
+    try {
+      await writeFile(inFile, input.audio);
+      // any format -> 16 kHz mono WAV (LID runs before ASR; the hint routes it)
+      await run(ffmpeg, ["-y", "-i", inFile, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav]);
+      const args = ["-m", opts.modelPath, "-f", wav, "-nt", "-np"];
+      if (input.hintLang && input.hintLang !== "und") args.push("-l", input.hintLang);
+      const { stdout } = await run(opts.binPath, args, { maxBuffer: 16 * 1024 * 1024 });
+      const text = stdout.trim();
+      return {
+        lang: input.hintLang || "en",
+        text,
+        engine: "whisper.cpp",
+        confidence: text ? 0.8 : 0,
+        isMachine: true,
+      };
+    } catch {
+      // ASR failure must never lose the memo — empty machine transcript
+      return { lang: input.hintLang || "und", text: "", engine: "whisper.cpp", confidence: 0, isMachine: true };
+    } finally {
+      await rm(dir, { recursive: true, force: true }).catch(() => {});
+    }
+  };
+}

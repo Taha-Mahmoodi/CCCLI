@@ -1,0 +1,77 @@
+# Loop 3 — Copy
+
+**Goal:** write the actual words, before the build, so the design gets built around
+real text instead of placeholder blocks.
+
+**Input:** `EVIDENCE.md`, `BRIEF.md` (verbal identity + proof ladder), `DIRECTION.md`.
+
+**Output:** `COPY.md` — every string that appears on the site.
+
+---
+
+## Why this comes before Build
+
+A portfolio is mostly prose. Three case studies, an about, a hero line, project
+blurbs, and the small print. Build a layout around lorem ipsum and it breaks the
+day real text arrives: the headline that fit at 4 words needs 9, the case study
+that filled the column is three paragraphs longer, the blurb has no natural break.
+
+Design around real lengths and none of that happens.
+
+## The case study shape
+
+Five beats. Dispatch `case-study-writer`, **one agent per project**.
+
+| Beat | What goes in it |
+|---|---|
+| **Problem** | What was actually wrong, in the world, before this existed. Not "the client wanted a site." |
+| **Constraint** | What made it hard. Budget, deadline, legacy system, team of one, a hostile stakeholder. The constraint is what makes the decision interesting. |
+| **Decision** | The call they made and what they gave up making it. A decision with no tradeoff is a task. |
+| **What broke** | The thing that went wrong. This beat is what separates a portfolio from a brochure, and it is the one people cut. Keep it. |
+| **Outcome** | What happened, sourced (`§5`). Ranked on the proof ladder. Unmeasurable outcomes are stated plainly as unmeasurable. |
+
+Depth comes from the audience in `BRIEF.md`. A hiring manager skims and wants the
+decision. A collaborator reads and wants what broke. Write for the one named.
+
+## Voice
+
+From the verbal identity section of `BRIEF.md`, which came from their own sentences
+in the interview. Use their lexicon. Honor their banned words. Match their rhythm
+and their opening move.
+
+Quote them directly where the interview gave you something good. A real sentence
+from the subject beats anything you write in their voice.
+
+## The prose pass
+
+Run in this order, per `§11`:
+
+1. **`stop-slop`** — strip the AI tells first
+2. **`copywriting`** — structure, hierarchy, what earns a line
+3. **`ogilvy`** — does it sell the work, does every claim answer "so what?"
+
+Hard bans: "not X, but Y" contrasts. Em-dash cadence as a tic. Three-item lists by
+reflex. Hollow superlatives. Passive voice hiding who did what. "Passionate about."
+"Leveraged." "Solutions."
+
+## Everything else that is text
+
+The hero line, and the sub-line if the design has one. Section headers. Project
+blurbs. The about, in first person unless the archetype says otherwise. Alt text on
+every image — descriptive, per `§12`, written now rather than improvised during the
+build. The contact ask. The footer. Meta title and description for Loop 5. Error and
+empty states if the design has any.
+
+## The evidence check
+
+Before this loop closes, walk every factual claim in `COPY.md` against
+`EVIDENCE.md`. Sourced claims ship. Unsourced claims get cut, or attributed to the
+subject as speech. This is `§5` and it is a hard rule — no exceptions, no
+"probably," no rounding a number up because it reads better.
+
+## Skip cost
+
+Skipping this ships a gallery: images with captions, and nothing that explains why
+any of it mattered. The design also gets built around invented text lengths and
+then breaks when the real words arrive. Case studies are the substance of a
+portfolio.

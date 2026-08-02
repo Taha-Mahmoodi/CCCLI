@@ -1,0 +1,182 @@
+import { describe, it, expect, beforeEach } from "vitest";
+import { usePlayer } from "@/stores/player";
+
+const fakeBlob = () => new Blob(["x"], { type: "audio/webm" });
+const add = (durationMs = 1000, transcript = "") =>
+  usePlayer.getState().addMemo(fakeBlob(), durationMs, "audio/webm", transcript);
+
+beforeEach(() => {
+  usePlayer.setState({
+    memos: [],
+    urls: {},
+    channels: [{ id: "main", name: "Main" }],
+    activeChannel: "all",
+    shuffle: false,
+    shuffleOrder: [],
+    currentIndex: 0,
+    isPlaying: false,
+    status: "idle",
+    hydrated: false,
+    replayNonce: 0,
+    showTranscripts: true,
+    playbackRate: 1,
+  });
+});
+
+describe("player store", () => {
+  it("adds memos to the stream in order", async () => {
+    await add(5000);
+    await add(6000);
+    const s = usePlayer.getState();
+    expect(s.memos.length).toBe(2);
+    expect(s.currentIndex).toBe(0);
+  });
+
+  it("play is a no-op with an empty stream", () => {
+    usePlayer.getState().play();
+    expect(usePlayer.getState().isPlaying).toBe(false);
+  });
+
+  it("next advances, then ends the stream at the last memo (#3)", async () => {
+    await add();
+    await add();
+    const p = usePlayer.getState();
+    p.play();
+    p.next();
+    expect(usePlayer.getState().currentIndex).toBe(1);
+    usePlayer.getState().next();
+    const s = usePlayer.getState();
+    expect(s.status).toBe("ended");
+    expect(s.isPlaying).toBe(false);
+  });
+
+  it("previous skips back one, clears the ended state, and clamps at 0", async () => {
+    await add();
+    await add();
+    const p = usePlayer.getState();
+    p.play();
+    p.next();
+    p.next(); // ended at index 1
+    p.previous();
+    // stepping back one memo (1 -> 0) reopens the stream as paused
+    expect(usePlayer.getState().currentIndex).toBe(0);
+    expect(usePlayer.getState().status).toBe("paused");
+    usePlayer.getState().previous();
+    expect(usePlayer.getState().currentIndex).toBe(0); // clamped at start
+  });
+
+  it("toggleLike flips per-memo state (no counts, just state)", async () => {
+    const m = await add();
+    usePlayer.getState().toggleLike(m.id);
+    expect(usePlayer.getState().memos[0].liked).toBe(true);
+    usePlayer.getState().toggleLike(m.id);
+    expect(usePlayer.getState().memos[0].liked).toBe(false);
+  });
+
+  it("a new memo reopens an ended stream at the new item", async () => {
+    await add();
+    const p = usePlayer.getState();
+    p.play();
+    p.next(); // single memo -> ended
+    expect(usePlayer.getState().status).toBe("ended");
+    await add();
+    const s = usePlayer.getState();
+    expect(s.currentIndex).toBe(1);
+    expect(s.status).toBe("paused");
+  });
+
+  it("playFrom jumps to an index and plays", async () => {
+    await add();
+    await add();
+    await add();
+    usePlayer.getState().playFrom(2);
+    const s = usePlayer.getState();
+    expect(s.currentIndex).toBe(2);
+    expect(s.isPlaying).toBe(true);
+    expect(s.status).toBe("playing");
+  });
+
+  it("stores the machine transcript captured at record time", async () => {
+    await add(3000, "hello there");
+    expect(usePlayer.getState().memos[0].machineTranscript).toBe("hello there");
+  });
+
+  it("correctTranscript keeps the machine text and stores the correction", async () => {
+    const memo = await add(3000, "helo ther");
+    usePlayer.getState().correctTranscript(memo.id, "  hello there  ");
+    const m = usePlayer.getState().memos[0];
+    expect(m.machineTranscript).toBe("helo ther"); // never overwritten
+    expect(m.correctedTranscript).toBe("hello there"); // trimmed
+  });
+
+  it("toggleTranscripts flips the display flag", () => {
+    expect(usePlayer.getState().showTranscripts).toBe(true);
+    usePlayer.getState().toggleTranscripts();
+    expect(usePlayer.getState().showTranscripts).toBe(false);
+  });
+
+  it("records into the active station (Main from 'all')", async () => {
+    const m = await add();
+    expect(m.channelId).toBe("main");
+    usePlayer.getState().createChannel("Music");
+    const m2 = await add();
+    expect(m2.channelId).toBe("music"); // createChannel made 'music' active
+  });
+
+  it("the play queue follows the active station", async () => {
+    // one memo in Main, then switch to a new station and add two there
+    await add(); // main
+    usePlayer.getState().createChannel("Talk"); // active = talk
+    await add();
+    await add(); // two in talk
+    // active is 'talk' → queue length 2, next ends after the 2nd
+    const p = usePlayer.getState();
+    p.play();
+    p.next();
+    expect(usePlayer.getState().currentIndex).toBe(1);
+    usePlayer.getState().next();
+    expect(usePlayer.getState().status).toBe("ended");
+    // switch to All → queue is all 3, resets to start
+    usePlayer.getState().setActiveChannel("all");
+    expect(usePlayer.getState().currentIndex).toBe(0);
+    expect(usePlayer.getState().status).toBe("idle");
+  });
+
+  it("createChannel makes a unique id and activates it", () => {
+    usePlayer.getState().createChannel("News");
+    usePlayer.getState().createChannel("News"); // duplicate name
+    const ids = usePlayer.getState().channels.map((c) => c.id);
+    expect(ids).toContain("news");
+    expect(ids).toContain("news-2");
+    expect(usePlayer.getState().activeChannel).toBe("news-2");
+  });
+
+  it("cyclePlaybackRate steps 1 → 1.25 → 1.5 → 2 → 1", () => {
+    const p = usePlayer.getState();
+    expect(p.playbackRate).toBe(1);
+    p.cyclePlaybackRate();
+    expect(usePlayer.getState().playbackRate).toBe(1.25);
+    usePlayer.getState().cyclePlaybackRate();
+    expect(usePlayer.getState().playbackRate).toBe(1.5);
+    usePlayer.getState().cyclePlaybackRate();
+    expect(usePlayer.getState().playbackRate).toBe(2);
+    usePlayer.getState().cyclePlaybackRate();
+    expect(usePlayer.getState().playbackRate).toBe(1);
+  });
+
+  it("toggleShuffle builds a shuffle order covering the active queue", async () => {
+    await add();
+    await add();
+    await add();
+    expect(usePlayer.getState().shuffle).toBe(false);
+    usePlayer.getState().toggleShuffle();
+    const s = usePlayer.getState();
+    expect(s.shuffle).toBe(true);
+    expect(s.shuffleOrder).toHaveLength(3); // same set as the 3 memos
+    expect(new Set(s.shuffleOrder)).toEqual(new Set(s.memos.map((m) => m.id)));
+    expect(s.currentIndex).toBe(0);
+    usePlayer.getState().toggleShuffle();
+    expect(usePlayer.getState().shuffle).toBe(false);
+    expect(usePlayer.getState().shuffleOrder).toEqual([]);
+  });
+});

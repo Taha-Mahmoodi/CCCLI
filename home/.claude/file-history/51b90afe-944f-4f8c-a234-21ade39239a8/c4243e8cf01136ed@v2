@@ -1,0 +1,88 @@
+# ROI
+
+**Exchange-office bookkeeping, built for real currency desks.**
+
+ROI is a PHP web application for running the day-to-day books of a currency
+exchange office: customer accounts, multi-currency balances, receipts, loans,
+and printable reports, with a Persian (Dari/Farsi) interface throughout.
+
+> A [Cyborg Tech Creative Agency](https://github.com/CyborgTech-co) project.
+
+---
+
+## What it does
+
+- **Customer accounts** — open and manage per-customer ledgers
+- **Receipts** — credit and debit entries against any account
+- **Multi-currency balances** — track holdings across several currencies at once
+- **Loan tracking** — record and follow outstanding loans
+- **Reports** — printable statements and summaries
+- **Administration** — user and account management with role-gated access
+- **Backup & restore** — export and re-import the database from the admin panel
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Backend | PHP 7.4+, custom lightweight MVC (no framework) |
+| Database | MySQL / MariaDB |
+| Server | Apache with `mod_rewrite` (`.htaccess` routing) |
+| Frontend | Server-rendered views, vendored assets |
+
+## Project structure
+
+```text
+ROI/
+  controllers/   # Route handlers (Admin, Login, Users, ...)
+  models/        # Data-access classes
+  views/         # UI templates
+  libs/          # Core MVC (Bootstrap, Controller, Model, View, DB, Session)
+  util/          # Shared auth helpers
+  assets/        # Images and static files
+  public/        # Vendor libraries
+  config.php     # Database, base URL, constants
+  index.php      # Entry point
+  .htaccess      # URL rewrite rules
+```
+
+## Getting started
+
+Requirements: PHP 7.4+, MySQL/MariaDB, Apache with `mod_rewrite` and
+`AllowOverride All` for the project path.
+
+1. Place the project under your web root (e.g. `htdocs/ROI`).
+2. Create a database and import the schema.
+3. Set database credentials and the base `URL` in `config.php`.
+4. Ensure `assets/user_images/` and the log path are writable.
+5. Open `http://<host>/ROI/`.
+
+## Routing
+
+Routes resolve through `.htaccess` + `index.php` as `/controller/method/params`:
+
+| Route | Purpose |
+|---|---|
+| `/ROI/` | Login |
+| `/ROI/admin` | Dashboard |
+| `/ROI/admin/customers` | Customer accounts |
+| `/ROI/admin/receipt` | Receipts |
+| `/ROI/admin/loan` | Loans |
+| `/ROI/admin/reports` | Reports |
+| `/ROI/admin/backres` | Backup / restore |
+
+## Configuration
+
+All app config lives in `config.php`: database credentials, base-URL checks,
+password/session hashing keys, and currency definitions. If the deployment URL
+changes, update `URL` there — the app validates the host and will redirect on a
+mismatch.
+
+## Security
+
+- Rotate the crypto keys in `config.php` before any production deployment.
+- Keep secrets out of version control; use environment-based config in production.
+- Serve over HTTPS with secure session and cookie settings.
+
+## License
+
+No license file is currently included in this repository.

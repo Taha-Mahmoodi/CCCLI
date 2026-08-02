@@ -1,0 +1,43 @@
+# Third Eye World — full stack for a VPS.
+#
+#   cp .env.example .env      # edit NEXT_PUBLIC_API_URL + a moderator token
+#   docker compose up -d --build
+#
+# Then put your own TLS-terminating reverse proxy (nginx/Caddy) in front:
+#   your-domain            -> web  (:3000)
+#   your-domain/api  (or a subdomain) -> api (:4000)
+# and set NEXT_PUBLIC_API_URL in .env to that public API URL before building.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    environment:
+      PORT: "4000"
+      TEW_DATA_DIR: /data
+      # Bearer tokens for the moderator console: "token:moderatorId,token2:mod2".
+      TEW_MODERATOR_TOKENS: "${TEW_MODERATOR_TOKENS:-}"
+      TEW_DEV_AUTH: "${TEW_DEV_AUTH:-0}"
+    volumes:
+      - tew-data:/data
+    ports:
+      - "4000:4000"
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+      args:
+        # Baked into the client bundle at build time — must be the API's PUBLIC
+        # URL as the browser will reach it.
+        NEXT_PUBLIC_API_URL: "${NEXT_PUBLIC_API_URL:-http://localhost:4000}"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  tew-data:

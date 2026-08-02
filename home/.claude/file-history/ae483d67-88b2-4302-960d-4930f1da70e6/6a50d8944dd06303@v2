@@ -1,0 +1,299 @@
+package com.thirdeyeworld.android
+
+import android.content.Context
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import com.thirdeyeworld.core.OnboardingStepKind
+import com.thirdeyeworld.core.SwipeAction
+import com.thirdeyeworld.core.classifySwipe
+import com.thirdeyeworld.core.isDoubleActivation
+import com.thirdeyeworld.core.onboardingSteps
+import kotlin.math.roundToInt
+
+private const val PREFS = "third-eye-world"
+private const val ONBOARDED_KEY = "tew:onboarded:v1"
+
+fun hasOnboarded(context: Context): Boolean =
+  context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(ONBOARDED_KEY, false)
+
+fun setOnboarded(context: Context) {
+  context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+    .putBoolean(ONBOARDED_KEY, true).apply()
+}
+
+/**
+ * The v1 first-run wizard — teaches the four moves and has the user practise
+ * each before reaching the deck. The script lives in core so all platforms teach
+ * the same words.
+ *
+ * Never a trap: every step is skippable, the whole tour is skippable, each
+ * action can be practised by gesture OR by button OR by a TalkBack custom
+ * action, and each success is announced. Practice is encouragement, not a gate.
+ */
+@Composable
+fun OnboardingWizardScreen(onFinish: () -> Unit) {
+  val view = LocalView.current
+  val context = LocalContext.current
+  val announce: (String) -> Unit = { message -> view.announceForAccessibility(message) }
+
+  var stepIndex by remember { mutableIntStateOf(0) }
+  var practiced by remember { mutableStateOf(setOf<Int>()) }
+
+  val step = onboardingSteps[stepIndex]
+  val isLast = stepIndex == onboardingSteps.size - 1
+  val didPractice = practiced.contains(stepIndex)
+
+  val pass: (String) -> Unit = { message ->
+    if (!practiced.contains(stepIndex)) {
+      practiced = practiced + stepIndex
+      announce(message)
+    }
+  }
+
+  val finish: () -> Unit = {
+    setOnboarded(context)
+    onFinish()
+  }
+
+  Column(
+    Modifier.fillMaxSize().padding(24.dp),
+    verticalArrangement = Arrangement.spacedBy(16.dp),
+  ) {
+    Text(
+      "Step ${stepIndex + 1} of ${onboardingSteps.size}",
+      style = MaterialTheme.typography.labelMedium,
+    )
+    Text(
+      step.title,
+      style = MaterialTheme.typography.headlineSmall,
+      modifier = Modifier.semantics { heading() },
+    )
+    Text(step.body, style = MaterialTheme.typography.bodyMedium)
+
+    if (step.practice != null) {
+      Text(step.practice!!, style = MaterialTheme.typography.titleSmall)
+      PracticeSurface(kind = step.kind, done = didPractice, onPass = pass, announce = announce)
+      if (didPractice) {
+        Text(
+          "✓ Nicely done. Continue when you're ready.",
+          style = MaterialTheme.typography.titleSmall,
+          color = MaterialTheme.colorScheme.primary,
+        )
+      }
+    }
+
+    Spacer(Modifier.weight(1f))
+
+    Row(
+      Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.spacedBy(12.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      if (stepIndex > 0) {
+        OutlinedButton(
+          onClick = { stepIndex -= 1 },
+          modifier = Modifier.heightIn(min = 48.dp),
+        ) { Text("Back") }
+      }
+      Button(
+        onClick = { if (isLast) finish() else stepIndex += 1 },
+        modifier = Modifier.heightIn(min = 48.dp),
+      ) {
+        Text(
+          when {
+            isLast -> "Enter Third Eye World"
+            step.practice != null && !didPractice -> "Skip this step"
+            else -> "Next"
+          },
+        )
+      }
+      if (!isLast) {
+        Spacer(Modifier.weight(1f))
+        TextButton(onClick = finish, modifier = Modifier.heightIn(min = 48.dp)) {
+          Text("Skip the tour")
+        }
+      }
+    }
+  }
+}
+
+/**
+ * The hands-on bit. Every step can be completed by gesture, by button, or by a
+ * TalkBack custom action — practising the accessibility floor itself, not just
+ * the swipe.
+ */
+@Composable
+private fun PracticeSurface(
+  kind: OnboardingStepKind,
+  done: Boolean,
+  onPass: (String) -> Unit,
+  announce: (String) -> Unit,
+) {
+  if (kind == OnboardingStepKind.RECORD) {
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+      Box(
+        Modifier
+          .size(64.dp)
+          .clip(CircleShape)
+          .background(MaterialTheme.colorScheme.primary)
+          .semantics(mergeDescendants = true) {
+            role = Role.Button
+            contentDescription = "Practice record button. Press and hold, or tap."
+            onClick(label = "Practise recording") {
+              onPass("A tap works too — that starts and stops recording."); true
+            }
+          }
+          .pointerInput(Unit) {
+            detectTapGestures(
+              onPress = {
+                val startedAt = System.currentTimeMillis()
+                tryAwaitRelease()
+                if (System.currentTimeMillis() - startedAt >= 220L) {
+                  onPass("You held to record. Let go when you're done.")
+                } else {
+                  onPass("A tap works too — that starts and stops recording.")
+                }
+              },
+            )
+          },
+        contentAlignment = Alignment.Center,
+      ) {
+        Icon(
+          Icons.Filled.Mic,
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.onPrimary,
+        )
+      }
+    }
+    return
+  }
+
+  var offsetX by remember { mutableFloatStateOf(0f) }
+  var offsetY by remember { mutableFloatStateOf(0f) }
+  var rightHitAt by remember { mutableStateOf<Long?>(null) }
+
+  val buttonLabel = when (kind) {
+    OnboardingStepKind.LIKE -> "Like"
+    OnboardingStepKind.SKIP -> "Skip"
+    OnboardingStepKind.LIKE_NEXT -> "Like and next"
+    else -> "Try it"
+  }
+
+  val viaButton: () -> Unit = {
+    when (kind) {
+      OnboardingStepKind.LIKE -> onPass("That's a like.")
+      OnboardingStepKind.SKIP -> onPass("Skipped. Well done.")
+      OnboardingStepKind.LIKE_NEXT -> onPass("Liked, and on to the next.")
+      else -> Unit
+    }
+  }
+
+  val handleSwipe: (SwipeAction?) -> Unit = { action ->
+    when {
+      kind == OnboardingStepKind.LIKE && action == SwipeAction.LIKE -> onPass("That's a like.")
+      kind == OnboardingStepKind.SKIP && action == SwipeAction.SKIP ->
+        onPass("Skipped. Well done.")
+      kind == OnboardingStepKind.LIKE_NEXT && action == SwipeAction.LIKE -> {
+        val now = System.currentTimeMillis()
+        if (isDoubleActivation(rightHitAt, now)) {
+          rightHitAt = null
+          onPass("Liked, and on to the next. That's the double.")
+        } else {
+          rightHitAt = now
+          announce("Once more, quickly.")
+        }
+      }
+      else -> Unit
+    }
+  }
+
+  Column(
+    Modifier
+      .fillMaxWidth()
+      // The screen-reader route: a custom action, since TalkBack eats the swipe.
+      .semantics {
+        contentDescription = "Practice card. Swipe it, use the button, or use this action."
+        customActions = listOf(
+          CustomAccessibilityAction(buttonLabel) { viaButton(); true },
+        )
+      },
+    verticalArrangement = Arrangement.spacedBy(12.dp),
+    horizontalAlignment = Alignment.CenterHorizontally,
+  ) {
+    Box(
+      Modifier
+        .fillMaxWidth()
+        .heightIn(min = 96.dp)
+        .offset { IntOffset(offsetX.roundToInt(), 0) }
+        .clip(RoundedCornerShape(20.dp))
+        .background(MaterialTheme.colorScheme.surfaceVariant)
+        .pointerInput(kind) {
+          detectDragGestures(
+            onDragEnd = {
+              val action = classifySwipe(offsetX, offsetY)
+              offsetX = 0f
+              offsetY = 0f
+              handleSwipe(action)
+            },
+            onDragCancel = { offsetX = 0f; offsetY = 0f },
+          ) { change, dragAmount ->
+            change.consume()
+            offsetX += dragAmount.x
+            offsetY += dragAmount.y
+          }
+        },
+      contentAlignment = Alignment.Center,
+    ) {
+      Text(if (done) "✓ Practice memo" else "Practice memo")
+    }
+
+    OutlinedButton(onClick = viaButton, modifier = Modifier.heightIn(min = 48.dp)) {
+      Text(buttonLabel)
+    }
+  }
+}

@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# env
+.env
+*.db
+
+# Node
+node_modules/
+dist/
+build/
+
+# Android / Capacitor
+*.apk
+*.aab
+.gradle/
+android/app/build/
+android/.gradle/
+android/local.properties
+capacitor.config.json.bak
+
+# IDE
+.vscode/
+.idea/
+.DS_Store
+
+# subagent-driven-development scratch (briefs, reports, diffs, ledger)
+.superpowers/
+.gstack/

@@ -1,0 +1,53 @@
+# HEARD Research & Launch Strategy
+
+**Evidence base and LinkedIn launch playbook for HEARD: a platform connecting isolated individuals with trained peer listeners from underemployed populations (blind, disabled, elderly, and displaced people).**
+
+`Status: Active Research & Launch Planning` · `Phase: Pre-Launch`
+
+> **Related Application:** [heard-backup](https://github.com/Taha-Mahmoodi/heard-backup) — the HEARD platform codebase, built on this same research.
+
+---
+
+## Contents
+
+- **[HEARD_Launch_Campaign.md](HEARD_Launch_Campaign.md)** — the original research document, verbatim: verified statistics, LinkedIn best practices, all 11 posts, and the posting calendar
+- **[docs/STATISTICS.md](docs/STATISTICS.md)** — the same statistics, split out one-per-entry with source and verification notes
+- **[docs/POSTS.md](docs/POSTS.md)** — the 11 posts, split out for easy copy-paste
+- **[docs/LINKEDIN_STRATEGY.md](docs/LINKEDIN_STRATEGY.md)** — the LinkedIn best-practices section, expanded with structure/formatting notes
+
+The three docs are the same content as the source document, reorganized for readability — nothing in them should say anything the source doesn't already say. If you spot something that does, flag it, that's a bug in the split.
+
+---
+
+## What Is HEARD? (from the source doc's TL;DR)
+
+The evidence base for HEARD centers on two anchors: the WHO's June 2025 estimate that loneliness contributes to ~871,000 deaths a year, and the US Surgeon General's May 2023 advisory equating social disconnection with smoking up to 15 cigarettes a day.
+
+On blind employment, the honest framing is that about 44% of working-age Americans with vision loss are employed versus 77% of people without disabilities — not the unsupported "70% unemployment" figure, which the National Research and Training Center on Blindness and Low Vision calls a myth. Remote work is the single biggest recent driver of disability employment gains, which is HEARD's core argument for building a remote-first listener workforce.
+
+---
+
+## Important Caveats (from the source doc)
+
+- **Do not use the "70% unemployment" figure.** It's explicitly labeled a myth. Use "about 44% employed vs. 77%" instead.
+- **The platform, org, and founder biography were not independently verified** through public web search when this research was compiled — the posts rely on the description provided. Confirm all platform-specific claims before publishing, especially anything about how listeners are paid or trained.
+- **Refugee loneliness figures are ranges** from a systematic review, not single national statistics — keep them phrased as ranges.
+- **Frame peer support as connection and hope, not clinical treatment.** Evidence for hope/empowerment is solid; evidence for clinical symptom improvement is mixed. Consider a crisis-resources note wherever HEARD directs vulnerable users.
+- **The WHO 871,000-deaths figure is an estimate covering 2014-2019**, per The Lancet Public Health. Cite it as "the WHO estimates."
+
+---
+
+## Contributing
+
+If you find additional sources, spot an outdated statistic, or have field feedback from HEARD users, open an issue or PR.
+
+---
+
+## License
+
+- **Documentation & research:** CC-BY-4.0
+- **Sample posts:** MIT (adapt and reuse freely)
+
+---
+
+**Last Updated:** July 2026

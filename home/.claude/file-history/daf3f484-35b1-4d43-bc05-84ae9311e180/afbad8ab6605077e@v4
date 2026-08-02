@@ -1,0 +1,123 @@
+import { describe, expect, it } from "vitest";
+import {
+  DECAY_DAYS,
+  decayCountdown,
+  earnedStage,
+  effectiveStage,
+  labelOpacity,
+  mockNotes,
+  mockProjects,
+  mockVaults,
+  noteOrbitRadius,
+  remnantFactor,
+  type Project,
+} from "./data";
+
+const DAY = 86_400_000;
+const NOW = 1_800_000_000_000;
+
+function proj(over: Partial<Project>): Project {
+  return {
+    id: "t",
+    name: "Test",
+    noteCount: 100,
+    contributors: 3,
+    cadence: 20,
+    createdAt: NOW - 200 * DAY,
+    lastActivity: NOW,
+    milestoneMarked: false,
+    ...over,
+  };
+}
+
+describe("earnedStage", () => {
+  it("new empty project is a nebula", () => {
+    expect(
+      earnedStage(proj({ cadence: 0.2, contributors: 0, createdAt: NOW - 2 * DAY })),
+    ).toBe("nebula");
+  });
+  it("sustained multi-contributor activity reaches blue giant", () => {
+    expect(earnedStage(proj({ cadence: 30, contributors: 6 }))).toBe("blue-giant");
+  });
+  it("milestone always wins: black hole", () => {
+    expect(earnedStage(proj({ milestoneMarked: true }))).toBe("black-hole");
+  });
+});
+
+describe("decay", () => {
+  it("active project does not decay", () => {
+    const p = proj({ cadence: 30, contributors: 6 });
+    expect(effectiveStage(p, NOW)).toBe("blue-giant");
+  });
+  it("cools one step after its stage window", () => {
+    const p = proj({
+      cadence: 30,
+      contributors: 6,
+      lastActivity: NOW - (DECAY_DAYS["blue-giant"] + 1) * DAY,
+    });
+    expect(effectiveStage(p, NOW)).toBe("main-sequence");
+  });
+  it("countdown is visible and decreases toward the next step", () => {
+    const p = proj({
+      cadence: 30,
+      contributors: 6,
+      lastActivity: NOW - 2 * DAY,
+    });
+    const days = decayCountdown(p, NOW);
+    expect(days).not.toBeNull();
+    expect(days!).toBeCloseTo(DECAY_DAYS["blue-giant"] - 2, 5);
+  });
+  it("black hole never reverts, only dims toward a remnant", () => {
+    const p = proj({ milestoneMarked: true, lastActivity: NOW - 400 * DAY });
+    expect(effectiveStage(p, NOW)).toBe("black-hole");
+    expect(remnantFactor(p, NOW)).toBe(0.25);
+    expect(remnantFactor(proj({ milestoneMarked: true }), NOW)).toBe(1);
+  });
+});
+
+describe("vaults", () => {
+  it("is deterministic and note counts sum exactly to the project total", () => {
+    const p = proj({ noteCount: 137 });
+    const a = mockVaults(p);
+    expect(a).toEqual(mockVaults(p));
+    expect(a.reduce((s, v) => s + v.noteCount, 0)).toBe(137);
+    expect(a.every((v) => v.noteCount >= 1)).toBe(true);
+  });
+});
+
+describe("notes", () => {
+  it("is deterministic, capped, with bounded moons", () => {
+    const v = mockVaults(proj({ noteCount: 300 }))[0];
+    const a = mockNotes(v);
+    expect(a).toEqual(mockNotes(v));
+    expect(a.length).toBeLessThanOrEqual(14);
+    expect(a.every((n) => n.size >= 1 && n.subCount <= 3)).toBe(true);
+  });
+  it("fresh notes orbit closer than stale ones", () => {
+    const v = mockVaults(proj({ noteCount: 60 }))[0];
+    const fresh = { ...mockNotes(v)[0], lastActivity: NOW };
+    const stale = { ...fresh, lastActivity: NOW - 200 * DAY };
+    expect(noteOrbitRadius(fresh, NOW)).toBeLessThan(noteOrbitRadius(stale, NOW));
+    expect(noteOrbitRadius(stale, NOW)).toBeLessThanOrEqual(3.2);
+  });
+});
+
+describe("labelOpacity", () => {
+  it("is 1 near, 0 far, smooth between", () => {
+    expect(labelOpacity(10, 100, 500)).toBe(1);
+    expect(labelOpacity(600, 100, 500)).toBe(0);
+    const mid = labelOpacity(300, 100, 500);
+    expect(mid).toBeGreaterThan(0.4);
+    expect(mid).toBeLessThan(0.6);
+  });
+});
+
+describe("mock universe", () => {
+  it("is deterministic for a given seed", () => {
+    expect(mockProjects(NOW, 7)).toEqual(mockProjects(NOW, 7));
+  });
+  it("covers every stage so the sky has visual variety", () => {
+    const stages = new Set(mockProjects(NOW).map((p) => effectiveStage(p, NOW)));
+    expect(stages.size).toBeGreaterThanOrEqual(4);
+  });
+});

@@ -1,0 +1,26 @@
+---
+name: yildizim-galaxy-project
+description: "Yildizim — closed-source 3D galaxy/gamification visualization layer for hosted Chapters; private PIIIX-org/yildizim; design phase largely done, implementation not started"
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: daf3f484-35b1-4d43-bc05-84ae9311e180
+---
+
+Yildizim (galaxy project — deliberately shares its name with the unrelated [[yildizim-messenger]]; user confirmed reuse) is the closed-source, full-3D, gamified galaxy visualization layer for knowledge bases. Open-core relationship with [[chapters-project]]: self-hosted Chapters (OSS) gets a plain node-graph; PIIIX-hosted Chapters (paid) gets Yildizim as the differentiator.
+
+**Repo:** github.com/PIIIX-org/yildizim (private, org-owned). Local clone at `~/Documents/yildizim-galaxy` (folder named to avoid colliding with `~/Documents/Yildizim`, the messenger). All state lives in README.md + `docs/research-3d-gamification-precedents.md`.
+
+**Design state as of 2026-07-17 — mechanics brainstorming done:**
+- Hierarchy: project = galaxy, vault = star, note = planet, sub-note/comment = moon; size driven by info volume + usage.
+- Project evolution ladder: nebula → red dwarf → main sequence → blue giant → supernova (explicit user-triggered milestone, not automatic) → black hole (permanent, gravitational landmark). Stages 1–4 automatic, weighted to cadence + distinct contributors, not raw edit count.
+- Decay reverses stages with a visible countdown (never a surprise — dark-pattern research drew this line); black holes never fully revert, they dim to a remnant and recover fast.
+- Rewards: black hole earns permanent title + customizable visual signature + nav pinning + Hall of Constellations entry; Stardust currency for cosmetics; 250 badges (180 common / 50 unique / 20 rare, enumeration deferred); constellations, cosmic events, collective company goals, quarterly recap.
+- Dual view modes: by-project and by-user (privacy-preserving — teammates see galaxy size/shape only, never content).
+- Deep-research pass done (105 agents): gamification/decay findings solid (loss-aversion-on-earned-status RCT, Forest precedent, transparency requirement); galaxy-scale visual clarity has NO verified precedent anywhere — recorded as open problem with a working hypothesis in README (semantic LOD from cartography, Leiden constellations, evolution-brightness-as-hierarchy, atmospheric depth cues), final solution deferred to implementation time by user decision.
+
+**Deferred:** live multiplayer mechanics → v2 (user explicitly doesn't know how it should work yet). Art direction / "jaw-dropping premium look" → prototyping phase (research found no recipe for premium-vs-generic 3D space UI).
+
+**Workflow notes:** user works commit-direct-to-main on this repo so far (no PR flow established, unlike Chapters). User intends the implementation/visual work to be done with Fable 5 for visual quality. Research-only constraint applied during design phase, same as Chapters.
+
+**Next phase (user's own list from session start, pre-Yildizim-detour):** page-by-page structure, user flows, component placement for the overall product — not yet started.

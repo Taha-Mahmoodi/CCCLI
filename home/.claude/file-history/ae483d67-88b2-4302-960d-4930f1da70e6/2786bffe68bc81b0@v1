@@ -1,0 +1,14 @@
+---
+name: github-accounts
+description: Taha has three GitHub accounts logged into gh CLI — Taha-Mahmoodi (main), wafa-khairi-1020 (learning), sadeqisaidmohaddes-star (Said Mohaddes Sadeqi / "sadqi", third-party collaborator's own account); keep them from bleeding into each other
+metadata: 
+  node_type: memory
+  type: user
+  originSessionId: dd2d19a7-275a-41ba-8730-beb4679fee9d
+---
+
+Main GitHub account: **Taha-Mahmoodi**. Second account **wafa-khairi-1020** is only for learning and must never appear in main-account repos (as author, committer, collaborator, or reviewer). Third account **sadeqisaidmohaddes-star** belongs to Said Mohaddes Sadeqi (project lead on Third Eye Kit, [[third-eye-kit-v2]]) — it's a separate person's account Taha has gh-CLI access to, not Taha's own.
+
+**Why:** He wants a clean separation; wafa attribution leaked into main repos because the Mac's global git config was set to wafa's identity (fixed 2026-07-03 to Taha-Mahmoodi / 85902429+Taha-Mahmoodi@users.noreply.github.com). With a third account added 2026-07-05, the same leak risk applies in both directions — don't let sadqi's account become active for Taha's own work, or vice versa.
+
+**How to apply:** If commits ever show the wrong identity, check `git config user.email` (global and per-repo) first. Closed atlas-erp PRs #90–#122 permanently show wafa in their commit snapshots — known, accepted limitation. `gh` CLI has all three accounts logged in; default active account should be Taha-Mahmoodi — after doing anything as sadqi or wafa, switch back with `gh auth switch --hostname github.com --user Taha-Mahmoodi` and verify with `gh auth status`.

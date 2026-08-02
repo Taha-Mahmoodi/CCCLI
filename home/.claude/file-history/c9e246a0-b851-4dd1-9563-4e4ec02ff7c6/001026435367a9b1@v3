@@ -1,0 +1,18 @@
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
+
+// Container healthcheck: 200 only when the app is up AND the database is
+// reachable, so orchestrators do not route traffic to a broken instance.
+export const dynamic = "force-dynamic";
+
+export async function GET() {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    return NextResponse.json({ status: "ok", ts: Date.now() });
+  } catch {
+    return NextResponse.json(
+      { status: "degraded", ts: Date.now() },
+      { status: 503 },
+    );
+  }
+}

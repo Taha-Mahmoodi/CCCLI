@@ -1,0 +1,63 @@
+# Voice of the customer — <client>
+
+Written by `voice-miner` in Loop 1c. Read by the conductor when writing the headline,
+and by every `page-writer` in Loop 3.
+
+`§5` lives in this file. The customer lexicon governs the nouns and verbs for
+problems, symptoms, and outcomes; the company register in `BRIEF.md §15` governs tone.
+A page written without opening this file reverts to the company's vocabulary, which is
+the most common reason a well-designed site converts badly.
+
+Verbatim, always. A paraphrased customer quote is worthless as a voice sample and
+unusable as a testimonial. Nothing here is publishable without permission (`§25`) — a
+public review is evidence of language, not a testimonial the client may reprint.
+
+## 1. The lexicon
+
+10–20 recurring phrases with fingerprints on them. The test: the client would not have
+written it, and a customer would recognize it as their own.
+
+| Phrase | Frequency | Source | Attributable (`§25`) |
+|---|---|---|---|
+| | | | |
+
+## 2. Problem language
+
+How customers describe the *problem* against how the client describes the *product*.
+The conductor uses this table directly when writing the headline.
+
+| Customer says | Client says |
+|---|---|
+| | |
+
+## 3. Objections, ranked
+
+By frequency, not by how serious they sound. Mapped to `POSITIONING.md §9`. Note
+whether it came from the client's own churn data (evidence about the client) or from a
+competitor's reviews (evidence about the market).
+
+| Objection | Frequency | Source | Where felt |
+|---|---|---|---|
+| | | | |
+
+## 4. Outcomes, in their words
+
+Raw material for headlines and for the outcome beat of a case study.
+
+| Outcome | Source | Attributable |
+|---|---|---|
+| | | |
+
+## 5. Switching stories
+
+Anyone who moved from a competitor: the trigger, the fear, what actually happened.
+The most valuable narrative in the file — it is the exact journey the site has to cause.
+
+## 6. The jargon list — banned in Loop 3
+
+Words the client uses that no customer ever uses.
+
+## 7. What could not be found
+
+Where you looked, and what was not there. A claimed benefit with no customer language
+behind it is a finding: the client may be selling something nobody is asking for.

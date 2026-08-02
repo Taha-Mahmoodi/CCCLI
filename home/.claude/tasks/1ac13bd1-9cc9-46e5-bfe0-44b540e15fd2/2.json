@@ -1,0 +1,9 @@
+{
+  "id": "2",
+  "subject": "Slice 5: Accessibility & test hardening",
+  "description": "Full keyboard/SR audit, consolidated axe across all routes, reduced-motion/high-contrast/textScale verified, a11y CI gate, docs. PR by Said.",
+  "activeForm": "Hardening accessibility & tests",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

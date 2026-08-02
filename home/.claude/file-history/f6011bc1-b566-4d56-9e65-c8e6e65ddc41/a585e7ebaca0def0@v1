@@ -1,0 +1,124 @@
+"use client";
+
+import * as React from "react";
+import { Play, Pause } from "lucide-react";
+import { t } from "@/lib/i18n";
+import { useToast } from "@/components/ui/Toast";
+
+export interface VoicePlayerProps {
+  name: string;
+  /** Transcript text shown (the "voice intro" content). */
+  intro: string;
+  /** Larger layout with visible transcript (used on the profile screen). */
+  big?: boolean;
+  /** Optional signed URL to real audio. When absent, playback is simulated. */
+  audioUrl?: string | null;
+}
+
+/** Decorative animated bars; reduced to static under prefers-reduced-motion. */
+function Waveform() {
+  const bars = [8, 18, 12, 20, 9, 15, 22, 11];
+  return (
+    <span
+      aria-hidden="true"
+      className="inline-flex h-[22px] items-center gap-[3px]"
+    >
+      {bars.map((h, i) => (
+        <span
+          key={i}
+          className="w-[3px] rounded-[2px] bg-accent"
+          style={{
+            height: h,
+            animation: `wf 0.9s var(--ease-warm) ${i * 0.08}s infinite alternate`,
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
+/**
+ * Voice-intro player — the focal element of discovery. Plays real audio when a
+ * signed URL is provided, otherwise simulates playback. Always shows a
+ * transcript so the content is fully available to screen-reader users.
+ */
+export function VoicePlayer({ name, intro, big, audioUrl }: VoicePlayerProps) {
+  const [playing, setPlaying] = React.useState(false);
+  const { announce } = useToast();
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+
+  const toggle = () => {
+    const next = !playing;
+    setPlaying(next);
+    if (audioUrl && audioRef.current) {
+      if (next) void audioRef.current.play();
+      else audioRef.current.pause();
+    }
+    announce(
+      next ? t("ui.announcePlaying", { name }) : t("ui.announcePaused"),
+    );
+  };
+
+  const diameter = big ? 64 : 48;
+
+  return (
+    <div
+      className={[
+        "flex gap-3.5 rounded-card border border-border bg-surface shadow-sm",
+        big ? "flex-col items-stretch p-4" : "flex-row items-center p-3",
+      ].join(" ")}
+    >
+      <div className="flex min-w-0 flex-1 items-center gap-3.5">
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label={
+            playing
+              ? t("ui.pauseVoiceIntro", { name })
+              : t("ui.playVoiceIntro", { name })
+          }
+          aria-pressed={playing}
+          className="grid flex-none place-items-center rounded-pill bg-primary text-surface hover:bg-primary-dark aria-pressed:bg-primary-dark"
+          style={{ width: diameter, height: diameter }}
+        >
+          {playing ? (
+            <Pause size={big ? 28 : 22} strokeWidth={2} aria-hidden="true" />
+          ) : (
+            <Play size={big ? 28 : 22} strokeWidth={2} aria-hidden="true" />
+          )}
+        </button>
+        <div className="min-w-0 flex-1">
+          <div className="text-base font-bold text-ink">
+            {t("ui.voiceIntroOf", { name })}
+          </div>
+          <div className="flex items-center gap-2 text-sm text-ink-soft">
+            {playing ? (
+              <>
+                <Waveform />
+                <span>{t("ui.playingNow")}</span>
+              </>
+            ) : (
+              <span>{t("ui.tapToListen")}</span>
+            )}
+          </div>
+        </div>
+      </div>
+      {big ? (
+        <p className="text-base leading-snug text-ink">
+          <span className="mb-0.5 block text-xs font-bold text-ink-soft">
+            {t("ui.transcript")}
+          </span>
+          {intro}
+        </p>
+      ) : null}
+      {audioUrl ? (
+        <audio
+          ref={audioRef}
+          src={audioUrl}
+          onEnded={() => setPlaying(false)}
+          className="sr-only"
+        />
+      ) : null}
+    </div>
+  );
+}

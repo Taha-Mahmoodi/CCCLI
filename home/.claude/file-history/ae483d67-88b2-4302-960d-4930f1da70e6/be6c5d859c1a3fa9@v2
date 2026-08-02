@@ -1,0 +1,83 @@
+"use client";
+
+// The timeline — the memos in chronological order (the stream has an order and
+// an end). No counts, no ranking (#4). Each item is playable and likeable, all
+// reachable by keyboard and screen reader.
+
+import { Heart, Play, Radio } from "lucide-react";
+import { usePlayer } from "@/stores/player";
+import { formatDuration, spokenDuration } from "@/lib/format";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+export function MemoList() {
+  const memos = usePlayer((s) => s.memos);
+  const currentIndex = usePlayer((s) => s.currentIndex);
+  const status = usePlayer((s) => s.status);
+  const playFrom = usePlayer((s) => s.playFrom);
+  const toggleLike = usePlayer((s) => s.toggleLike);
+
+  if (memos.length === 0) {
+    return (
+      <div className="rounded-2xl border border-dashed border-border p-8 text-center">
+        <Radio aria-hidden="true" className="mx-auto mb-3 size-8 text-muted-foreground" />
+        <p className="font-medium">Your radio is quiet</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Record the first memo — it becomes the first thing on your stream.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <ul aria-label="Your stream, oldest first" className="flex flex-col gap-2">
+      {memos.map((memo, i) => {
+        const isCurrent = i === currentIndex && status !== "ended";
+        return (
+          <li key={memo.id}>
+            <div
+              aria-current={isCurrent ? "true" : undefined}
+              className={cn(
+                "flex items-center gap-3 rounded-xl border p-3 transition-colors",
+                isCurrent ? "border-primary bg-primary/5" : "border-border",
+              )}
+            >
+              <Button
+                type="button"
+                size="icon"
+                variant={isCurrent ? "default" : "outline"}
+                className="size-11 shrink-0 rounded-full"
+                aria-label={`Play memo ${i + 1}, ${spokenDuration(memo.durationMs)}${
+                  isCurrent ? ", currently selected" : ""
+                }`}
+                onClick={() => playFrom(i)}
+              >
+                <Play className="size-4" aria-hidden="true" />
+              </Button>
+
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">Memo {i + 1}</p>
+                <p className="text-xs text-muted-foreground">{formatDuration(memo.durationMs)}</p>
+              </div>
+
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="size-11 shrink-0 rounded-full"
+                aria-pressed={memo.liked}
+                aria-label={memo.liked ? `Unlike memo ${i + 1}` : `Like memo ${i + 1}`}
+                onClick={() => toggleLike(memo.id)}
+              >
+                <Heart
+                  className={cn("size-4", memo.liked && "fill-current text-primary")}
+                  aria-hidden="true"
+                />
+              </Button>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}

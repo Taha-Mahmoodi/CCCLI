@@ -1,0 +1,64 @@
+import { test, expect, type Page } from "@playwright/test";
+
+async function signUp(page: Page, name: string) {
+  const email = `notif-${Date.now()}-${Math.floor(performance.now())}@example.com`;
+  const password = "test-password-123";
+  await page.goto("/app/signup");
+  await page.getByLabel("Name").fill(name);
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByLabel("I am a").selectOption("SUPPORTER");
+  await page.getByRole("button", { name: /create account/i }).click();
+  await expect(page).toHaveURL(/\/app$/);
+  return { email, password };
+}
+
+async function signIn(page: Page, email: string, password: string) {
+  await page.goto("/app/login");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill(password);
+  await page.getByRole("button", { name: /^sign in$/i }).click();
+  await expect(page).toHaveURL(/\/app$/);
+}
+
+async function signOut(page: Page) {
+  await page.getByRole("button", { name: /sign out/i }).click();
+  await expect(page).toHaveURL(/\/app\/login$/);
+}
+
+test("a reply notifies the post author, with a badge that clears on view", async ({
+  page,
+}) => {
+  // Bee posts, then signs out.
+  const bee = await signUp(page, "Bee Keeper");
+  const body = `Bee post ${Date.now()}`;
+  await page.getByLabel(/share something with the community/i).fill(body);
+  await page.getByRole("button", { name: /^post$/i }).click();
+  await expect(page.getByText(body)).toBeVisible();
+  await signOut(page);
+
+  // Ada replies to Bee's post.
+  await signUp(page, "Ada Reply");
+  const article = page.locator("article", { hasText: body });
+  await article.getByRole("link", { name: /open the discussion/i }).click();
+  await page.getByLabel(/add a reply/i).fill("Nice one.");
+  await page.getByRole("button", { name: /^reply$/i }).click();
+  await expect(page.getByText("Nice one.")).toBeVisible();
+  await signOut(page);
+
+  // Bee signs back in: unread badge, then the notification itself.
+  await signIn(page, bee.email, bee.password);
+  await expect(
+    page.getByRole("link", { name: /notifications, 1 unread/i }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: /notifications/i }).click();
+  await expect(page).toHaveURL(/\/app\/notifications$/);
+  await expect(page.getByText("Ada Reply")).toBeVisible();
+  await expect(page.getByText(/replied to your post/i)).toBeVisible();
+
+  // Badge clears after viewing.
+  await page.goto("/app");
+  await expect(
+    page.getByRole("link", { name: "Notifications", exact: true }),
+  ).toBeVisible();
+});

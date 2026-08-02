@@ -1,0 +1,146 @@
+<!doctype html>
+<!-- forged-with: portfolio.me -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Third Eye Kit, 2022 — Said Mohaddes Sadeqi</title>
+<meta name="description" content="Three high schoolers, $112, a support centre in Herat. Glasses that listened for obstacles, shoes that felt them, a GPS module underneath. Best Presentation, TEKNOFEST Black Sea, 2022.">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/case.css">
+</head>
+<body>
+
+<svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+  <filter id="p-duo-amber" color-interpolation-filters="sRGB">
+    <feColorMatrix type="matrix" values="0.33 0.5 0.17 0 0
+                                         0.33 0.5 0.17 0 0
+                                         0.33 0.5 0.17 0 0
+                                         0    0   0    1 0"/>
+    <feComponentTransfer>
+      <feFuncR type="table" tableValues="0.043 0.788"/>
+      <feFuncG type="table" tableValues="0.059 0.604"/>
+      <feFuncB type="table" tableValues="0.051 0.337"/>
+    </feComponentTransfer>
+  </filter>
+</svg>
+
+<div class="p-shell">
+  <a class="p-skip" href="#beats">Skip to the case study</a>
+
+  <main id="main">
+    <header class="case-head">
+      <span class="p-landmark p-mono"><a href="../index.html">Said Mohaddes Sadeqi</a> · the proof</span>
+      <h1>At seventeen, our team of three built a wearable that let a blind person
+      hear and feel a room instead of seeing it.</h1>
+      <p class="status">
+        <span class="p-tag p-mono">Shipped 2022</span>
+        <span class="p-mono">Herat, Afghanistan · Samsun, Turkey</span>
+      </p>
+      <p class="standfirst">Glasses with an ultrasonic sensor and audio feedback,
+      shoes that vibrated, and a GPS module. About $112 in total. Field-tested with
+      blind users at a support centre in Herat, then taken to TEKNOFEST Black Sea,
+      where it won Best Presentation.</p>
+    </header>
+
+    <div class="beats" id="beats">
+
+      <section aria-labelledby="b-problem">
+        <h2 id="b-problem">The problem</h2>
+        <p>In Herat, if you were blind, you got around with a cane or with someone
+        else's arm. Both only tell you what is already in front of you. Nothing we
+        could find used sound and touch together, to tell a person what was coming
+        before the cane found it. We wanted a system that did not put the whole job on
+        one sense, because a cane alone means every obstacle is a surprise until the
+        last second.</p>
+      </section>
+
+      <section aria-labelledby="b-constraint">
+        <h2 id="b-constraint">The constraint</h2>
+        <p>I was seventeen, team captain of three students at Herat Boys' High School.
+        Our team was called ABRT01. We had $112 in total, no lab, and a TEKNOFEST
+        deadline that did not move for any of that.</p>
+      </section>
+
+      <section aria-labelledby="b-decision">
+        <h2 id="b-decision">The decision</h2>
+        <p>We built three things instead of one: glasses with an ultrasonic sensor and
+        audio feedback, shoes that vibrated, and a GPS module. You got the same
+        information through sound and through your feet, rather than from a single
+        channel doing all the work.</p>
+        <p>That is three separate parts to build, wire, and keep working on $112,
+        instead of one polished object, and three parts means more that can fail when
+        your whole team is three people. A single device would have been simpler to
+        demo and harder to break. We gave that up on purpose. We also brought the
+        finished kit to a support centre for the blind in Herat and tested it there
+        before the competition, rather than after.</p>
+      </section>
+
+      <div class="plates">
+        <figure>
+          <picture>
+            <source type="image/webp" srcset="../assets/img/kit-shoes-glasses-400.webp 400w, ../assets/img/kit-shoes-glasses-665.webp 665w" sizes="(min-width: 48rem) 30rem, 90vw">
+            <img class="p-duo-amber" src="../assets/img/kit-shoes-glasses-665.jpg"
+                 srcset="../assets/img/kit-shoes-glasses-400.jpg 400w, ../assets/img/kit-shoes-glasses-665.jpg 665w"
+                 sizes="(min-width: 48rem) 30rem, 90vw"
+                 width="665" height="904" loading="lazy" decoding="async"
+                 alt="The Third Eye Kit laid out from above: a pair of trainers fitted with sensor housings at the toes, beside the glasses rig with its ultrasonic sensor and wired electronics. Photographed in 2022 and tinted amber.">
+          </picture>
+          <figcaption>The kit, 2022. Shoes and glasses.</figcaption>
+        </figure>
+        <figure>
+          <picture>
+            <source type="image/webp" srcset="../assets/img/kit-gps-400.webp 400w, ../assets/img/kit-gps-604.webp 604w" sizes="(min-width: 48rem) 30rem, 90vw">
+            <img class="p-duo-amber" src="../assets/img/kit-gps-604.jpg"
+                 srcset="../assets/img/kit-gps-400.jpg 400w, ../assets/img/kit-gps-604.jpg 604w"
+                 sizes="(min-width: 48rem) 30rem, 90vw"
+                 width="604" height="367" loading="lazy" decoding="async"
+                 alt="The GPS module on a wooden table: a small circuit board with its antenna wired to a flat metal patch. Photographed in 2022 and tinted amber.">
+          </picture>
+          <figcaption>The GPS module.</figcaption>
+        </figure>
+      </div>
+
+      <section aria-labelledby="b-broke">
+        <h2 id="b-broke">What broke</h2>
+        <p>Wear the glasses and you are tethered to a battery pack by a wire. It is
+        three separate things you put on your body, not one integrated device.</p>
+        <p>We ran the field test once, in that room, with that person. We do not know
+        what the kit does after a month of someone wearing it every day, because we
+        never got the chance to find out. It was a prototype and it behaved like one:
+        it worked in the room we tested it in, and we cannot say more than that.</p>
+      </section>
+
+      <section aria-labelledby="b-outcome">
+        <h2 id="b-outcome">The outcome</h2>
+        <p>We went to TEKNOFEST Black Sea, in Samsun, in September 2022, and won Best
+        Presentation. Anadolu Agency and Faktor.ba both covered it on their own, and
+        TEKNOFEST's own finalist registry lists our team, ABRT01. It is the one claim
+        on this page nobody has to take my word for.</p>
+      </section>
+    </div>
+
+    <div class="sources">
+      <h2>Sources</h2>
+      <ul>
+        <li><a href="https://www.teknofest.org/tr/yarismalar/finalist-takimlar/2203">TEKNOFEST official finalist-teams registry</a> — team ABRT01</li>
+        <li><a href="https://www.aa.com.tr/tr/ayrimcilikhatti/engelli-yasam/lise-ogrencisinden-ucuncu-goz-projesi/1815004">Anadolu Agency</a> — independent coverage</li>
+        <li><a href="https://faktor.ba/nije-odabrano/nije-odabrano/ucenik-koji-je-ostao-bez-oka-tokom-rata-u-afganistanu-dizajnirao-uredaj-za-pomoc-slabovidnim/134008">Faktor.ba</a> — independent coverage</li>
+        <li>Project proposal, dated 2022-05-17, with the hardware photographs above</li>
+      </ul>
+    </div>
+
+    <nav class="case-nav" aria-label="Back">
+      <a href="../index.html">← All the work</a>
+    </nav>
+  </main>
+
+  <footer>
+    <p>This site is built to WCAG AAA. If any part of it fails you, tell me and I will
+    fix it: <a href="mailto:sadeqisaidmohaddes@gmail.com">sadeqisaidmohaddes@gmail.com</a></p>
+    <p class="credit"><a href="https://github.com/PIIIX-org/portfolio.me">Built with portfolio.me</a></p>
+  </footer>
+</div>
+</body>
+</html>

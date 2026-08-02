@@ -1,0 +1,64 @@
+W, H = 900, 240
+FONT = 'SFMono-Regular, Menlo, Consolas, monospace'
+RED = '#E23B33'
+CYAN = '#35D0D0'
+CX = W / 2
+WORD = 'CYBORG&#8202;TECH'
+WORD_Y = 128
+
+p = [f'<svg width="{W}" height="{H}" viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg">']
+p.append('''<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#101014"/><stop offset="100%" stop-color="#070709"/></linearGradient>
+</defs>''')
+p.append(f'<rect width="{W}" height="{H}" fill="url(#bg)"/>')
+
+# faint scanlines
+y = 0
+while y < H:
+    p.append(f'<rect x="0" y="{y}" width="{W}" height="1" fill="#ffffff" opacity="0.025"/>')
+    y += 3
+
+# a red top rule
+p.append(f'<rect x="0" y="0" width="{W}" height="3" fill="{RED}"/>')
+
+# chip icon (top-left) — CPU with pins, echoing the CYBORG logo
+cx, cy, s = 44, 40, 22
+p.append(f'<g stroke="{RED}" stroke-width="2" fill="none">')
+p.append(f'<rect x="{cx-s/2}" y="{cy-s/2}" width="{s}" height="{s}" rx="3"/>')
+p.append(f'<rect x="{cx-s/4}" y="{cy-s/4}" width="{s/2}" height="{s/2}" rx="1.5" fill="{RED}" fill-opacity="0.9" stroke="none"/>')
+for i in range(3):
+    off = -s/2 + 4 + i*7
+    p.append(f'<line x1="{cx+off}" y1="{cy-s/2}" x2="{cx+off}" y2="{cy-s/2-5}"/>')
+    p.append(f'<line x1="{cx+off}" y1="{cy+s/2}" x2="{cx+off}" y2="{cy+s/2+5}"/>')
+    p.append(f'<line x1="{cx-s/2}" y1="{cy+off}" x2="{cx-s/2-5}" y2="{cy+off}"/>')
+    p.append(f'<line x1="{cx+s/2}" y1="{cy+off}" x2="{cx+s/2+5}" y2="{cy+off}"/>')
+p.append('</g>')
+p.append(f'<text x="72" y="46" font-family="{FONT}" font-size="13" fill="#6b7280">// creative technology agency</text>')
+
+# glitch wordmark: red + cyan chromatic layers under white, with discrete jitter
+def word_layer(fill, opacity, vals_r, vals_c=None):
+    return (f'<text x="{CX}" y="{WORD_Y}" text-anchor="middle" font-family="{FONT}" font-size="58" '
+            f'font-weight="700" fill="{fill}" opacity="{opacity}">{WORD}'
+            f'<animateTransform attributeName="transform" type="translate" '
+            f'values="{vals_r}" keyTimes="0;0.34;0.4;0.46;0.52;0.7;0.76;0.82;1" '
+            f'dur="5s" calcMode="discrete" repeatCount="indefinite"/></text>')
+
+red_vals  = '0 0;0 0;-5 1;4 -1;0 0;0 0;6 0;-3 1;0 0'
+cyan_vals = '0 0;0 0;5 -1;-4 1;0 0;0 0;-6 0;3 -1;0 0'
+p.append(word_layer(RED, '0.85', red_vals))
+p.append(word_layer(CYAN, '0.8', cyan_vals))
+# white main, mostly stable with rare slice
+p.append(f'<text x="{CX}" y="{WORD_Y}" text-anchor="middle" font-family="{FONT}" font-size="58" font-weight="700" fill="#f2f2f4">{WORD}</text>')
+
+# flickering slice bars (glitch scan sweep)
+p.append(f'<rect x="0" y="{WORD_Y-40}" width="{W}" height="4" fill="{CYAN}" opacity="0">'
+         f'<animate attributeName="opacity" values="0;0;0.5;0;0" keyTimes="0;0.38;0.41;0.44;1" dur="5s" repeatCount="indefinite"/>'
+         f'<animate attributeName="y" values="{WORD_Y-40};{WORD_Y-40};{WORD_Y+18};{WORD_Y+18};{WORD_Y+18}" keyTimes="0;0.38;0.41;0.44;1" dur="5s" repeatCount="indefinite"/></rect>')
+
+# bottom tagline
+p.append(f'<text x="{CX}" y="{H-46}" text-anchor="middle" font-family="{FONT}" font-size="14" fill="#9aa0aa">We build the software our clients ship.</text>')
+p.append(f'<rect x="{CX-70}" y="{H-32}" width="140" height="2" fill="{RED}"/>')
+
+p.append('</svg>')
+open('/private/tmp/claude-501/-Users-taha/51b90afe-944f-4f8c-a234-21ade39239a8/scratchpad/cyborg_header.svg','w').write('\n'.join(p))
+print('done')

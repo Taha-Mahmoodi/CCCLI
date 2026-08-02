@@ -1,0 +1,41 @@
+import { test, expect, type Page } from "@playwright/test";
+
+async function signUp(page: Page, name: string) {
+  const email = `follow-${Date.now()}-${Math.floor(performance.now())}@example.com`;
+  await page.goto("/app/signup");
+  await page.getByLabel("Name").fill(name);
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill("test-password-123");
+  await page.getByLabel("I am a").selectOption("FAMILY");
+  await page.getByRole("button", { name: /create account/i }).click();
+  await expect(page).toHaveURL(/\/app$/);
+}
+
+test("follow a member and see their posts in the Following feed", async ({
+  page,
+}) => {
+  // Member B posts, then signs out.
+  const bName = `Bianca ${Date.now()}`;
+  await signUp(page, bName);
+  const postBody = `Bianca route note ${Date.now()}`;
+  await page.getByLabel(/share something with the community/i).fill(postBody);
+  await page.getByRole("button", { name: /^post$/i }).click();
+  await expect(page.getByText(postBody)).toBeVisible();
+  await page.getByRole("button", { name: /sign out/i }).click();
+  await expect(page).toHaveURL(/\/app\/login$/);
+
+  // Member A signs up, opens B's profile from B's post, and follows.
+  await signUp(page, "Aria Path");
+  const article = page.locator("article", { hasText: postBody });
+  await expect(article).toBeVisible();
+  await article.getByRole("link", { name: bName }).click();
+  await expect(page).toHaveURL(/\/app\/u\//);
+
+  await page.getByRole("button", { name: /^follow$/i }).click();
+  await expect(page.getByRole("button", { name: /following/i })).toBeVisible();
+  await expect(page.getByText(/1 followers/)).toBeVisible();
+
+  // B's post now appears in A's Following feed.
+  await page.goto("/app?feed=following");
+  await expect(page.getByText(postBody)).toBeVisible();
+});

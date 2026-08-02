@@ -1,0 +1,48 @@
+W, H = 900, 230
+r = 14
+
+def esc(s):
+    return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+parts = []
+parts.append(f'<svg width="{W}" height="{H}" viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg">')
+parts.append('''<defs>
+  <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#0d1117"/>
+    <stop offset="100%" stop-color="#05060d"/>
+  </linearGradient>
+  <filter id="softglow" x="-50%" y="-50%" width="200%" height="200%">
+    <feGaussianBlur stdDeviation="1.4"/>
+  </filter>
+</defs>''')
+
+# window frame
+parts.append(f'<rect x="1" y="1" width="{W-2}" height="{H-2}" rx="{r}" fill="url(#body)" stroke="#262c38" stroke-width="1.5"/>')
+# title bar
+parts.append(f'<path d="M1,{r+1} A{r},{r} 0 0 1 {r+1},1 H{W-r-1} A{r},{r} 0 0 1 {W-1},{r+1} V38 H1 Z" fill="#161b22"/>')
+parts.append(f'<line x1="0" y1="38" x2="{W}" y2="38" stroke="#262c38" stroke-width="1"/>')
+# traffic lights
+for i, color in enumerate(['#ff5f56', '#ffbd2e', '#27c93f']):
+    parts.append(f'<circle cx="{28 + i*22}" cy="19" r="6.5" fill="{color}"/>')
+# window title
+parts.append(f'<text x="{W/2}" y="24" text-anchor="middle" font-family="Menlo, Fira Code, monospace" font-size="13" fill="#8b949e">taha@piiix &#8212; zsh</text>')
+
+# terminal body content
+mono = 'font-family="Menlo, Fira Code, monospace"'
+lines = [
+    ('#6C63FF', '$', ' whoami'),
+]
+y = 76
+parts.append(f'<text x="28" y="{y}" {mono} font-size="17"><tspan fill="#27c93f">taha@piiix</tspan><tspan fill="#8b949e">:</tspan><tspan fill="#6C63FF">~</tspan><tspan fill="#8b949e">$ </tspan><tspan fill="#c9d1d9">whoami</tspan></text>')
+y += 40
+parts.append(f'<text x="28" y="{y}" {mono} font-size="26" font-weight="600" fill="#ffffff">Taha Mahmoodi</text>')
+y += 34
+parts.append(f'<text x="28" y="{y}" {mono} font-size="16" fill="#8b949e">Founder <tspan fill="#6C63FF">@</tspan> PIIIX &#183; building in the open</text>')
+y += 38
+parts.append(f'<text x="28" y="{y}" {mono} font-size="17" fill="#8b949e">$ <tspan fill="#c9d1d9" filter="url(#softglow)">_</tspan></text>')
+
+parts.append('</svg>')
+
+with open('/private/tmp/claude-501/-Users-taha/51b90afe-944f-4f8c-a234-21ade39239a8/scratchpad/terminal_header.svg', 'w') as f:
+    f.write('\n'.join(parts))
+print('done')

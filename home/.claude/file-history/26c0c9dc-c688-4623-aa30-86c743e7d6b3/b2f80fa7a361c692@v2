@@ -1,0 +1,94 @@
+# Loop 0 — Bootstrap
+
+**Goal:** confirm you can actually do the work before you promise any of it.
+
+**Output:** a capability line in `runs/<slug>/REPORT.md`. Nothing else.
+
+---
+
+## The capabilities
+
+| # | Capability | Native check | If missing |
+|---|---|---|---|
+| 1 | **Shell + git** | `git --version` | Stop. Nothing works without it |
+| 2 | **Web fetch / search** | your own tools | Loop 1 competitor teardown and VOC mining are unavailable. Record the skip |
+| 3 | **Headless browser** | `browse` skill, or Playwright | Loops 2b, 4, 7 lose screenshots and Loop 7 loses the funnel proof. **This is the one to fix** — `§18` needs a real browser |
+| 4 | **Crawler** | `npx lychee`, or `wget --spider`, or the browser | Loop 1's redirect map is built from the sitemap alone, which misses orphan pages (`§13`) |
+| 5 | **Image generation** | `imagegen-frontend-web` or equivalent | Loop 2a runs as written concepts instead of images; Gate B1 gets worse |
+| 6 | **Image sampling** | `python3 -c "import PIL"` | `pip install Pillow`, or ImageMagick, or the brand palette gets guessed (`§12`) |
+| 7 | **Prose skills** | `stop-slop`, `copywriting`, `ogilvy` | Install via `find-skills`. Loop 3 degrades without them |
+| 8 | **Audit tooling** | `npx @axe-core/cli`, `npx lighthouse` | Loop 7 checks become manual. `§17` still applies |
+| 9 | **GitHub API** | `gh auth status` | Only needed if the client's repo or Pages is the target |
+| 10 | **Deploy CLI** | depends on target — see below | Loop 6 becomes handoff mode |
+
+Check them, report what you have in one line, and move on. Do not spend a long time
+here.
+
+## Client-side access — ask, don't check
+
+Four things you cannot verify yourself and should ask for now, so they exist by the
+time they are needed. They are the most common reason a run stalls in the middle.
+
+| Access | Needed by | Ask for |
+|---|---|---|
+| Analytics | Loop 1 baseline, Loop 5, Loop 8 | Read access on their property, on their account |
+| Search Console | Loop 1 redirect map, Loop 7, Loop 8 | Verified property access — the authoritative ranking list |
+| CRM / lead destination | Loop 5, Loop 7 (`§18`) | Where leads go, who reads them, and a way to confirm arrival |
+| DNS and host | Loop 6 | Whose account, who can change records, current TTL |
+
+## The deploy CLI
+
+Cannot be checked until the target is known, which happens in Loop 1. Re-run this row
+after Gate A.
+
+| Target | Check |
+|---|---|
+| GitHub Pages | `gh auth status` |
+| Netlify | `netlify --version` |
+| Vercel | `vercel --version` |
+| Cloudflare Pages | `wrangler --version` |
+| VPS (nginx or Docker) | `ssh <host> 'echo ok'`, then `docker --version` on the host if relevant |
+| cPanel | `lftp --version`, or `curl --version` with FTPS |
+| S3 + CloudFront | `aws sts get-caller-identity` |
+| Handoff | nothing |
+
+A missing CLI is not a blocker. Say which one, offer to install it, and continue — the
+target only has to work by Loop 6.
+
+## Set up the run
+
+```bash
+mkdir -p runs/<slug>/{shots,prototypes,inbox,design,baseline,competitors}
+cp runs/_template/*.md runs/<slug>/
+```
+
+`<slug>` is the client's domain or name, lowercased and hyphenated. `inbox/` is where
+they drop material for Loop 1 — brand book, sales deck, customer quotes, support
+exports, the claims they want to make. Tell them it exists now, so the material is
+there by the time you need it.
+
+`baseline/` is where Loop 1's analytics exports and screenshots go. It is small,
+boring, and the only reason Loop 8 can say anything honest.
+
+## Existing site or not
+
+One question, asked here rather than in Loop 1, because the answer changes what Loop 1
+has to do first.
+
+| Answer | Loop 1 must also |
+|---|---|
+| Replacing a site on the same domain | Crawl it, export the ranking URLs, build the redirect map (`§13`, hard). Capture the baseline before anything changes |
+| New domain, nothing to replace | One sentence: "nothing to preserve." Move on |
+| New site, old one stays somewhere | Decide what happens to the old URLs. "Both live" is usually two sites competing for the same terms |
+
+## What not to do here
+
+Do not research the client. Do not propose a design. Do not ask the intake questions —
+those belong to Loop 1 and they work better opening the conversation than following a
+capability audit.
+
+## Skip cost
+
+Skipping bootstrap costs you a failure in Loop 6 or 7 instead of a two-minute check in
+Loop 0, plus the client-access requests arriving three loops late. It is the cheapest
+loop to run and the most annoying one to have skipped.

@@ -1,0 +1,8 @@
+{
+  "id": "21",
+  "subject": "Per-load generative seed",
+  "description": "The bigger creative swing — hero's generative visual gets a fresh procedural seed per page load. Design carefully, note CLS/determinism tradeoffs honestly in the PR.",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

@@ -1,0 +1,8 @@
+{
+  "id": "60",
+  "subject": "2c-1 wikilink autocomplete (PR #78, CI running)",
+  "description": "Wikilinks: [[ typeahead against vault notes, clickable rendered links, link-to-create. First slice after the Editor. Then Slices 3-7 (Search/Team/Vault-settings/Admin/Settings + ⌘K).",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

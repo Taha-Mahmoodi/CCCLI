@@ -1,0 +1,38 @@
+// Pure, DOM-free gesture rules for the v1 card deck. Kept separate from the
+// components so the swipe / double-activation logic is unit-testable without
+// pointer events or a DOM.
+//
+// v1 reverses spec principles 5 & 6 (see the spec's recorded dissent): the deck
+// is gesture-led. This module is only the CLASSIFIER — every action it names
+// (like / skip / like-and-next) is ALSO wired to a visible labelled button and
+// a keyboard shortcut in SwipeDeck, because a screen reader consumes raw
+// swipes. Gestures are one route, never the only one.
+
+export type SwipeAction = "like" | "skip" | null;
+
+/** A horizontal drag past this many px is a decision. Shorter drags, or drags
+ *  that are more vertical than horizontal, are not — so a hesitation or a
+ *  vertical scroll never fires like/skip by accident. */
+export const SWIPE_THRESHOLD_PX = 96;
+
+export function classifySwipe(dx: number, dy: number, threshold = SWIPE_THRESHOLD_PX): SwipeAction {
+  if (Math.abs(dx) < threshold) return null; // not far enough to be a decision
+  if (Math.abs(dx) <= Math.abs(dy)) return null; // mostly vertical → leave it for scrolling
+  return dx > 0 ? "like" : "skip";
+}
+
+/** "Swipe right twice fast" → like AND advance (spec's rule 2). A second like
+ *  within this window counts as the double-activation. There is always a
+ *  non-timed route to the same result (the explicit "Like & next" button), so
+ *  no user is gated on hitting a time window — principle 6's real constraint. */
+export const DOUBLE_ACTIVATION_MS = 400;
+
+export function isDoubleActivation(
+  prevTs: number | null,
+  nowTs: number,
+  windowMs = DOUBLE_ACTIVATION_MS,
+): boolean {
+  if (prevTs === null) return false;
+  const gap = nowTs - prevTs;
+  return gap >= 0 && gap <= windowMs;
+}

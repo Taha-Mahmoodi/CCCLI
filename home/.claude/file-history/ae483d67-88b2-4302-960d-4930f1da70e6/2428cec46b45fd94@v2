@@ -1,0 +1,98 @@
+"use client";
+
+// Demo & testing tool (not linked from the app). Loads the pre-generated seed
+// content — memos with real spoken audio, from a small blind-first community —
+// into THIS browser's IndexedDB, so the beta can be tested with a populated
+// timeline instead of an empty one. Reversible: "Clear all content" wipes it.
+
+import { useState } from "react";
+import { getAllMemos, putMemo, deleteMemo } from "@/lib/idb";
+import { saveChannels } from "@/lib/channels";
+import type { Channel, StoredMemo } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+
+type SeedMemo = Omit<StoredMemo, "blob"> & { audio: string };
+type Manifest = { channels: Channel[]; memos: SeedMemo[] };
+
+export default function SeedPage() {
+  const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function load() {
+    setBusy(true);
+    setStatus("Loading demo content…");
+    try {
+      // no-store: always read the current seed, never a stale cached manifest
+      // (HTTP cache or the PWA service worker) — a demo loader must be exact.
+      const manifest: Manifest = await fetch("/seed/manifest.json", { cache: "no-store" }).then((r) => {
+        if (!r.ok) throw new Error("no seed manifest — run scripts/seed/generate.mjs");
+        return r.json();
+      });
+      saveChannels(manifest.channels);
+      let n = 0;
+      for (const m of manifest.memos) {
+        const { audio, ...meta } = m;
+        const blob = await fetch(audio, { cache: "no-store" }).then((r) => r.blob());
+        await putMemo({ ...meta, blob } as StoredMemo);
+        n += 1;
+        setStatus(`Loaded ${n} of ${manifest.memos.length} memos…`);
+      }
+      setStatus(`Done — ${n} memos across ${manifest.channels.length} stations. Open the app to listen.`);
+    } catch (e) {
+      setStatus(`Failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clear() {
+    setBusy(true);
+    setStatus("Clearing…");
+    try {
+      const all = await getAllMemos();
+      for (const m of all) await deleteMemo(m.id);
+      setStatus(`Cleared ${all.length} memos. (Stations remain — recreate them by clearing site data if needed.)`);
+    } catch (e) {
+      setStatus(`Failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-5 py-8">
+      <section className="flex flex-col gap-2">
+        <h1 className="text-2xl font-semibold tracking-tight">Demo content</h1>
+        <p className="text-muted-foreground">
+          A testing tool. It loads placeholder memos — real spoken audio from a small,
+          fictional blind-first community — into this browser so you can try the app with a
+          full timeline. It only touches this device, and you can clear it any time.
+        </p>
+      </section>
+
+      <div className="flex flex-wrap gap-3">
+        <Button type="button" className="h-11 px-5" disabled={busy} onClick={load}>
+          Load demo content
+        </Button>
+        <Button type="button" variant="outline" className="h-11 px-5" disabled={busy} onClick={clear}>
+          Clear all content
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-11 px-5"
+          disabled={busy}
+          // Full reload, not client nav: the player store hydrates from IndexedDB
+          // once on mount, so it must re-mount to pick up the seeded memos.
+          onClick={() => window.location.assign("/")}
+        >
+          Open the app
+        </Button>
+      </div>
+
+      <p role="status" aria-live="polite" className="min-h-6 text-sm text-foreground/90">
+        {status}
+      </p>
+    </div>
+  );
+}

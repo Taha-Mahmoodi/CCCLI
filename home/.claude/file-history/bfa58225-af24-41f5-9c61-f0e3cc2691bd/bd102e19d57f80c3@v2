@@ -1,0 +1,119 @@
+# Deploying to a VPS
+
+Real, HTTPS deployment of the full stack (Postgres + backend + dashboard)
+behind [Caddy](https://caddyserver.com/) for automatic Let's Encrypt TLS on
+one domain, no subdomains needed. Works on any VPS with Docker installed —
+DigitalOcean, Hetzner, Linode, AWS Lightsail, etc. This is a separate,
+production-shaped compose file (`docker-compose.prod.yml`) from the
+local-dev one (`docker-compose.yml`) — see `README.md`'s "Deploying
+(Docker)" section for that one.
+
+Verified locally end-to-end (real HTTPS termination, real path-based
+routing to the backend, real dashboard serving including a client-side-only
+route) before this doc was written — see `PROGRESS.md` for the details.
+The one thing that genuinely can't be verified without a real domain is the
+actual Let's Encrypt certificate issuance (ACME needs a real, publicly
+resolvable domain and port 80 reachable from the internet) — that step is
+the same well-established Caddy behavior used by a huge number of
+production deployments, not something new invented for this project.
+
+## 1. Provision a VPS
+
+Any provider, any size — this is a small internal tool, a $5-6/mo VPS
+(1 vCPU, 1-2GB RAM) is plenty to start. Requirements:
+
+- Docker + the Docker Compose plugin installed (most providers offer a
+  "Docker" marketplace image that has this preinstalled; otherwise follow
+  [Docker's install docs](https://docs.docker.com/engine/install/) for
+  whatever Linux distro you picked).
+- Ports 80 and 443 open to the internet (check the provider's firewall
+  panel, not just the OS firewall).
+
+## 2. Point a domain at it
+
+Add an `A` record (and `AAAA` if the VPS has IPv6) for your domain pointing
+at the VPS's public IP. Wait for it to propagate (`dig yourdomain.com`
+should return the VPS's IP) before continuing — Caddy's certificate request
+in step 4 will fail if the domain doesn't resolve yet.
+
+You do NOT need separate subdomains for the backend and dashboard — one
+domain serves both. `https://yourdomain.com/api/*` routes to the backend,
+everything else routes to the dashboard (see `Caddyfile`).
+
+## 3. Copy the repo and configure
+
+```bash
+git clone https://github.com/Taha-Mahmoodi/atlas-fieldforce.git
+cd atlas-fieldforce
+cp deploy.env.example .env
+```
+
+Edit `.env` and fill in every value — `deploy.env.example` documents each
+one, including a copy-pasteable command to generate a real VAPID keypair in
+the exact format `pywebpush` expects (not a PEM — verified against
+`pywebpush`'s actual key-parsing code before writing that command into the
+file, not guessed).
+
+## 4. Start the stack
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+First boot: Caddy requests a Let's Encrypt certificate for your domain
+(needs port 80 reachable, per step 1), the backend runs
+`alembic upgrade head` automatically (see `backend/docker-entrypoint.sh`),
+then everything starts. Watch it happen:
+
+```bash
+docker compose -f docker-compose.prod.yml logs -f
+```
+
+Once it settles, `https://yourdomain.com` serves the dashboard and
+`https://yourdomain.com/api/v1/...` serves the backend, both over a real,
+auto-renewing TLS certificate — Caddy renews it automatically well before
+expiry, nothing to schedule yourself.
+
+## 5. Verify
+
+```bash
+curl https://yourdomain.com/api/v1/auth/register \
+  -X POST -H "Content-Type: application/json" \
+  -H "X-Tenant-Id: $(uuidgen)" \
+  -d '{"email":"you@example.com","password":"a-real-password","role":"manager"}'
+```
+
+Expect a real `access_token`/`refresh_token` JSON response. Then open
+`https://yourdomain.com` in a browser and log in with the tenant ID printed
+above (the `X-Tenant-Id` you sent) plus the email/password.
+
+## Updating to a new version
+
+```bash
+git pull
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Migrations run automatically on every restart via the entrypoint script —
+there's no separate migration step to remember.
+
+## Building the tablet app against this deployment
+
+Set `VITE_API_BASE_URL=https://yourdomain.com` in `tablet/.env` before
+running `tablet/README.md`'s documented build sequence — the app needs to
+point at your real, reachable backend to be useful on a physical device
+(pointing it at `localhost` would only work on the machine that built it,
+not on a device you install it to).
+
+## What this doesn't do
+
+- **No backup strategy** for the `fieldforce_pg_data` volume — set up your
+  own Postgres backup approach (a cron'd `pg_dump` to object storage is the
+  usual minimum) before trusting this with real data.
+- **No zero-downtime deploys** — `docker compose up -d --build` restarts
+  the backend container, which drops in-flight requests for a few seconds.
+  Fine for an internal tool at this scale; revisit if that ever matters.
+- **Runs as root, single process** — the backend container has no
+  non-root user or worker-process management configured. Acceptable for a
+  small internal deployment; a larger-scale production hardening pass
+  would add both.

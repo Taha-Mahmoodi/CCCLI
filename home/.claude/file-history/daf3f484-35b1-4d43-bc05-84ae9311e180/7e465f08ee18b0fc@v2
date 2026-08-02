@@ -1,0 +1,150 @@
+import * as THREE from "three";
+import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import { mockNotes, mulberry32, noteOrbitRadius, type Vault } from "./data";
+
+// Semantic LOD tier 3: inside one vault's star system. Notes are planets
+// lit by their star (a real point light); sub-notes are moons. Faint
+// orrery rings for readability — the verified Elite Dangerous pattern of
+// a schematic system view, kept subtle.
+
+interface Orbiter {
+  pivot: THREE.Object3D;
+  speed: number;
+}
+
+export interface NoteSystem {
+  group: THREE.Group;
+  vault: Vault;
+  orbiters: Orbiter[];
+  labels: CSS2DObject[];
+  light: THREE.PointLight;
+  /** fade handle: 0..1, applied to all system materials */
+  setOpacity(o: number): void;
+}
+
+const PLANET_TINTS = [0xc9a687, 0x9db4c9, 0xb79d8a, 0x8fae9c, 0xc9b487, 0xa593b5];
+
+export function buildNoteSystem(
+  vault: Vault,
+  now: number,
+  palCore: number,
+  sprite: THREE.Texture,
+): NoteSystem {
+  const rnd = mulberry32(vault.id.length * 811 + vault.noteCount * 3);
+  const notes = mockNotes(vault);
+  const group = new THREE.Group();
+  const orbiters: Orbiter[] = [];
+  const labels: CSS2DObject[] = [];
+  const fadeMats: (THREE.Material & { opacity: number })[] = [];
+
+  // the star itself: emissive core + corona billboard + real light
+  const starColor = new THREE.Color(palCore);
+  const starMat = new THREE.MeshBasicMaterial({
+    color: starColor,
+    transparent: true,
+  });
+  const star = new THREE.Mesh(new THREE.SphereGeometry(0.34, 24, 24), starMat);
+  group.add(star);
+  fadeMats.push(starMat);
+
+  const coronaMat = new THREE.SpriteMaterial({
+    map: sprite,
+    color: starColor,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const corona = new THREE.Sprite(coronaMat);
+  corona.scale.setScalar(2.6);
+  group.add(corona);
+  fadeMats.push(coronaMat);
+
+  const light = new THREE.PointLight(starColor, 26, 34, 2);
+  group.add(light);
+
+  for (const [i, note] of notes.entries()) {
+    const orbitR = noteOrbitRadius(note, now);
+    const planetR = 0.07 + Math.sqrt(note.size) * 0.045;
+
+    const pivot = new THREE.Object3D();
+    pivot.rotation.y = rnd() * Math.PI * 2;
+    pivot.rotation.x = (rnd() - 0.5) * 0.22; // slight orbital inclination
+    group.add(pivot);
+
+    const mat = new THREE.MeshStandardMaterial({
+      color: PLANET_TINTS[i % PLANET_TINTS.length],
+      roughness: 0.85,
+      metalness: 0.05,
+      emissive: 0x0a0c14, // night side never fully black
+      transparent: true,
+    });
+    const planet = new THREE.Mesh(new THREE.SphereGeometry(planetR, 20, 20), mat);
+    planet.position.x = orbitR;
+    pivot.add(planet);
+    fadeMats.push(mat);
+    // closer orbits move faster — Kepler-flavored, slow enough to feel calm
+    orbiters.push({ pivot, speed: 0.12 / Math.pow(orbitR, 1.5) });
+
+    // faint orrery ring
+    const ringGeo = new THREE.RingGeometry(orbitR - 0.004, orbitR + 0.004, 96);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x8f9bb8,
+      transparent: true,
+      opacity: 0.14,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = Math.PI / 2;
+    ring.rotation.y = pivot.rotation.x; // match inclination visually
+    group.add(ring);
+    fadeMats.push(ringMat);
+
+    // moons: sub-notes orbiting the planet
+    for (let m = 0; m < note.subCount; m++) {
+      const moonPivot = new THREE.Object3D();
+      moonPivot.rotation.y = rnd() * Math.PI * 2;
+      planet.add(moonPivot);
+      const moonMat = new THREE.MeshStandardMaterial({
+        color: 0xb8bcc9,
+        roughness: 0.9,
+        emissive: 0x07080e,
+        transparent: true,
+      });
+      const moon = new THREE.Mesh(
+        new THREE.SphereGeometry(planetR * 0.28, 12, 12),
+        moonMat,
+      );
+      moon.position.x = planetR * (2.1 + m * 0.9);
+      moonPivot.add(moon);
+      fadeMats.push(moonMat);
+      orbiters.push({ pivot: moonPivot, speed: 0.9 + rnd() * 0.7 });
+    }
+
+    const el = document.createElement("div");
+    el.className = "yz-label";
+    el.textContent = note.title;
+    const label = new CSS2DObject(el);
+    label.position.set(0, planetR + 0.22, 0);
+    planet.add(label);
+    labels.push(label);
+  }
+
+  group.visible = false;
+  return {
+    group,
+    vault,
+    orbiters,
+    labels,
+    light,
+    setOpacity(o: number) {
+      for (const m of fadeMats) m.opacity = o;
+      light.intensity = 26 * o;
+      group.visible = o > 0.01;
+    },
+  };
+}
+
+export function tickNoteSystem(sys: NoteSystem, dt: number): void {
+  for (const o of sys.orbiters) o.pivot.rotation.y += o.speed * dt;
+}

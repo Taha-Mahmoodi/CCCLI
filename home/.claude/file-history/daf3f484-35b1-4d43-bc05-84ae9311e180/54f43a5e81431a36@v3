@@ -1,0 +1,157 @@
+import * as THREE from "three";
+import { burstEnvelope, mulberry32 } from "./data";
+import type { GalaxyNode } from "./galaxy";
+
+// The supernova moment: the one deliberate, celebratory action in the sky.
+// Build-up (the galaxy holds its breath), detonation (shockwave shell +
+// radial particle burst + camera shake), afterglow — and what remains is
+// a black hole. Duration ~5.5s.
+
+const DURATION = 5.5;
+const BURST_N = 2600;
+
+const VERT = /* glsl */ `
+  attribute vec3 aDir;
+  attribute float aSpeed;
+  uniform float uShock;
+  varying float vFade;
+  void main() {
+    float r = uShock * aSpeed;
+    vFade = 1.0 - uShock;
+    vec4 mv = modelViewMatrix * vec4(aDir * r, 1.0);
+    gl_PointSize = (2.0 + 3.0 * (1.0 - uShock)) * (300.0 / -mv.z);
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+
+const FRAG = /* glsl */ `
+  varying float vFade;
+  uniform vec3 uColor;
+  void main() {
+    float d = length(gl_PointCoord - 0.5);
+    float alpha = smoothstep(0.5, 0.0, d) * vFade;
+    gl_FragColor = vec4(uColor, alpha);
+  }
+`;
+
+export class SupernovaEffect {
+  group = new THREE.Group();
+  private t = 0;
+  private node: GalaxyNode;
+  private shell: THREE.Mesh;
+  private burst: THREE.Points;
+  private burstMat: THREE.ShaderMaterial;
+  private flashSprite: THREE.Sprite;
+  private baseOpacity: number;
+  private baseNucleus: number;
+  private detonated = false;
+  onDetonate?: () => void;
+  onDone?: () => void;
+
+  constructor(node: GalaxyNode, sprite: THREE.Texture) {
+    this.node = node;
+    this.baseOpacity = node.cloudMat.opacity;
+    this.baseNucleus = node.nucleusMat.opacity;
+    this.group.position.copy(node.group.position);
+
+    const shellMat = new THREE.MeshBasicMaterial({
+      color: 0xfff2dc,
+      transparent: true,
+      opacity: 0,
+      side: THREE.BackSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    this.shell = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 32), shellMat);
+    this.group.add(this.shell);
+
+    const rnd = mulberry32(node.project.id.length * 53 + 9);
+    const dirs = new Float32Array(BURST_N * 3);
+    const speeds = new Float32Array(BURST_N);
+    for (let i = 0; i < BURST_N; i++) {
+      const u = rnd() * 2 - 1;
+      const th = rnd() * Math.PI * 2;
+      const s = Math.sqrt(1 - u * u);
+      dirs.set([s * Math.cos(th), u * 0.55, s * Math.sin(th)], i * 3);
+      speeds[i] = node.radius * (1.6 + rnd() * 2.6);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(BURST_N * 3), 3));
+    geo.setAttribute("aDir", new THREE.BufferAttribute(dirs, 3));
+    geo.setAttribute("aSpeed", new THREE.BufferAttribute(speeds, 1));
+    geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
+    this.burstMat = new THREE.ShaderMaterial({
+      vertexShader: VERT,
+      fragmentShader: FRAG,
+      uniforms: {
+        uShock: { value: 0 },
+        uColor: { value: new THREE.Color(0xffdcae) },
+      },
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    this.burst = new THREE.Points(geo, this.burstMat);
+    this.burst.frustumCulled = false;
+    this.group.add(this.burst);
+
+    const flashMat = new THREE.SpriteMaterial({
+      map: sprite,
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    this.flashSprite = new THREE.Sprite(flashMat);
+    this.flashSprite.scale.setScalar(node.radius * 5);
+    this.group.add(this.flashSprite);
+  }
+
+  /** the galaxy this effect is consuming — updateFades yields to us for it */
+  get targetNode(): GalaxyNode {
+    return this.node;
+  }
+
+  /** returns camera-shake amplitude for this frame */
+  update(dt: number): number {
+    this.t += dt / DURATION;
+    const t = Math.min(this.t, 1);
+    const env = burstEnvelope(t);
+
+    (this.flashSprite.material as THREE.SpriteMaterial).opacity = env.flash;
+    // the nucleus IS the dying heart: it flares through build-up and blast
+    this.node.nucleusMat.opacity = Math.min(1, this.baseNucleus + env.flash * 1.5);
+    this.node.group.scale.setScalar(env.contract);
+    this.node.cloudMat.opacity = Math.min(
+      1,
+      this.baseOpacity + env.flash * 0.9,
+    );
+
+    const shellR = 0.5 + env.shock * this.node.radius * 3.4;
+    this.shell.scale.setScalar(shellR);
+    (this.shell.material as THREE.MeshBasicMaterial).opacity =
+      env.shock > 0 ? Math.max(0, 0.55 * (1 - env.shock)) : 0;
+
+    this.burstMat.uniforms.uShock.value = env.shock;
+
+    if (!this.detonated && t > 0.24) {
+      this.detonated = true;
+      this.onDetonate?.();
+    }
+    if (t >= 1) {
+      this.node.group.scale.setScalar(1);
+      this.onDone?.();
+    }
+    // shake hardest right at detonation, decaying through the afterglow
+    return this.detonated ? Math.max(0, 1 - (t - 0.24) / 0.3) * 1.6 : 0;
+  }
+
+  dispose(): void {
+    this.shell.geometry.dispose();
+    (this.shell.material as THREE.Material).dispose();
+    this.burst.geometry.dispose();
+    this.burstMat.dispose();
+    (this.flashSprite.material as THREE.Material).dispose();
+  }
+}

@@ -1,0 +1,48 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { Heart } from "@phosphor-icons/react";
+import { togglePostLike } from "@/actions/posts";
+
+export function PostLikeButton({
+  postId,
+  initialCount,
+  initialLiked,
+}: {
+  postId: string;
+  initialCount: number;
+  initialLiked: boolean;
+}) {
+  const [count, setCount] = useState(initialCount);
+  const [liked, setLiked] = useState(initialLiked);
+  const [pending, startTransition] = useTransition();
+
+  const onClick = () =>
+    startTransition(async () => {
+      const res = await togglePostLike(postId);
+      if ("count" in res) {
+        setCount(res.count);
+        setLiked(res.liked);
+      }
+    });
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={pending}
+      aria-pressed={liked}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition-colors disabled:opacity-60 ${
+        liked
+          ? "border-accent text-accent-strong"
+          : "border-border text-muted hover:text-fg"
+      }`}
+    >
+      <Heart size={16} weight={liked ? "fill" : "regular"} aria-hidden />
+      <span>{count}</span>
+      <span className="sr-only">
+        {liked ? "likes. Remove your like" : "likes. Like this post"}
+      </span>
+    </button>
+  );
+}

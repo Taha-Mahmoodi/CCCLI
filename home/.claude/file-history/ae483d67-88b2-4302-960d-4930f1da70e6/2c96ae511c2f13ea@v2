@@ -1,0 +1,129 @@
+import Foundation
+
+/// The radio player state machine — a faithful Swift port of the web Zustand
+/// store, so iOS and web behave identically. Value type with mutating methods
+/// (easy to test); the SwiftUI app wraps it in an ObservableObject.
+///
+/// Non-negotiables enforced here:
+///  #3 the stream ends — `next()` past the last memo yields `.ended`.
+///  #4 no engagement machinery — likes are per-memo state, never counted.
+public struct RadioEngine: Sendable {
+  public private(set) var memos: [Memo] = []
+  public private(set) var channels: [Channel] = [Channel(id: "main", name: "Main")]
+  public private(set) var activeChannel: String = allChannels
+  public private(set) var shuffle: Bool = false
+  public private(set) var shuffleOrder: [String] = []
+  public private(set) var currentIndex: Int = 0
+  public private(set) var isPlaying: Bool = false
+  public private(set) var status: PlayerStatus = .idle
+  public private(set) var playbackRate: Double = 1
+
+  public init() {}
+
+  public var queue: [Memo] { orderedQueue(memos, activeChannel, shuffle ? shuffleOrder : nil) }
+  public var current: Memo? { queue.indices.contains(currentIndex) ? queue[currentIndex] : nil }
+
+  public mutating func addMemo(_ memo: Memo) {
+    var m = memo
+    m.channelId = activeChannel == allChannels ? "main" : activeChannel
+    let wasEnded = status == .ended
+    let inActive = activeChannel == allChannels || m.channelId == activeChannel
+    memos.append(m)
+    if shuffle && inActive { shuffleOrder.append(m.id) }
+    if wasEnded && inActive {
+      currentIndex = max(0, queue.count - 1)
+      status = .paused
+    }
+  }
+
+  public mutating func play() {
+    if !queue.isEmpty {
+      isPlaying = true
+      status = .playing
+    }
+  }
+
+  public mutating func pause() {
+    if status == .playing {
+      isPlaying = false
+      status = .paused
+    }
+  }
+
+  public mutating func next() {
+    if currentIndex < queue.count - 1 {
+      currentIndex += 1
+    } else {
+      isPlaying = false
+      status = .ended
+    }
+  }
+
+  public mutating func previous() {
+    currentIndex = max(0, currentIndex - 1)
+    if status == .ended { status = .paused }
+  }
+
+  public mutating func playFrom(_ index: Int) {
+    guard queue.indices.contains(index) else { return }
+    currentIndex = index
+    isPlaying = true
+    status = .playing
+  }
+
+  public mutating func toggleLike(_ id: String) {
+    if let i = memos.firstIndex(where: { $0.id == id }) { memos[i].liked.toggle() }
+  }
+
+  public mutating func correctTranscript(_ id: String, _ text: String) {
+    if let i = memos.firstIndex(where: { $0.id == id }) {
+      // never overwrite the machine transcript (spec §8.3)
+      memos[i].correctedTranscript = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+  }
+
+  public mutating func setActiveChannel(_ id: String) {
+    activeChannel = id
+    // the UI shuffles the ids and injects them via `setShuffleOrder`
+    shuffleOrder = shuffle ? channelQueue(memos, id).map(\.id) : []
+    currentIndex = 0
+    isPlaying = false
+    status = .idle
+  }
+
+  public mutating func createChannel(_ name: String) {
+    let trimmed = name.trimmingCharacters(in: .whitespaces)
+    guard !trimmed.isEmpty else { return }
+    let id = uniqueChannelId(trimmed, channels)
+    channels.append(Channel(id: id, name: trimmed))
+    activeChannel = id
+    shuffleOrder = []
+    currentIndex = 0
+    isPlaying = false
+    status = .idle
+  }
+
+  /// Enable shuffle with an order the caller (UI) produced (Fisher-Yates) — the
+  /// engine stays deterministic and testable.
+  public mutating func setShuffleOrder(_ order: [String]) {
+    shuffle = true
+    shuffleOrder = order
+    currentIndex = 0
+    isPlaying = false
+    status = .idle
+  }
+
+  public mutating func disableShuffle() {
+    shuffle = false
+    shuffleOrder = []
+    currentIndex = 0
+    isPlaying = false
+    status = .idle
+  }
+
+  public mutating func cyclePlaybackRate() {
+    let rates: [Double] = [1, 1.25, 1.5, 2]
+    let i = rates.firstIndex(of: playbackRate) ?? 0
+    playbackRate = rates[(i + 1) % rates.count]
+  }
+}

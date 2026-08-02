@@ -1,0 +1,77 @@
+# heard-research — citation research & doc fixes
+
+Research only, nothing pushed (no collaborator access was authorized on this repo). Paste whatever's useful directly into `docs/STATISTICS.md` / `docs/LINKEDIN_STRATEGY.md`.
+
+## Citations for docs/STATISTICS.md (13 of 15 confirmed clean)
+
+1. **WHO — 871,000 deaths/year from loneliness.** Confirmed ("100 deaths every hour... more than 871,000 deaths annually," "1 in 6 people worldwide affected"). Couldn't verify the "1 in 4 adolescents" split verbatim — WHO's own page says "around 1 in 5" for adolescents/young adults; treat as approximate.
+   - https://www.who.int/news/item/30-06-2025-social-connection-linked-to-improved-heath-and-reduced-risk-of-early-death
+   - https://www.who.int/groups/commission-on-social-connection/report
+
+2. **US Surgeon General — "as dangerous as smoking 15 cigarettes a day."** Confirmed, including 29%/32%/50% heart disease/stroke/dementia risk figures.
+   - https://www.hhs.gov/sites/default/files/surgeon-general-social-connection-advisory.pdf
+   - https://www.npr.org/2023/05/02/1173418268/loneliness-connection-mental-health-dementia-surgeon-general
+
+3. **APA "Stress in America" 2025.** Confirmed exactly (54%/50%/50%/69% vs 65% in 2024, n=3,199, Harris Poll).
+   - https://www.apa.org/news/press/releases/2025/11/nation-suffering-division-loneliness
+   - https://www.apa.org/pubs/reports/stress-in-america/2025/full-report.pdf
+
+4. **APA Healthy Minds Poll, Jan 2024.** Confirmed exactly (30% lonely weekly, 10% daily, n=2,200).
+   - https://www.psychiatry.org/news-room/news-releases/new-apa-poll-one-in-three-americans-feels-lonely-e
+
+5. **NRTC blind employment — 44% vs 77%. ⚠️ MISMATCH.** This is NOT 2023 ACS data as currently cited — it's 2017 data from McDonnall & Sui (2019). NRTC's actual current (2023) fact sheet reports **52.3% employed vs 76.3%, 8.1% unemployed vs 4.2%** — different, more favorable numbers. Fix the doc one of two ways:
+   - (a) Keep 44%/10% vs 77%/5% but correctly cite as 2017 data, source: https://doi.org/10.1177/0145482X19887620
+   - (b) Switch to the current 2023 figures (52.3%/76.3%, 8.1%/4.2%), source: https://www.blind.msstate.edu/sites/www.blind.msstate.edu/files/2024-12/Employment%20Statistics%20for%20Adults%20with%20Visual%20Impairments.pdf
+
+6. **BLS 2024 general disability employment.** Confirmed exactly (22.7% employment ratio, 7.5% unemployment).
+   - https://www.bls.gov/opub/ted/2025/22-7-percent-of-people-with-a-disability-were-employed-in-2024.htm
+
+7. **BLS 2024 telework among disabled workers — ⚠️ rounding drift.** Doc says "25% vs 23%"; actual BLS figures are **24.4% vs 22.8%** → rounds to 24%/23%, not 25%/23%. Fix the 25 to 24.
+   - https://www.bls.gov/opub/btn/volume-14/telework-trends.htm
+
+8. **NBER (Bloom, Dahl & Rooth) remote work / disability employment.** Confirmed ("~quarter million" workers, 68–85% of the rise explained by WFH).
+   - https://www.nber.org/papers/w32943
+   - https://cepr.org/voxeu/columns/working-home-boosted-growth-expanding-disability-employment
+
+9. **University of Michigan National Poll on Healthy Aging (2024), JAMA.** Confirmed exactly (33.4% lonely, 29.2% isolated, ages 50–80).
+   - https://jamanetwork.com/journals/jama/fullarticle/2827710
+   - https://www.michiganmedicine.org/health-lab/1-3-older-adults-still-experience-loneliness-and-isolation
+
+10. **Gardiner et al. — care home loneliness.** Confirmed (~61% moderate, ~35% severe). Gardiner, Laud, Heaton & Gott (2020), *Age and Ageing*.
+    - https://doi.org/10.1093/ageing/afaa049
+    - https://altarum.org/sites/default/files/Altarum%20LAN_Social%20Isolation%20and%20Loneliness%20in%20Nursing%20Homes%20Policy%20Brief_December%202023.pdf
+
+11. **Reminiscence therapy — Frontiers in Psychiatry 2023.** Confirmed exactly (SMD −0.61, 95% CI −0.94 to −0.28, "medium to large" effect).
+    - https://www.frontiersin.org/journals/psychiatry/articles/10.3389/fpsyt.2023.1139700/full
+    - https://pmc.ncbi.nlm.nih.gov/articles/PMC10098219/
+
+12. **Nguyen et al. 2024 — refugee loneliness.** Confirmed exactly (loneliness 15.9–47.7%, isolation 9.8–61.2%), *Social Science & Medicine* Vol. 360.
+    - https://www.sciencedirect.com/science/article/pii/S0277953624007949
+    - https://pubmed.ncbi.nlm.nih.gov/39293283/
+
+13. **Côté-Olijnyk et al. 2024 — asylum seekers / undocumented migrants.** Confirmed as a blended approximation ("about half depression" blends 84.6% asylum seekers vs 47.6% undocumented migrants — accurate as a rough average, worth knowing it's not uniform).
+    - https://www.sciencedirect.com/science/article/pii/S0165178124002166
+    - https://refugees.org/the-dire-mental-health-effects-of-restrictive-immigration-policies/
+
+14. **Cooper et al. 2024 — peer support, BMC Medicine.** Confirmed (umbrella review, 35 reviews/426 studies; consistent hope/empowerment evidence, mixed clinical-symptom evidence).
+    - https://doi.org/10.1186/s12916-024-03260-y
+
+15. **Marmalade Trust Loneliness Awareness Week 2025.** Confirmed exactly (96% felt connected, 87% started a conversation).
+    - https://www.marmaladetrust.org/post/loneliness-awareness-week-2025
+    - https://connexionblog.com/loneliness-awareness-week-marmalade-trust-voice/
+
+## docs/LINKEDIN_STRATEGY.md fixes
+
+**Issue A — unsupported claim, line ~60.** Currently:
+> ❌ NOT be a question (those underperform in 2025 algorithm)
+
+`HEARD_Launch_Campaign.md` never makes this claim — its only related passage (line 71) recommends *ending* posts with a question as part of the CTA, the opposite framing. This line should be removed or re-sourced; as written it contradicts the source doc's own strategy.
+
+**Issue B — unclosed bold tag, line ~341.** Currently:
+```
+❌ **Waiting for "perfect" — Post is better than perfect
+```
+Fix:
+```
+❌ **Waiting for "perfect"** — Post is better than perfect
+```

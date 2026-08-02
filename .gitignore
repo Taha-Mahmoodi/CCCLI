@@ -1,5 +1,7 @@
-.env
 .DS_Store
 node_modules/
-claude/skills/gstack/
-.impeccable/
+home/.claude/skills/gstack/
+home/**/.git/
+# embedded clones — install.sh restores them from their own remotes
+home/.claude/plugins/marketplaces/
+home/.claude-usage/claude-usage-data/

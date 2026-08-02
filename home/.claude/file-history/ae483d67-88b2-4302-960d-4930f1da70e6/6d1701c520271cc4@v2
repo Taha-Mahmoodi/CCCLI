@@ -1,0 +1,26 @@
+// swift-tools-version:6.0
+import PackageDescription
+
+// The iOS app's shared LOGIC layer, buildable + verifiable with just the Swift
+// toolchain (no Xcode/simulator). The SwiftUI views + AVAudioSession /
+// MPRemoteCommandCenter / UIAccessibility wiring live in the Xcode app target
+// (see README) which needs the iOS SDK to build.
+let package = Package(
+  name: "ThirdEyeWorld",
+  platforms: [.macOS(.v13), .iOS(.v16)],
+  products: [
+    .library(name: "ThirdEyeCore", targets: ["ThirdEyeCore"]),
+    .library(name: "ThirdEyeUI", targets: ["ThirdEyeUI"]),
+  ],
+  targets: [
+    .target(name: "ThirdEyeCore"),
+    // The SwiftUI screens + view model + audio wiring. Compiles on the plain
+    // macOS toolchain (SwiftUI/Combine are in the SDK); the iOS-only AVFoundation
+    // / MPRemoteCommandCenter implementation is behind `#if os(iOS)`.
+    .target(name: "ThirdEyeUI", dependencies: ["ThirdEyeCore"]),
+    // Runnable self-check (assert-based) — `swift run ThirdEyeCoreChecks`.
+    // XCTest/swift-testing ship with Xcode, absent here, so behavior is verified
+    // by an executable that exits non-zero on any failed precondition.
+    .executableTarget(name: "ThirdEyeCoreChecks", dependencies: ["ThirdEyeCore"]),
+  ]
+)

@@ -1,0 +1,28 @@
+const env = process.env
+
+export const config = {
+  nodeEnv: env.NODE_ENV ?? 'development',
+  isProd: env.NODE_ENV === 'production',
+  port: Number(env.PORT ?? 3000),
+  /** Yjs sync relay port (same process, own listener). */
+  collabPort: Number(env.COLLAB_PORT ?? 3001),
+  databaseUrl:
+    env.DATABASE_URL ?? 'postgres://chapters:chapters@localhost:5432/chapters',
+  /** Root directory for vault note files (OKF markdown on disk). */
+  dataDir: env.DATA_DIR ?? './data',
+  /** Optional pre-set one-time setup token; generated+logged if absent. */
+  setupToken: env.SETUP_TOKEN,
+  /** 'local' = ONNX bge-small on CPU; 'fake' = deterministic test embedder. */
+  embeddings: env.EMBEDDINGS ?? (env.NODE_ENV === 'production' ? 'local' : 'fake'),
+  semanticThreshold: Number(env.SEMANTIC_THRESHOLD ?? 0.75),
+  semanticK: Number(env.SEMANTIC_K ?? 8),
+  smtp: env.SMTP_HOST
+    ? {
+        host: env.SMTP_HOST,
+        port: Number(env.SMTP_PORT ?? 587),
+        user: env.SMTP_USER,
+        pass: env.SMTP_PASS,
+        from: env.SMTP_FROM ?? 'chapters@localhost',
+      }
+    : null,
+}

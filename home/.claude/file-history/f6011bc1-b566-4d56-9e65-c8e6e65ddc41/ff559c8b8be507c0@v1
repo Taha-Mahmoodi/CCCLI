@@ -1,0 +1,117 @@
+@font-face { font-family: 'Space Grotesk'; src: url('/fonts/SpaceGrotesk-VariableFont_wght.ttf') format('truetype-variations'); font-weight: 300 700; font-display: swap; }
+@font-face { font-family: 'DM Sans'; src: url('/fonts/DMSans-VariableFont_opsz_wght.ttf') format('truetype-variations'); font-weight: 100 1000; font-display: swap; }
+@font-face { font-family: 'DM Sans'; src: url('/fonts/DMSans-Italic-VariableFont_opsz_wght.ttf') format('truetype-variations'); font-weight: 100 1000; font-style: italic; font-display: swap; }
+
+/*
+ * Fallback @font-face declarations with size-adjust + ascent/descent
+ * overrides. The browser uses these while the real font files are
+ * downloading, so the layout doesn't shift when the swap happens
+ * (eliminates ~0.05–0.1 of CLS per page on slow networks).
+ */
+@font-face {
+  font-family: 'Space Grotesk Fallback';
+  src: local('Arial');
+  size-adjust: 105%;
+  ascent-override: 95%;
+  descent-override: 25%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: 'DM Sans Fallback';
+  src: local('Arial');
+  size-adjust: 100%;
+  ascent-override: 96%;
+  descent-override: 24%;
+  line-gap-override: 0%;
+}
+
+/* Tailwind utilities (shadcn/ui). Preflight is disabled in tailwind.config.js
+   so the existing reset below remains the source of truth. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── RESET & TOKENS ─────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --font-display: 'Space Grotesk', 'Space Grotesk Fallback', sans-serif;
+  --font-body: 'DM Sans', 'DM Sans Fallback', sans-serif;
+  --font-mono: 'DM Mono', 'Courier New', monospace;
+  --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px; --radius-full: 9999px;
+  --space-1:.25rem;--space-2:.5rem;--space-3:.75rem;--space-4:1rem;--space-6:1.5rem;--space-8:2rem;--space-10:2.5rem;--space-12:3rem;--space-16:4rem;--space-20:5rem;--space-24:6rem;
+  --maxw: 1280px;
+
+  /* Header height — used by the topnav and every sticky element that
+     sits below it (subnav on /media /about /documents, the story-detail
+     reading-progress bar, etc). Keeping it as a variable means future
+     nav height changes don't need to hunt down hard-coded 68 px values
+     across the stylesheet. */
+  --header-height: 68px;
+
+  /*
+   * CMS UI redesign — density + sidebar width vars (cms-redesign-plan.md §1).
+   * Defaults match comfortable density. Overridden inside the CMS shell via
+   * the `[data-density]` attribute on .adm-shell.
+   */
+  --row-y:    10px;
+  --pad-card: 22px;
+  --gap:      20px;
+  --rail-w:   248px;
+
+  /* Foreground color used on top of --brand / --accent tinted backgrounds. */
+  --brand-fg:  #ffffff;
+  --accent-fg: #ffffff;
+}
+
+/* CMS shell density toggle — overrides --row-y / --pad-card / --gap. */
+[data-density="compact"]     { --row-y: 6px;  --pad-card: 16px; --gap: 14px; }
+[data-density="comfortable"] { --row-y: 10px; --pad-card: 22px; --gap: 20px; }
+[data-theme="light"] {
+  --bg:#f6f6fe;--bg-elevated:#fff;--bg-subtle:#eaeaf5;--bg-inverse:#0d0407;
+  --fg:#0d0407;--fg-muted:#4a4a6a;--fg-subtle:#8888aa;--fg-inverse:#f6f6fe;
+  --border:#d4d4e8;--border-strong:#8888aa;
+  --brand:#1f61ff;--brand-hover:#1349d4;--brand-subtle:#eef3ff;
+  --accent:#e76021;--accent-hover:#c04c18;--accent-subtle:#fff4ee;
+  --focus-ring:#1f61ff;
+  --shadow-sm:0 1px 3px rgba(13,4,7,.08),0 1px 2px rgba(13,4,7,.04);
+  --shadow-md:0 4px 12px rgba(13,4,7,.10),0 2px 4px rgba(13,4,7,.06);
+  --shadow-lg:0 10px 30px rgba(13,4,7,.12),0 4px 8px rgba(13,4,7,.06);
+}
+[data-theme="dark"] {
+  --bg:#0d0410;--bg-elevated:#181326;--bg-subtle:#1e1a2e;--bg-inverse:#f6f6fe;
+  --fg:#f6f6fe;--fg-muted:#b0b0cc;--fg-subtle:#666688;--fg-inverse:#0d0407;
+  --border:rgba(246,246,254,.10);--border-strong:rgba(246,246,254,.25);
+  --brand:#4d7eff;--brand-hover:#7a9fff;--brand-subtle:rgba(31,97,255,.15);
+  --accent:#f07a3d;--accent-hover:#ff9f61;--accent-subtle:rgba(231,96,33,.15);
+  --focus-ring:#4d7eff;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.4);--shadow-md:0 4px 12px rgba(0,0,0,.5);--shadow-lg:0 10px 30px rgba(0,0,0,.6);
+}
+[data-theme="high-contrast"] {
+  --bg:#000;--bg-elevated:#0a0a0a;--bg-subtle:#111;--bg-inverse:#fff;
+  --fg:#fff;--fg-muted:#ddd;--fg-subtle:#aaa;--fg-inverse:#000;
+  --border:#fff;--border-strong:#fff;
+  --brand:#5c8fff;--brand-hover:#89adff;--brand-subtle:#001a66;
+  --accent:#ffaa5c;--accent-hover:#ffcc99;--accent-subtle:#4d2000;
+  --focus-ring:#ffff00;
+  --shadow-sm:0 0 0 2px #fff;--shadow-md:0 0 0 2px #fff;--shadow-lg:0 0 0 3px #fff;
+}
+
+[data-text-size="a"]{ font-size:16px; }
+[data-text-size="a-plus"]{ font-size:18px; }
+[data-text-size="a-plus-plus"]{ font-size:20px; }
+
+html {
+  scroll-behavior: smooth;
+  /* Anchor jumps (e.g. /about#team) land below the topnav AND the
+     subnav, not behind them. Approximate the combined height: topnav
+     (--header-height) + subnav (~48 px). */
+  scroll-padding-top: calc(var(--header-height) + 56px);
+}
+body { font-family: var(--font-body); background: var(--bg); color: var(--fg); line-height: 1.6; -webkit-font-smoothing: antialiased; transition: background .25s ease, color .25s ease; min-height: 100vh; }
+a { color: var(--brand); text-decoration: none; }
+a:hover { color: var(--brand-hover); }
+button { font: inherit; }
+:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; border-radius: 4px; }
+
+img { max-width: 100%; display: block; }
+

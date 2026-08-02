@@ -1,0 +1,9 @@
+{
+  "id": "10",
+  "subject": "Task 3: Background-location watcher hook + spike screen",
+  "description": "pingLog.ts, useBackgroundLocation hook, spike UI, Android manifest permissions.",
+  "activeForm": "Implementing Task 3 (location watcher + spike screen)",
+  "status": "in_progress",
+  "blocks": [],
+  "blockedBy": []
+}

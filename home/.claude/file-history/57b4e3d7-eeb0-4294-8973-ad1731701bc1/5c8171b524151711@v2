@@ -1,0 +1,107 @@
+<!doctype html>
+<!-- forged-with: portfolio.me -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Third Eye World — Said Mohaddes Sadeqi</title>
+<meta name="description" content="An accessibility-first social network for blind and low-vision people. The first beta leaned on sight. Testers said so, the beta closed, and the MVP is being rebuilt.">
+<link rel="stylesheet" href="../assets/css/tokens.css">
+<link rel="stylesheet" href="../assets/css/base.css">
+<link rel="stylesheet" href="../assets/css/case.css">
+</head>
+<body>
+<div class="p-shell">
+  <a class="p-skip" href="#beats">Skip to the case study</a>
+
+  <main id="main">
+    <header class="case-head">
+      <span class="p-landmark p-mono"><a href="../index.html">Said Mohaddes Sadeqi</a> · the active work</span>
+      <h1>A social network for people who don't look at the screen.</h1>
+      <p class="status">
+        <span class="p-tag p-mono">Rebuilding</span>
+        <span class="p-mono">Closed beta done · MVP in development</span>
+      </p>
+      <p class="standfirst">Accessibility-first, for blind and low-vision people. It
+      has not shipped. There is no version number on this page because there is no
+      version worth naming yet.</p>
+    </header>
+
+    <div class="beats" id="beats">
+
+      <section aria-labelledby="b-problem">
+        <h2 id="b-problem">The problem</h2>
+        <p>Every social network I have used treats sight as the default and works out
+        what to do with everyone else afterward. A sighted designer builds the
+        interface first. A screen reader gets added after, translating a screen its
+        own builder never had to read.</p>
+        <p>Third Eye World reverses that order: a social network, accessibility first,
+        where the non-visual interaction is designed before the visual layer that
+        follows it. You are testing that claim on this page right now, whether you are
+        reading it with your eyes or having it read to you.</p>
+      </section>
+
+      <section aria-labelledby="b-constraint">
+        <h2 id="b-constraint">The constraint</h2>
+        <p>There is no existing gesture language for a non-visual social network, and
+        no precedent from a sighted-first app that carries over cleanly. A social
+        network is many interactions, and every one of them had to work without sight,
+        with nothing to copy from.</p>
+        <blockquote>
+          <p>“It's my idea, my build, all my decisions.”</p>
+          <cite>The direction is mine to get right or get wrong, which means the
+          interaction model was mine to design before anyone could test it and tell me
+          what I had missed.</cite>
+        </blockquote>
+      </section>
+
+      <section aria-labelledby="b-decision">
+        <h2 id="b-decision">The decision</h2>
+        <p>The call that mattered: put an early beta in front of real testers instead
+        of refining it alone for another year. That gets feedback sooner, from the
+        people the product is for. It also means testers meet something rough before
+        it is ready, and that is the trade I made.</p>
+      </section>
+
+      <section aria-labelledby="b-broke">
+        <h2 id="b-broke">What broke</h2>
+        <blockquote>
+          <p>“The whole design of our first beta was dependent on vision more than we
+          liked. The gestures were generic, and navigation was hard and required
+          multiple gestures to do something.”</p>
+        </blockquote>
+        <p>The testers said so, and they were right. In that first beta I borrowed the
+        gestures from apps built for people looking at a screen. Doing something simple
+        took several gestures instead of one. Once the feedback was in, we started
+        rebuilding the design around what did not work.</p>
+      </section>
+
+      <section aria-labelledby="b-outcome">
+        <h2 id="b-outcome">The outcome</h2>
+        <p>The closed beta test is done. The MVP is under active development. There is
+        no version number here and no launch date, because neither exists. Third Eye
+        World has not shipped, and saying otherwise would repeat the first beta's
+        mistake: presenting something as finished before it works.</p>
+      </section>
+
+      <section aria-labelledby="b-noimg">
+        <h2 id="b-noimg">Why there are no screenshots</h2>
+        <p>Third Eye World has no product screens worth showing. Putting an invented
+        interface on this page would be the exact failure the case study is about. When
+        the MVP has a real screen, a real screenshot goes here.</p>
+      </section>
+    </div>
+
+    <nav class="case-nav" aria-label="Back">
+      <a href="../index.html">← All the work</a>
+    </nav>
+  </main>
+
+  <footer>
+    <p>This site is built to WCAG AAA. If any part of it fails you, tell me and I will
+    fix it: <a href="mailto:sadeqisaidmohaddes@gmail.com">sadeqisaidmohaddes@gmail.com</a></p>
+    <p class="credit"><a href="https://github.com/PIIIX-org/portfolio.me">Built with portfolio.me</a></p>
+  </footer>
+</div>
+</body>
+</html>

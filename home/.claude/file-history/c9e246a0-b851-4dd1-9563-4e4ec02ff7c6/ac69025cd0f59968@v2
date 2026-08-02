@@ -1,0 +1,222 @@
+# Third Eye World — Design Spec (v1)
+
+**Date:** 2026-07-13
+**Status:** Approved for planning
+**Repo:** `third-eye-world-engineering-build` (private, under Taha-Mahmoodi)
+
+---
+
+## 1. What this is
+
+A single Next.js application presenting **two clearly-separate surfaces** for **Third Eye** —
+a mission-driven assistive-technology project (a wearable that lets a blind person feel the
+world in real time; *"Feel, don't wait." / "They deserve more."*). Product lead & engineer:
+Said Mohaddes Sadeqi (Hillsboro, OR).
+
+- **Marketing site** (`/`) — public "who we are" identity page for the mission, grounded in
+  the real Third Eye Kit v2 dossier. No auth.
+- **Third Eye Commons** (`/app/*`) — an auth-gated, fully functional mission platform that
+  real users sign up for and use on day one.
+
+All content is grounded in the actual dossier (`docs/instructions/` + the Third Eye Kit v2
+spec). **No invented product claims.** The project's own radical honesty ("v2 is a blueprint,
+not a certified product; the cane and hearing remain primary") is presented as a trust asset.
+
+## 2. Goals
+
+1. A production-grade, self-hostable web product (Docker), not a demo.
+2. Accessibility is the product's identity: screen-reader-native, keyboard-first, WCAG 2.2 AA
+   as the floor, verified in CI. A product *for blind users* that is not itself accessible is
+   a failure regardless of polish.
+3. Anti-AI-slop throughout: real design system (via the `design-taste-frontend` skill), honest
+   grounded copy, a signature interactive element no template has.
+4. Performance per the brief: RSC-first, transform/opacity-only animation, main JS bundle
+   < 200KB gzipped target, 60fps, Core Web Vitals green (LCP < 2.5s, INP < 200ms, CLS < 0.1).
+5. Clean two-account GitHub workflow: repo private under Taha; every PR opened by Said's
+   account; **the user reviews and merges — the agent never merges.**
+
+## 3. Non-goals (v1)
+
+- No hardware/firmware, no real haptic-device integration (the marketing haptic demo is a
+  browser simulation only).
+- No payments/donations processing (a "Supporter" role exists; money movement is out of scope).
+- No native mobile apps.
+- No admin CMS UI in v1 — team updates are created by the seed script; no authoring UI.
+- No email-sending infra required to launch (email verification is optional/deferred; see §6).
+
+## 4. Architecture
+
+**One Next.js 15 app (App Router, React Server Components), TypeScript strict.** Route groups
+separate the two surfaces with distinct layouts:
+
+```
+src/app/
+  (marketing)/            # public identity site, marketing layout + nav
+    page.tsx              # the "who we are" home
+    layout.tsx
+  app/                    # Third Eye Commons (auth-gated)
+    layout.tsx            # app shell; redirects unauthenticated -> /app/login
+    (public)/login, /signup
+    (authed)/
+      feed/               # updates feed
+      waitlist/
+      contribute/
+      dossier/
+      profile/            # + accessibility control center
+  api/
+    auth/[...nextauth]/
+    health/               # container healthcheck
+```
+
+- **RSC by default.** `'use client'` only on interactive leaves (animation triggers, forms,
+  a11y controls). "Donut" composition: server shells wrap small client islands.
+- **Animation:** Motion (`motion/react`) for UI state/enter-exit; GSAP + ScrollTrigger for
+  scroll sequences and the hero. GSAP split into its own webpack chunk, plugins lazy-loaded.
+- **Shared UI:** Shadcn/ui primitives in `src/components/ui/`, themed via CSS variables; a
+  single design system used by both surfaces so they feel like one brand, two rooms.
+
+## 5. Surface 1 — Marketing site (`/`)
+
+Grounded sections (copy sourced from the dossier, condensed and honest):
+
+1. **Hero** — *"They deserve more." / "Feel, don't wait."* + the mission line. Signature
+   **interactive haptic demo**: a small, accessible in-browser simulation of the buzz-language
+   (Web Vibration API where supported + spatial/positional audio + visual pulse). Fully
+   operable by keyboard and announced to screen readers; respects `prefers-reduced-motion`.
+2. **The one idea** — everyone builds "robot eyes"; the invention is the *human input channel*.
+3. **What it is** — Senses (physics, not guesswork) → Delivers (into the body, instantly) →
+   Assists (AI names/reads/routes, never becomes the eyes, never steers).
+4. **Founding design rules** (life-critical = physics not AI; AI is assistant only; warn → gently
+   steer → never lock; fail transparent; augment not replace the cane and hearing).
+5. **Safety & honesty** — the blueprint-not-certified disclaimer, presented plainly.
+6. **The person / mission** — Said Mohaddes Sadeqi, Hillsboro OR → **CTA: Join the Commons**.
+7. **Footer** — links, dossier, contribute.
+
+## 6. Surface 2 — Third Eye Commons (`/app/*`)
+
+Auth-gated platform. **v1 launch feature set:**
+
+- **Auth** — Auth.js (NextAuth) Credentials provider, email + password, argon2id hashing,
+  DB sessions via Prisma adapter. Email verification deferred (accounts usable immediately in
+  v1; verification can be layered later without schema change — see data model). Rate-limited
+  login/signup.
+- **Role at signup** — one of: `BLIND_TRAVELER`, `FAMILY`, `CLINICIAN`, `ENGINEER`, `SUPPORTER`.
+  Drives light content tailoring (e.g. contributor tab prominence for engineers).
+- **Profile + Accessibility control center** — display name, bio, region; a11y preferences
+  (reduced motion, high contrast, larger text) persisted per-user and applied app-wide via a
+  root data-attribute + CSS. These are real, functional controls, not decoration.
+- **Updates feed** — team-authored dev updates (title, body, published_at); users read and add
+  a reaction. In v1 updates are created by the seed script (real dossier-derived posts); there
+  is **no author UI in v1** — authoring is out of scope and deferred.
+- **Pilot waitlist** — join with role, region, and free-text device/context; one entry per user;
+  status field (`PENDING` default) for future triage.
+- **Contributor onboarding** — engineers submit GitHub URL + selected focus areas
+  (haptics / sensing / exoskeleton / AI-assist / app) + a note.
+- **Dossier reader** — the Third Eye Kit v2 dossier rendered in an accessible reading view
+  (semantic headings, skip links, adjustable text size).
+
+## 7. Data model (PostgreSQL via Prisma)
+
+```
+User(id, email unique, passwordHash, role, emailVerifiedAt?, createdAt)
+Profile(userId 1-1, displayName, bio?, region?, a11yPrefs jsonb)          # reducedMotion, highContrast, textScale
+Update(id, authorId?, title, body, publishedAt)
+Reaction(id, updateId, userId, kind)  @@unique([updateId, userId])
+WaitlistEntry(id, userId 1-1, role, region?, deviceContext?, status)      # status default PENDING
+ContributorInterest(id, userId 1-1, githubUrl?, focusAreas text[], note?)
+Session / Account / VerificationToken                                      # Auth.js Prisma adapter tables
+```
+
+Migrations via Prisma Migrate. Seed script creates: a demo team account, a few real dossier-based
+Updates, and the dossier content.
+
+## 8. Accessibility requirements (first-class, testable)
+
+- WCAG 2.2 AA as the floor across both surfaces.
+- Semantic HTML, one `<h1>` per page, logical heading order, landmark regions, skip-to-content.
+- Full keyboard operability incl. the haptic demo; visible focus states; no keyboard traps.
+- All non-text content has text alternatives; the haptic demo has an equivalent text/audio path.
+- `prefers-reduced-motion` honored everywhere; user a11y prefs override defaults.
+- Color contrast ≥ 4.5:1 (text) / 3:1 (large + UI); high-contrast mode raises this.
+- **CI gate:** `@axe-core/playwright` runs on marketing home, signup, feed, profile — zero
+  serious/critical violations required to pass.
+
+## 9. Anti-slop discipline
+
+- UI built with the **`design-taste-frontend`** skill (audit-first, real design direction, no
+  templated look); **`design-review`** pass before each PR.
+- Copy is grounded, specific, and honest — pulled from the dossier, never generic filler.
+- One genuinely distinctive interactive centerpiece (the haptic demo) instead of stock hero art.
+- Consistent, intentional type/space/color system; motion that serves meaning, not decoration.
+
+## 10. Tech stack (decisions)
+
+| Concern | Choice |
+| --- | --- |
+| Framework | Next.js 15 (App Router, RSC), React 19, TypeScript strict |
+| Styling / components | Tailwind CSS 4, Shadcn/ui, CSS-variable theming |
+| Animation | Motion (`motion/react`) + GSAP/ScrollTrigger (own chunk, lazy plugins) |
+| Auth | Auth.js (NextAuth) Credentials + Prisma adapter, argon2id |
+| DB / ORM | PostgreSQL + Prisma |
+| Unit tests | Vitest + Testing Library |
+| E2E / visual / a11y | Playwright + `@axe-core/playwright` |
+| Lint / format | ESLint (next config) + Prettier |
+| Container | Docker multi-stage, Next.js `output: 'standalone'`; docker-compose (app + Postgres) |
+| CI | GitHub Actions: type-check, lint, unit, build, e2e+axe |
+
+## 11. Testing in a sandbox (definition of "tested")
+
+All dev/build/test runs happen locally in the project workspace (sandbox), never against any
+external environment. The full stack is exercised via `docker compose up` in isolation:
+
+- `npm run type-check`, `npm run lint`, `npm test` (Vitest) — green.
+- `npm run build` — succeeds; bundle budget checked.
+- `npm run test:e2e` (Playwright) incl. axe a11y and visual snapshots — green.
+- `docker compose up` brings up app + Postgres; a smoke test hits `/api/health`, `/`, and a
+  signup→login→feed flow. Verified before any "done" claim (verification-before-completion).
+
+## 12. Deployment (Docker self-host)
+
+- `Dockerfile` — multi-stage (deps → build → runner), non-root, standalone output.
+- `docker-compose.yml` — `app` + `postgres` + a one-shot `migrate` step; `.env.example` with all
+  vars documented (`DATABASE_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, etc.).
+- `/api/health` returns 200 when app + DB are reachable (compose healthcheck).
+- Production build reproducible from a clean checkout: `docker compose up --build`.
+
+## 13. GitHub two-account workflow
+
+- Repo `third-eye-world-engineering-build` created **private under Taha-Mahmoodi**; the five
+  instruction docs live in `docs/instructions/`; this spec in `docs/superpowers/specs/`.
+- Branches: `main` (release), `prod` (staging verify), `dev` (integration); feature branches off
+  `dev` named `feature/*`, `fix/*`, `chore/*` per the Github workflow doc.
+- **Said (sadeqisaidmohaddes-star) added as collaborator.** Every feature PR is **opened by
+  Said's account** (agent switches `gh` auth to Said to create the PR), targets `dev`.
+- CI must be green on each PR. **The user (Taha) reviews and merges. The agent never merges.**
+- "Production-ready" from the agent's side = everything built, sandbox-tested, Dockerized,
+  CI-green, PRs opened by Said and awaiting the user's review.
+
+## 14. Definition of done
+
+- [ ] Both surfaces implemented, grounded, and accessible (axe-clean in CI).
+- [ ] Auth + all six Commons features functional end-to-end.
+- [ ] Unit + e2e + a11y + visual tests green in sandbox.
+- [ ] `docker compose up --build` yields a working production stack; smoke test passes.
+- [ ] Performance budgets met (bundle < 200KB gz target; CWV green on marketing home).
+- [ ] Private repo under Taha with docs; branches set; Said is collaborator.
+- [ ] Feature work delivered as PRs opened by Said, CI-green, awaiting the user's review/merge.
+
+## 15. Build order (feature slices → one PR each, by Said)
+
+1. **Scaffold** — Next 15 app, TS strict, Tailwind 4, Shadcn init, ESLint/Prettier, Vitest +
+   Playwright wiring, base CSS-variable theme + design tokens, `/api/health`, CI workflow.
+2. **Data + auth** — Prisma schema + migrations + seed, Auth.js Credentials, signup/login,
+   session, role capture, app shell + auth redirect.
+3. **Marketing site** — all sections, grounded copy, GSAP/Motion, the interactive haptic demo;
+   design-taste-frontend + design-review pass.
+4. **Commons features** — profile + a11y control center, updates feed, waitlist, contributor
+   onboarding, dossier reader.
+5. **Accessibility + test hardening** — axe pass, keyboard/SR audit, visual snapshots, a11y CI gate.
+6. **Docker + production** — Dockerfile, compose, health, smoke test, README + deploy docs.
+
+Each slice: branch off `dev` → build + test in sandbox → PR opened by Said → CI green → await
+the user's review.

@@ -1,0 +1,62 @@
+# @tew/api — backend
+
+Small, cursor-paginated API for Third Eye World (spec §8). **No ranking, no
+follow graph, no like counts.** Runs locally with zero external services:
+`node:sqlite` (built-in) + filesystem audio storage + a stub transcriber.
+
+## Run
+
+```bash
+pnpm --filter @tew/api start        # serves on :4000 (PORT to override)
+pnpm --filter @tew/api test         # 10 integration tests, no server/network
+```
+
+Data lands in `.data/` (gitignored): `tew.sqlite` + `audio/`.
+
+## Endpoints
+
+| Method | Path | Notes |
+|---|---|---|
+| GET  | `/health` | liveness |
+| POST | `/memos` | multipart: `audio` file + `channelId`, `durationMs`, `mime`; or `isTts=true` + `sourceText`. Runs LID→ASR, stores audio + transcript. |
+| GET  | `/timeline?channel=&cursor=&limit=` | chronological, compound `"<ts>_<id>"` cursor (handles same-ms ties). No ranking. |
+| GET  | `/audio/:id` | streams the stored audio |
+| POST | `/memos/:id/like` | `{ userId }` — records a per-user like, **returns no count** (#4) |
+| POST | `/memos/:id/comments` | multipart `audio` — a voice comment |
+| POST | `/memos/:id/transcript/correction` | `{ text }` — stores a correction, **never overwrites** machine text (§8.3) |
+| GET  | `/search?q=` | full-text over transcripts (correction preferred) |
+| POST | `/reports` | `{ targetType, targetId, reason }` — DM reports get a faster SLA (§9) |
+
+All requests are token-bucket rate-limited per IP.
+
+## Real ASR (whisper.cpp, CPU)
+
+Real transcription is implemented (`makeWhisperTranscriber` in
+`src/transcribe.ts`) — self-hosted **whisper.cpp on CPU** (a GPU only buys
+throughput, not capability). Any input format is converted to 16 kHz mono WAV by
+ffmpeg, then transcribed. Enable it by pointing the server at a built binary +
+model:
+
+```bash
+# one-time: build whisper.cpp + fetch a model (outside the repo)
+git clone --depth 1 https://github.com/ggerganov/whisper.cpp
+cd whisper.cpp && cmake -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build -j
+bash ./models/download-ggml-model.sh tiny.en   # or base/small/medium/large-v3
+brew install ffmpeg                              # any-format -> wav
+
+# run the API with real ASR
+TEW_WHISPER_BIN=…/whisper.cpp/build/bin/whisper-cli \
+TEW_WHISPER_MODEL=…/whisper.cpp/models/ggml-tiny.en.bin \
+pnpm --filter @tew/api start
+```
+
+Without those env vars the API uses the honest stub (empty machine transcript).
+`tests/whisper.test.ts` proves the real path end-to-end (macOS `say` → webm →
+whisper → text) when the env is set; it skips in CI. Production scales this to
+Whisper large-v3 on a GPU worker — same interface, no code change beyond the
+model.
+
+## Swapping the remaining stubs for production
+- **Storage** (`src/storage.ts`): replace filesystem with S3-compatible +
+  zero-egress CDN (Cloudflare R2). Same interface.
+- **DB**: `node:sqlite` → Postgres for multi-instance. Schema in `src/db.ts`.

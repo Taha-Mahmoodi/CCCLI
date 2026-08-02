@@ -1,0 +1,124 @@
+// SQLite via Node's built-in node:sqlite (no native dep). One migration.
+import { DatabaseSync } from "node:sqlite";
+
+export type Db = DatabaseSync;
+
+// Data model per spec §8.2 — NOTE: there is deliberately NO follows table
+// (no follow graph) and likes are per-user state only, never aggregated.
+const SCHEMA = `
+CREATE TABLE IF NOT EXISTS channels (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  description TEXT DEFAULT '',
+  is_curated INTEGER DEFAULT 0,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS memos (
+  id TEXT PRIMARY KEY,
+  channel_id TEXT NOT NULL,
+  audio_key TEXT NOT NULL,
+  mime TEXT NOT NULL,
+  duration_ms INTEGER NOT NULL,
+  is_tts INTEGER DEFAULT 0,
+  source_text TEXT,
+  lang_id TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_memos_channel ON memos(channel_id, created_at);
+CREATE TABLE IF NOT EXISTS transcripts (
+  id TEXT PRIMARY KEY,
+  memo_id TEXT NOT NULL,
+  text TEXT NOT NULL DEFAULT '',
+  lang TEXT,
+  engine TEXT,
+  confidence REAL,
+  is_machine INTEGER DEFAULT 1,
+  corrected_text TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_transcripts_memo ON transcripts(memo_id);
+CREATE TABLE IF NOT EXISTS comments (
+  id TEXT PRIMARY KEY,
+  memo_id TEXT NOT NULL,
+  audio_key TEXT NOT NULL,
+  transcript_id TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS likes (
+  memo_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (memo_id, user_id)
+);
+CREATE TABLE IF NOT EXISTS reports (
+  id TEXT PRIMARY KEY,
+  target_type TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  reporter_id TEXT,
+  franking_proof TEXT,
+  reason TEXT,
+  status TEXT NOT NULL DEFAULT 'open',
+  sla_due_at INTEGER,
+  created_at INTEGER NOT NULL
+);
+-- Logs decisions, not content: rationale codes, never message text (spec §8.2).
+CREATE TABLE IF NOT EXISTS moderation_decisions (
+  id TEXT PRIMARY KEY,
+  report_id TEXT NOT NULL,
+  target_type TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  moderator_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  rationale_code TEXT NOT NULL,
+  is_appeal INTEGER DEFAULT 0,
+  lang TEXT,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_decisions_report ON moderation_decisions(report_id);
+`;
+
+export function openDb(path = ":memory:"): Db {
+  const db = new DatabaseSync(path);
+  db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
+  db.exec(SCHEMA);
+  // seed the default channel
+  db.prepare(
+    "INSERT OR IGNORE INTO channels (id, name, is_curated, created_at) VALUES (?,?,?,?)",
+  ).run("main", "Main", 0, Date.now());
+  return db;
+}
+
+// Row shapes we read back (node:sqlite returns plain objects).
+export interface MemoRowRaw {
+  id: string;
+  channel_id: string;
+  audio_key: string;
+  mime: string;
+  duration_ms: number;
+  is_tts: number;
+  source_text: string | null;
+  lang_id: string | null;
+  created_at: number;
+}
+export interface TranscriptRowRaw {
+  id: string;
+  memo_id: string;
+  text: string;
+  lang: string | null;
+  engine: string | null;
+  confidence: number | null;
+  is_machine: number;
+  corrected_text: string | null;
+  created_at: number;
+}
+export interface ReportRowRaw {
+  id: string;
+  target_type: string;
+  target_id: string;
+  reporter_id: string | null;
+  franking_proof: string | null;
+  reason: string | null;
+  status: string;
+  sla_due_at: number | null;
+  created_at: number;
+}

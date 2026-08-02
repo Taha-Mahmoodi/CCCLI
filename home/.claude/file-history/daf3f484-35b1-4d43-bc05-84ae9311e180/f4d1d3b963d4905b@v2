@@ -1,0 +1,133 @@
+import * as THREE from "three";
+import { effectiveStage, isDust } from "./data";
+import { STAGE_PALETTE, type GalaxyNode } from "./galaxy";
+
+// Sector minimap (worlds-in-miniature — the research pick for overview
+// tasks): a top-down 2D chart of the whole sky with the camera's frustum
+// wedge, black holes ringed, click to fly. Canvas 2D, no second WebGL
+// pass; redrawn every other frame only while open.
+
+const SIZE = 208;
+const PAD = 14;
+
+export class Minimap {
+  private el: HTMLCanvasElement;
+  private ctx: CanvasRenderingContext2D;
+  private nodes: GalaxyNode[];
+  private colors: string[];
+  private holes: boolean[];
+  private worldR = 1;
+  open = false;
+
+  constructor(
+    nodes: GalaxyNode[],
+    now: number,
+    onJump: (world: THREE.Vector3, node: GalaxyNode | null) => void,
+  ) {
+    this.nodes = nodes;
+    this.colors = nodes.map((n) => {
+      if (isDust(n.project, now)) return "rgba(140,132,120,0.8)";
+      const c = STAGE_PALETTE[effectiveStage(n.project, now)].core;
+      return `#${c.toString(16).padStart(6, "0")}`;
+    });
+    this.holes = nodes.map((n) => n.project.milestoneMarked);
+    for (const n of nodes) {
+      this.worldR = Math.max(
+        this.worldR,
+        Math.abs(n.group.position.x),
+        Math.abs(n.group.position.z),
+      );
+    }
+    this.worldR *= 1.08;
+
+    this.el = document.createElement("canvas");
+    this.el.id = "yz-minimap";
+    this.el.width = SIZE * devicePixelRatio;
+    this.el.height = SIZE * devicePixelRatio;
+    this.el.style.width = `${SIZE}px`;
+    this.el.style.height = `${SIZE}px`;
+    document.body.appendChild(this.el);
+    this.ctx = this.el.getContext("2d")!;
+    this.ctx.scale(devicePixelRatio, devicePixelRatio);
+
+    this.el.addEventListener("click", (e) => {
+      const rect = this.el.getBoundingClientRect();
+      const wx = ((e.clientX - rect.left - SIZE / 2) / (SIZE / 2 - PAD)) * this.worldR;
+      const wz = ((e.clientY - rect.top - SIZE / 2) / (SIZE / 2 - PAD)) * this.worldR;
+      // a dot within ~9px reads as clicking that galaxy
+      let best: GalaxyNode | null = null;
+      let bestD = 9 / this.pxPerWorld();
+      for (const n of this.nodes) {
+        const d = Math.hypot(n.group.position.x - wx, n.group.position.z - wz);
+        if (d < bestD) {
+          bestD = d;
+          best = n;
+        }
+      }
+      onJump(new THREE.Vector3(wx, 0, wz), best);
+    });
+  }
+
+  private pxPerWorld(): number {
+    return (SIZE / 2 - PAD) / this.worldR;
+  }
+
+  toggle(): void {
+    this.open = !this.open;
+    this.el.classList.toggle("yz-minimap-open", this.open);
+  }
+
+  /** Redraw: dots + camera frustum wedge. Call only while open. */
+  update(camera: THREE.PerspectiveCamera, active: boolean): void {
+    this.el.classList.toggle("yz-minimap-open", this.open && active);
+    if (!this.open || !active) return;
+    const g = this.ctx;
+    const s = this.pxPerWorld();
+    const cx = SIZE / 2;
+    g.clearRect(0, 0, SIZE, SIZE);
+
+    g.font = "9px Menlo, monospace";
+    g.fillStyle = "rgba(255,240,214,0.35)";
+    g.fillText("SECTOR", 10, 16);
+
+    for (let i = 0; i < this.nodes.length; i++) {
+      const p = this.nodes[i].group.position;
+      const x = cx + p.x * s;
+      const y = cx + p.z * s;
+      const r = Math.max(1.4, this.nodes[i].radius * s * 0.6);
+      g.fillStyle = this.colors[i];
+      g.globalAlpha = 0.85;
+      g.beginPath();
+      g.arc(x, y, r, 0, Math.PI * 2);
+      g.fill();
+      if (this.holes[i]) {
+        g.globalAlpha = 1;
+        g.strokeStyle = "rgba(255,157,92,0.9)";
+        g.lineWidth = 1;
+        g.beginPath();
+        g.arc(x, y, r + 2.5, 0, Math.PI * 2);
+        g.stroke();
+      }
+    }
+    g.globalAlpha = 1;
+
+    // camera + frustum wedge
+    const px = cx + camera.position.x * s;
+    const py = cx + camera.position.z * s;
+    const dir = camera.getWorldDirection(new THREE.Vector3());
+    const heading = Math.atan2(dir.z, dir.x);
+    const hfov = Math.atan(
+      Math.tan((camera.fov * Math.PI) / 360) * camera.aspect,
+    );
+    g.fillStyle = "rgba(255,240,214,0.14)";
+    g.beginPath();
+    g.moveTo(px, py);
+    g.arc(px, py, 34, heading - hfov, heading + hfov);
+    g.closePath();
+    g.fill();
+    g.fillStyle = "rgba(255,240,214,0.95)";
+    g.beginPath();
+    g.arc(px, py, 2.4, 0, Math.PI * 2);
+    g.fill();
+  }
+}

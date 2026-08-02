@@ -1,0 +1,32 @@
+"use client";
+
+// Announces client-side route changes to screen readers and moves focus to the
+// new view's <h1>. SPAs don't announce navigation on their own — this is the
+// single most important a11y fix for a routed app (spec §5.1). Both focus AND
+// the live-region update are required; focus alone is unreliable across readers.
+
+import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
+import { announce, focusMainHeading } from "@/lib/a11y";
+
+const TITLES: Record<string, string> = {
+  "/": "Your radio",
+  "/moderate": "Moderation queue",
+};
+
+export function RouteAnnouncer() {
+  const pathname = usePathname();
+  const first = useRef(true);
+
+  useEffect(() => {
+    if (first.current) {
+      first.current = false; // don't announce the initial page load
+      return;
+    }
+    const title = TITLES[pathname] ?? document.title;
+    focusMainHeading();
+    announce(`Navigated to ${title}`);
+  }, [pathname]);
+
+  return null;
+}

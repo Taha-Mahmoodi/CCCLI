@@ -1,0 +1,288 @@
+# -*- coding: utf-8 -*-
+import os
+import subprocess
+import sys
+
+OUT_DIR = os.path.expanduser("~/Documents/letters-of-intent")
+MD_DIR = os.path.join(OUT_DIR, "_md")
+PDF_DIR = os.path.join(OUT_DIR, "pdf")
+os.makedirs(OUT_DIR, exist_ok=True)
+os.makedirs(MD_DIR, exist_ok=True)
+os.makedirs(PDF_DIR, exist_ok=True)
+
+PDF_BIN = os.path.expanduser("~/.claude/skills/gstack/make-pdf/dist/pdf")
+
+TR_CONN = "Turkey's welcoming policies toward international students, its cultural and geographic closeness to Afghanistan, and its manageable cost of living relative to Western alternatives make it a country where I can commit fully to graduate study rather than constantly managing logistics."
+PK_CONN = "Pakistan's shared regional history with Afghanistan, its relatively accessible visa and admissions process for Afghan applicants, and its lower cost of living make it a place where I can concentrate on research rather than on logistics."
+IN_CONN = "India's longstanding ties with Afghanistan, its relatively accessible admissions pathway for regional applicants, and its affordability relative to Western graduate programs make it a country where I can focus fully on research rather than financial strain."
+
+BG = {
+"A": "I started teaching myself to program in the 8th grade, long before it was a formal subject in any classroom I sat in, and that early, self-directed start is still how I approach the field. I made it formal later with a Bachelor of Computer Science from Aria University, graduating in 2025 with a CGPA of 3.68/4.0 (92%) across 144 credit hours. What has held my attention consistently since that first year of self-teaching is not any single course but the systems-level questions — how software is architected, how it fails, and how it is kept running at scale — which is what draws me to Software Engineering and Systems as a specialization.",
+"B": "I taught myself to program starting in the 8th grade, well before I had any formal instruction in it, and I later gave that self-directed interest an academic foundation with a Bachelor of Computer Science from Aria University, completed in 2025 with a CGPA of 3.68/4.0 (92%, 144 credit hours). Across both my early self-teaching and my formal coursework, I kept gravitating toward the same kind of problem: how large software systems are structured, how they scale, and how they stay reliable under real use — the foundation of the Software Engineering and Systems specialization I want to pursue at the graduate level.",
+"C": "My path into computer science started in the 8th grade, when I began teaching myself to program on my own, years before I encountered it as a formal subject. I later formalized that early interest with a Bachelor of Computer Science from Aria University, graduating in 2025 with a CGPA of 3.68/4.0 (92%) over 144 credit hours. What has stayed constant since that first year of self-teaching is a recurring question: how do you build software that keeps working as it grows more complex? That question is what has pulled me toward Software Engineering and Systems as the specialization I want to pursue next.",
+}
+
+WORK = {
+"A": "My professional path has run in parallel with my formal studies rather than after it — most of it was remote or task-based work I could do around my coursework. From 2020 to 2025 I co-founded and served as Chief Creative Officer of Cyborgtech Creative Agency, where beyond creative direction I ran the company's Development division: assigning engineering tasks, reviewing delivery, and helping ship client web applications end to end. Since January 2023 I have also worked as a Conversational UX QA and Model Tester for Pygmalion.chat, testing large language models before public release for security, memory retention, and response quality — work that included identifying an 80% improvement in contextual memory reliability between two model versions, which led directly to the newer model replacing the old one in production.",
+"B": "Alongside my degree, I have spent five years running the technical side of a real company rather than only studying one. As co-founder and CCO of Cyborgtech Creative Agency (2020–2025), I managed the agency's Development division in addition to creative direction — assigning work, reviewing output, and shipping client-facing web applications, mostly remotely and on a task basis that let me keep the company running around my coursework. I have also worked since January 2023 as a Conversational UX QA and Model Tester for Pygmalion.chat, where I test pre-release large language models for security, memory, and response quality; one QA cycle I led identified an 80% improvement in contextual memory reliability between two model versions, directly informing which version shipped to production.",
+"C": "I did not wait until after my degree to start working in technology. From 2020 to 2025, as co-founder and Chief Creative Officer of Cyborgtech Creative Agency, I managed the company's Development division alongside its creative work — assigning engineering tasks, reviewing delivery, and shipping client web applications, largely through remote, task-based work that fit around my coursework rather than displacing it. Since January 2023, I have also worked as a Conversational UX QA and Model Tester for Pygmalion.chat, testing large language models before public release for security, memory retention, and conversational reliability — including a QA cycle where I identified an 80% improvement in contextual memory reliability between two model versions, a finding that led directly to the newer model's production release.",
+}
+
+PROJ = {
+"A": "That same self-directed instinct is what drives the projects I build outside work and coursework. Atlas ERP is an industry-agnostic enterprise resource planning system I designed with SAP S/4HANA as a functional benchmark — forcing me to think seriously about data modeling, module boundaries, and the architecture choices that let a system serve many industries without collapsing into special cases. For Third Eye Worldwide, a nonprofit delivering assistive technology to blind and low-vision learners across the Global South, I built a voice-first social platform designed so a blind user is the default user rather than an afterthought, along with its supporting web presence, CMS, and admin dashboard. And because I kept losing track of which local development servers were running where, I built LLSGC, a cross-platform controller (an Electron/React desktop app plus a lightweight Node agent) that can monitor, restart, and firewall every server bound to a port across a local network.",
+"B": "That same self-taught habit shows up most clearly in the independent projects I have built outside work and coursework. Atlas ERP is the most ambitious of these: an open-source, industry-agnostic ERP system I built using SAP S/4HANA as my functional benchmark, which meant confronting real questions about data modeling and module design rather than toy versions of them. I also contribute to Third Eye Worldwide, a nonprofit building assistive technology for blind and low-vision learners in the Global South, where I designed a voice-first social network built around the idea that a blind user should be the default user, not an accommodation, and developed the CMS and admin tooling behind it. Separately, I built LLSGC, a desktop controller and companion agent (Electron/React/Node) for monitoring, restarting, and firewalling every local server running across a network.",
+"C": "Outside of work and formal study, that same self-taught instinct is what has produced my most substantial technical work. I designed Atlas ERP, an open-source ERP system built to be industry-agnostic, using SAP S/4HANA as the benchmark I measured my own architecture decisions against — a project that taught me more about data modeling and system boundaries than any single course did. I also work on Third Eye Worldwide, a nonprofit delivering assistive technology to blind and low-vision learners across the Global South, where I built a voice-first social platform premised on the blind user being the default user rather than an edge case, plus the CMS and admin dashboard that support it. And when I got tired of losing track of local development servers scattered across my devices, I built LLSGC — a desktop controller with a companion agent that can monitor, restart, and firewall any server bound to a local port.",
+}
+
+CLOSE = {
+"A": "My longer-term goal is a PhD in software engineering or systems research, and I see this master's as the place where I finally get the formal research grounding that a self-taught, project-driven path has not given me — structured theory, a research group to be accountable to, and faculty who can show me what a real research problem looks like from the inside. I would welcome the opportunity to bring that same self-directed energy into your program.",
+"B": "I am ultimately aiming for a PhD in software engineering or systems, and this master's is where I want to close the gap between having built and shipped real things and knowing how to formally investigate why they work — through coursework, a research group, and faculty mentorship a self-taught path cannot provide on its own. I hope to bring the same hands-on instincts that built Atlas ERP and LLSGC into a research setting like yours.",
+"C": "Beyond this degree, I intend to pursue a PhD in software engineering or systems research. What I am looking for in a master's program is exactly what a self-taught, project-driven background cannot give on its own: rigorous theoretical grounding, a research community, and faculty who can turn years of independent instinct into a real research trajectory. I would be glad to bring that same drive to your program.",
+}
+
+# (filename, program, university, city_country, hook, connector, fit, bg_key, work_key, proj_key, close_key, note)
+ENTRIES = [
+("01_Turkey_Open_YildizTechnicalUniversity",
+ "MS, Computer Engineering (Institute of Natural Sciences)", "Yıldız Technical University", "Istanbul, Turkey",
+ "I am writing to apply to the Master of Science in Computer Engineering at Yıldız Technical University's Institute of Natural Sciences. YTÜ's identity as one of Turkey's oldest and most respected state technical universities, situated in a city that itself functions as a live laboratory for large-scale software and infrastructure problems, is exactly the kind of environment I want to study systems engineering in.",
+ TR_CONN,
+ "As a state university with a long engineering lineage, YTÜ's Computer Engineering department offers the kind of rigorous, systems-oriented curriculum I am looking for, and Istanbul's dense technology sector means the research done there rarely stays theoretical for long.",
+ "A","B","C","A",
+ "This program is primarily Turkish-medium. Confirm with the admissions office whether an English statement of purpose is accepted for international applicants, or whether a Turkish translation should accompany it."),
+
+("02_Turkey_Open_IstanbulSabahattinZaimUniversity",
+ "MA, Computer Science & Engineering", "İstanbul Sabahattin Zaim University", "Istanbul, Turkey",
+ "I am applying to the MA in Computer Science and Engineering at İstanbul Sabahattin Zaim University. IZU's English-medium program and its explicit orientation toward international students told me this is a university that has built its Computer Science program around students like me, rather than treating international admission as an afterthought.",
+ TR_CONN,
+ "A private, English-medium program gives me the structural flexibility to specialize early in software engineering and systems, and IZU's growing international student community is one I am glad to be part of building.",
+ "B","C","A","C", None),
+
+("03_Turkey_Open_SinopUniversity",
+ "MS, Computer Engineering", "Sinop University", "Sinop, Turkey",
+ "I am writing to apply to the Master of Science in Computer Engineering at Sinop University. Sinop is not the first city people think of when they picture Turkish higher education, and that is part of the appeal — a smaller state university on the Black Sea coast, building its Computer Engineering program deliberately rather than coasting on reputation.",
+ TR_CONN,
+ "A smaller department means closer contact with faculty and a real chance to shape my own research direction rather than being one name in a very large cohort, which matters more to me at this stage than institutional size.",
+ "C","A","B","B",
+ "This program is primarily Turkish-medium. Confirm with the admissions office whether an English statement of purpose is accepted for international applicants, or whether a Turkish translation should accompany it."),
+
+("04_Turkey_Open_SabanciUniversity",
+ "MSc, Computer Science & Engineering (FENS)", "Sabancı University", "Istanbul, Turkey",
+ "I am applying to the MSc in Computer Science and Engineering at Sabancı University's Faculty of Engineering and Natural Sciences. FENS's interdisciplinary structure — where computer science sits deliberately close to other engineering and natural science departments rather than in its own silo — matches how I already think about systems engineering: as a discipline that borrows constantly from adjacent fields.",
+ TR_CONN,
+ "Sabancı's research-intensive, English-medium environment and its emphasis on flexible, cross-departmental coursework are precisely what I need to explore software engineering and systems research broadly before committing to a specific doctoral direction.",
+ "A","B","C","A", None),
+
+("05_Turkey_Open_KocaeliUniversity",
+ "MS, Computer Engineering", "Kocaeli University", "Kocaeli, Turkey",
+ "I am writing to apply to the Master of Science in Computer Engineering at Kocaeli University. Kocaeli is one of Turkey's major industrial regions, and a Computer Engineering program embedded in that context — close to manufacturing, logistics, and heavy industry — is a rare chance to work on systems problems that have an obvious industrial customer, not just a hypothetical one.",
+ TR_CONN,
+ "Studying systems engineering somewhere so close to industry itself is something I could not have designed better on paper, and I would like to make the most of it.",
+ "B","C","A","C",
+ "This program is primarily Turkish-medium (with a partial-English component). Confirm with the admissions office whether an English statement of purpose is accepted, or whether a Turkish translation should accompany it."),
+
+("06_Turkey_Reopening_OzyeginUniversity",
+ "Graduate Program, Computer Science", "Özyeğin University", "Istanbul, Turkey",
+ "I am applying to the Graduate Program in Computer Science at Özyeğin University. Özyeğin's reputation for a hands-on, industry-connected approach to engineering education is the reason I want to study there rather than at a program that treats research and practice as separate tracks.",
+ TR_CONN,
+ "A program built around practical engineering rigor is the right complement to the background I bring, and I want a graduate education that keeps testing my ideas against real constraints rather than only theoretical ones.",
+ "C","A","B","B", None),
+
+("07_Turkey_Reopening_KocUniversity",
+ "MS, Computer Science & Engineering (GSSE)", "Koç University", "Istanbul, Turkey",
+ "I am writing to apply to the MS in Computer Science and Engineering at Koç University's Graduate School of Sciences and Engineering. Koç's standing as one of Turkey's most research-intensive universities, and GSSE's track record of producing work that gets noticed internationally, is exactly the bar I want to be measured against.",
+ TR_CONN,
+ "I am drawn to Koç specifically because a demanding, research-first environment is what will convert my independent project work into the kind of rigorous research training a PhD application will eventually need.",
+ "A","B","C","A", None),
+
+("08_Turkey_Reopening_BogaziciUniversity",
+ "MS, Computer Engineering", "Boğaziçi University", "Istanbul, Turkey",
+ "I am applying to the MS in Computer Engineering at Boğaziçi University. Boğaziçi's identity as an English-medium public university with a research culture built over more than a century is a rare combination — the accessibility of a state institution with the academic intensity usually associated with private research universities.",
+ TR_CONN,
+ "That combination — public, research-driven, English-medium — is close to an ideal fit for someone in my position: serious about research but working within real financial constraints.",
+ "B","C","A","C", None),
+
+("09_Turkey_Reopening_IstanbulTechnicalUniversity",
+ "MSc, Computer Engineering", "Istanbul Technical University (İTÜ)", "Istanbul, Turkey",
+ "I am writing to apply to the MSc in Computer Engineering at Istanbul Technical University. Founded in 1773, İTÜ is one of the oldest technical universities in the world, and a Computer Engineering department carrying that engineering lineage forward into modern systems research is precisely the lineage I want my own graduate work to sit inside.",
+ TR_CONN,
+ "Few programs let you feel the weight of two and a half centuries of engineering tradition behind a modern systems curriculum, and that is a rare kind of institutional depth I want to learn inside of.",
+ "C","A","B","B", None),
+
+("10_Turkey_Reopening_METU",
+ "MS, Computer Engineering", "Middle East Technical University (METU)", "Ankara, Turkey",
+ "I am applying to the MS in Computer Engineering at Middle East Technical University. METU's consistent standing as one of Turkey's top research universities, combined with a fully English-medium instruction model built into its founding identity rather than added later, makes it one of the clearest cases of a program built for international researchers like me.",
+ TR_CONN,
+ "METU's research output in computer engineering and its rigorous, English-first academic culture are exactly the environment I need to take my systems background from independent projects to formal research.",
+ "A","B","C","A", None),
+
+("11_Turkey_Reopening_BilkentUniversity",
+ "MS / PhD, Computer Engineering", "Bilkent University", "Ankara, Turkey",
+ "I am writing to apply to the MS program in Computer Engineering at Bilkent University, with the department's combined MS/PhD track in view as my longer-term path. As Turkey's first private university, founded in 1984 specifically to build a research-first institution from scratch, Bilkent's Computer Engineering department is one of the country's most consistently strong, and it is where I want to lay the groundwork for doctoral research.",
+ TR_CONN,
+ "The department's track record of moving strong MS students directly into PhD research is precisely the pipeline I am hoping to enter, and I would apply myself fully to it.",
+ "B","C","A","C", None),
+
+("12_Turkey_Reopening_HacettepeUniversity",
+ "MS, Computer Engineering", "Hacettepe University", "Ankara, Turkey",
+ "I am writing to apply to the Master of Science in Computer Engineering at Hacettepe University. Hacettepe's standing as one of Ankara's major state research universities, with a Computer Engineering department that has trained generations of Turkish engineers, is the kind of established, serious institution I want backing my graduate work.",
+ TR_CONN,
+ "A well-established state department gives me both the academic rigor and the institutional stability I am looking for as I begin building toward doctoral-level research.",
+ "C","A","B","B",
+ "This program is Turkish-medium. Confirm with the department whether an English statement of purpose is accepted for international applicants, or whether a Turkish translation should accompany it."),
+
+("13_Turkey_Reopening_KadirHasUniversity",
+ "MS, Computer Engineering", "Kadir Has University", "Istanbul, Turkey",
+ "I am applying to the MS in Computer Engineering at Kadir Has University. KHAS's compact, English-medium Computer Engineering program in the heart of Istanbul, with a deliberate focus on building out its international programs, is the kind of growing department where a new graduate student can still help shape the direction of the group rather than just join an already fixed one.",
+ TR_CONN,
+ "I would rather join a program still actively building its research identity and contribute to that than join one so large I have no way to leave a mark on it.",
+ "A","B","C","A", None),
+
+("14_Pakistan_Open_GIKI",
+ "MS / PhD, Computer Engineering", "Ghulam Ishaq Khan Institute (GIKI)", "Topi, Khyber Pakhtunkhwa, Pakistan",
+ "I am writing to apply to the MS in Computer Engineering at the Ghulam Ishaq Khan Institute of Engineering Sciences and Technology, with its combined MS/PhD structure in view as my longer path. GIKI was founded specifically to build a world-class, research-intensive engineering institute in Pakistan, and its reputation for producing rigorously trained engineers is exactly the standard I want to be held to.",
+ PK_CONN,
+ "GIKI's residential, research-focused campus culture, and its direct MS-to-PhD track, make it one of the clearest paths I have found toward the doctoral research career I am ultimately aiming for.",
+ "B","C","A","C", None),
+
+("15_Pakistan_Open_COMSATSIslamabad",
+ "MS, Computer Science", "COMSATS University Islamabad", "Islamabad, Pakistan",
+ "I am applying to the MS in Computer Science at COMSATS University Islamabad. As one of Pakistan's largest public-sector universities with a Computer Science department spread across multiple campuses, COMSATS has built the kind of scale and institutional depth in computing education that I want to learn inside of.",
+ PK_CONN,
+ "A large public research university gives me exposure to a wide range of systems and software engineering research groups before I have to commit to a narrow specialization, which is exactly the breadth I want at this stage.",
+ "C","A","B","B", None),
+
+("16_Pakistan_Reopening_NUST",
+ "MS, Computer Engineering / Computer Software Engineering", "National University of Sciences & Technology (NUST)", "Islamabad, Pakistan",
+ "I am writing to apply to the MS in Computer Engineering at the National University of Sciences and Technology. NUST is consistently ranked as Pakistan's top university for engineering and technology, and a Computer Engineering department operating at that level of institutional seriousness is where I want my graduate research training to begin.",
+ PK_CONN,
+ "NUST's standing as Pakistan's leading technology university, and its research culture built around real institutional investment rather than aspiration alone, is the caliber of environment I am looking for as I work toward doctoral research.",
+ "A","B","C","A", None),
+
+("17_Pakistan_Reopening_LUMS",
+ "MS, Computer Science (SBASSE)", "Lahore University of Management Sciences (LUMS)", "Lahore, Pakistan",
+ "I am applying to the MS in Computer Science at Lahore University of Management Sciences, housed in the Syed Babar Ali School of Science and Engineering. LUMS's reputation for one of the most rigorous, research-oriented curricula in Pakistan is precisely the intensity I am looking to be tested against.",
+ PK_CONN,
+ "SBASSE's demanding coursework and close faculty mentorship model is the kind of structured rigor that complements my background well, filling in theoretical depth that independent and professional work alone cannot give me.",
+ "B","C","A","C", None),
+
+("18_Pakistan_Reopening_FASTNUCES",
+ "MS, Computer Science", "FAST National University of Computer and Emerging Sciences (NUCES)", "Lahore / Islamabad / Karachi / Peshawar, Pakistan",
+ "I am writing to apply to the MS in Computer Science at FAST National University of Computer and Emerging Sciences. FAST is one of the very few universities in the region built with computing as its entire founding mission rather than one department among many, and that singular focus is what drew me to it.",
+ PK_CONN,
+ "A university whose entire institutional identity is built around computing and emerging technology is the kind of concentrated, specialist environment I want for graduate study, rather than a general engineering school where computer science is one track among several.",
+ "C","A","B","B", None),
+
+("19_India_Reopening_IIScBangalore",
+ "M.Tech (Research) / PhD, Computer Science & Automation", "Indian Institute of Science (IISc)", "Bangalore, India",
+ "I am writing to apply to the M.Tech (Research) program in Computer Science and Automation at the Indian Institute of Science, Bangalore. IISc's identity as India's premier research institute — a place built around research output first, with teaching as a natural byproduct of an active research culture rather than the other way around — is the single closest match I have found to how I want to spend my next few years.",
+ IN_CONN,
+ "The M.Tech (Research) format at IISc, effectively a research apprenticeship built into the degree itself, is exactly the on-ramp to doctoral research I am looking for, more directly than a standard coursework-based master's would give me.",
+ "A","B","C","A", None),
+
+("20_India_Reopening_IITMadras",
+ "M.Tech / M.S. (Research) / PhD, Computer Science & Engineering", "Indian Institute of Technology Madras (IIT Madras)", "Chennai, India",
+ "I am applying to the Computer Science and Engineering graduate program at the Indian Institute of Technology Madras. IIT Madras's position as India's top-ranked engineering institute, with a Computer Science and Engineering department that competes internationally rather than only regionally, is the level of program I want to measure my own work against.",
+ IN_CONN,
+ "A department operating at that level, with the option to move from M.S. by research into a PhD without changing institutions, matches almost exactly the trajectory I am hoping to build for myself over the next several years.",
+ "B","C","A","C", None),
+
+("21_India_Reopening_IITKanpur",
+ "M.Tech, Computer Science & Engineering (Foreign Nationals route)", "Indian Institute of Technology Kanpur (IIT Kanpur)", "Kanpur, India",
+ "I am writing to apply to the M.Tech in Computer Science and Engineering at the Indian Institute of Technology Kanpur, through the Foreign Nationals admission route. IIT Kanpur is one of the original IITs and has one of the country's strongest computer science research traditions, and a department with that depth of history is where I want to build the research foundation for a future PhD.",
+ IN_CONN,
+ "IIT Kanpur's long-standing research strength in systems and software, paired with an admissions route built specifically for applicants like me, tells me this is a department that has thought seriously about bringing in international researchers rather than treating it as an afterthought.",
+ "C","A","B","B", None),
+
+("23_Turkey_Open_AtilimUniversity",
+ "MS, Computer Engineering (thesis)", "Atılım University", "Ankara, Turkey",
+ "I am writing to apply to the MS in Computer Engineering at Atılım University. Atılım's Computer Engineering department, established in 1998 and now the largest in the university's Faculty of Engineering, has run its graduate program since 2002 — one of the oldest in the Graduate School of Natural and Applied Sciences — which tells me this is a department with two decades of experience actually training graduate researchers, not one that added a master's program as an afterthought.",
+ TR_CONN,
+ "As a private, English-medium foundation university in Ankara with a Computer Engineering graduate program old enough to have a real track record, Atılım gives me the institutional maturity I want without the scale of a much larger state university.",
+ "B","C","A","C", None),
+
+("22_India_Reopening_VIT",
+ "M.Tech, Computer Science & Engineering", "VIT (Vellore Institute of Technology)", "Vellore, India",
+ "I am applying to the M.Tech in Computer Science and Engineering at VIT. VIT's international student community — now over 1,200 students from more than 50 countries — told me this is a university that has genuinely built the infrastructure and culture to support students arriving from outside India, not just a program that technically admits them.",
+ IN_CONN,
+ "That scale of international community, combined with a private university's flexibility in curriculum design, gives me the kind of supportive environment I want while I build toward more research-focused doctoral work later.",
+ "A","B","C","A", None),
+]
+
+for fname, program, university, loc, hook, conn, fit, bg_k, work_k, proj_k, close_k, note in ENTRIES:
+    body = f"""STATEMENT OF PURPOSE
+
+Applicant: Taha Mahmoodi (Afghan national)
+Program: {program}
+University: {university}
+Location: {loc}
+
+Dear Admissions Committee,
+
+{hook} {conn}
+
+{BG[bg_k]}
+
+{WORK[work_k]}
+
+{PROJ[proj_k]}
+
+{fit}
+
+{CLOSE[close_k]}
+
+Sincerely,
+Taha Mahmoodi
+"""
+    if note:
+        body += f"\n[Note to self before submitting: {note}]\n"
+
+    path = os.path.join(OUT_DIR, fname + ".txt")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(body)
+
+    # Markdown version for PDF rendering
+    md_paras = "\n\n".join([
+        f"{hook} {conn}",
+        BG[bg_k],
+        WORK[work_k],
+        PROJ[proj_k],
+        fit,
+        CLOSE[close_k],
+    ])
+    md = f"""# Statement of Purpose
+
+**Applicant:** Taha Mahmoodi (Afghan national)
+**Program:** {program}
+**University:** {university}
+**Location:** {loc}
+
+---
+
+Dear Admissions Committee,
+
+{md_paras}
+
+Sincerely,
+Taha Mahmoodi
+"""
+    if note:
+        md += f"\n> **Note before submitting:** {note}\n"
+
+    md_path = os.path.join(MD_DIR, fname + ".md")
+    with open(md_path, "w", encoding="utf-8") as f:
+        f.write(md)
+
+    pdf_path = os.path.join(PDF_DIR, fname + ".pdf")
+    title = f"{university} — Statement of Purpose"
+    result = subprocess.run(
+        [PDF_BIN, "generate", "--no-confidential", "--author", "Taha Mahmoodi",
+         "--title", title, md_path, pdf_path],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        print(f"FAILED: {fname}", file=sys.stderr)
+        print(result.stderr, file=sys.stderr)
+    else:
+        print(f"OK: {pdf_path}")
+
+print(f"Wrote {len(ENTRIES)} letters (.txt + .md) and rendered PDFs to {PDF_DIR}")

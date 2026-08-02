@@ -1,0 +1,111 @@
+import { test, expect } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
+
+// App tests run with the first-run onboarding already dismissed.
+test.describe("app", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      try {
+        localStorage.setItem("tew:onboarded", "true");
+      } catch {
+        /* ignore */
+      }
+    });
+  });
+
+  test("home page has zero axe violations", async ({ page }) => {
+    await page.goto("/");
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(results.violations).toEqual([]);
+  });
+
+  test("skip link and the single h1 are present", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("link", { name: /skip to content/i })).toBeAttached();
+    const h1s = page.getByRole("heading", { level: 1 });
+    await expect(h1s).toHaveCount(1);
+    await expect(h1s).toHaveText("Your deck");
+  });
+
+  test("the record control is labelled and reachable", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("button", { name: /record a voice memo/i })).toBeVisible();
+  });
+
+  test("the radio player is a labelled region", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByRole("region", { name: /radio player/i })).toBeVisible();
+  });
+
+  test("empty deck guides the first recording", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByText(/your deck is empty/i)).toBeVisible();
+    await expect(page.getByText(/press and hold the record button/i)).toBeVisible();
+  });
+
+  test("populated deck: axe-clean, and every gesture also a labelled button + keyboardable group", async ({ page }) => {
+    await page.goto("/");
+    // Seed one memo directly into IndexedDB, then reload so the store hydrates it.
+    await page.evaluate(async () => {
+      await new Promise<void>((resolve, reject) => {
+        const req = indexedDB.open("third-eye-world", 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains("memos")) db.createObjectStore("memos", { keyPath: "id" });
+        };
+        req.onsuccess = () => {
+          const tx = req.result.transaction("memos", "readwrite");
+          tx.objectStore("memos").put({
+            id: "seed-1",
+            createdAt: 1000,
+            durationMs: 7000,
+            mime: "audio/webm",
+            liked: false,
+            channelId: "main",
+            machineTranscript: "hello from the seed memo",
+            blob: new Blob(["x"], { type: "audio/webm" }),
+          });
+          tx.oncomplete = () => resolve();
+          tx.onerror = () => reject(tx.error);
+        };
+        req.onerror = () => reject(req.error);
+      });
+    });
+    await page.reload();
+
+    // The accessibility floor for the gesture-led v1 (screen readers eat swipes):
+    // a labelled button for every action + a keyboardable group describing the
+    // keys. Scoped to the deck region (the persistent RadioPlayer also has a Like).
+    const deck = page.getByRole("region", { name: /your memo deck/i });
+    await expect(deck.getByRole("button", { name: /^skip this memo$/i })).toBeVisible();
+    await expect(deck.getByRole("button", { name: /^like this memo$/i })).toBeVisible();
+    await expect(deck.getByRole("button", { name: /like and go to the next memo/i })).toBeVisible();
+    await expect(deck.getByRole("group", { name: /use the buttons below.*arrow keys/i })).toBeVisible();
+
+    const results = await new AxeBuilder({ page }).analyze();
+    expect(results.violations).toEqual([]);
+  });
+});
+
+// First-run wizard (fresh visit, no prior dismissal) — teaches + drills the
+// gestures, three routes each, and is never a trap.
+test("first-run wizard: teaches gestures, axe-clean, practice-by-button works, dismisses", async ({ page }) => {
+  await page.goto("/");
+  const dialog = page.getByRole("dialog", { name: /welcome to third eye world/i });
+  await expect(dialog).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+
+  // Welcome has no practice → advance to the Like step.
+  await dialog.getByRole("button", { name: /^next$/i }).click();
+  await expect(page.getByRole("heading", { name: /like a memo/i })).toBeVisible();
+
+  // Practise via the BUTTON — the non-gesture route a screen-reader user takes.
+  const practice = dialog.getByRole("group", { name: /practice card/i });
+  await practice.getByRole("button").click();
+  await expect(page.getByText(/nicely done/i)).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+
+  // The whole tour is skippable — practice is encouraged, never forced.
+  await dialog.getByRole("button", { name: /skip the tour/i }).click();
+  await expect(dialog).toBeHidden();
+});

@@ -1,0 +1,14 @@
+import type { NextConfig } from "next";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+const nextConfig: NextConfig = {
+  // Pin the workspace root so Turbopack stops inferring it from lockfiles.
+  turbopack: {
+    root: repoRoot,
+  },
+};
+
+export default nextConfig;

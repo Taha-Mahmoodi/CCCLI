@@ -1,0 +1,92 @@
+[2026-07-11T09:49:50.603Z] [supervisor] ─── daemon start ─── version=2.1.207 pid=5998 origin=transient
+[2026-07-11T09:49:50.608Z] [supervisor] auth: scheduling proactive refresh in 23397s
+[2026-07-11T09:49:50.609Z] [supervisor] auth: scheduling proactive refresh in 23397s
+[2026-07-11T09:49:50.613Z] [supervisor] workers=0
+[2026-07-11T09:49:50.617Z] [bg] bg: control socket bound at /tmp/cc-daemon-501/7d296a9c/control.sock
+[2026-07-11T09:49:50.642Z] [bg] bg spare spawned host pid=6007
+[2026-07-11T09:49:50.820Z] [bg] bg claimed-spare 14e2dfca (spare)
+[2026-07-11T09:49:50.822Z] [bg] bg spawned daf3f484 (slash)
+[2026-07-11T09:49:50.824Z] [bg] bg spare spawned host pid=6015
+[2026-07-11T09:51:50.662Z] [bg] bg claimed-spare 5e5e21d4 (spare)
+[2026-07-11T09:51:50.667Z] [bg] bg spare spawned host pid=6165
+[2026-07-11T09:51:51.133Z] [bg] bg settled 14e2dfca (killed)
+[2026-07-11T10:51:50.752Z] [bg] bg settled 5e5e21d4 (done)
+[2026-07-11T10:55:50.775Z] [bg] bg settled daf3f484 (done)
+[2026-07-11T10:55:55.781Z] [supervisor] idle 5s with no clients — exiting
+[2026-07-11T10:55:55.781Z] [supervisor] shutting down (cause=idle_exit, uptime=3965s, leases=0, live_workers=0)
+[2026-07-13T11:05:50.621Z] [supervisor] ─── daemon start ─── version=2.1.207 pid=10041 origin=transient
+[2026-07-13T11:05:50.629Z] [supervisor] auth: scheduling proactive refresh in 10907s
+[2026-07-13T11:05:50.630Z] [supervisor] auth: scheduling proactive refresh in 10907s
+[2026-07-13T11:05:50.634Z] [supervisor] workers=0
+[2026-07-13T11:05:50.638Z] [bg] bg: control socket bound at /tmp/cc-daemon-501/7d296a9c/control.sock
+[2026-07-13T11:05:50.705Z] [bg] bg spare spawned host pid=10051
+[2026-07-13T11:05:50.841Z] [bg] bg claimed-spare 5ed9294a (spare)
+[2026-07-13T11:05:50.842Z] [bg] bg spawned 1ac13bd1 (slash)
+[2026-07-13T11:05:50.843Z] [bg] bg spare spawned host pid=10057
+[2026-07-13T11:06:06.172Z] [bg] bg settled 5ed9294a (killed)
+[2026-07-19T06:56:18.806Z] [supervisor] ─── daemon start ─── version=2.1.215 pid=12121 origin=transient
+[2026-07-19T06:56:18.917Z] [supervisor] auth: scheduling proactive refresh in 21064s
+[2026-07-19T06:56:18.918Z] [supervisor] auth: scheduling proactive refresh in 21064s
+[2026-07-19T06:56:18.923Z] [supervisor] workers=0
+[2026-07-19T06:56:18.929Z] [bg] bg: control socket bound at /tmp/cc-daemon-501/7d296a9c/control.sock
+[2026-07-19T06:56:18.932Z] [bg] bg adopt: adopted=0 respawned=0 dead=1
+[2026-07-19T06:56:18.995Z] [bg] bg spare spawned host pid=12131
+[2026-07-19T06:56:19.132Z] [bg] bg claimed-spare 9501ec8b (slash)
+[2026-07-19T06:56:19.133Z] [bg] bg spawned 33872c06 (spare)
+[2026-07-19T06:56:19.134Z] [bg] bg spare spawned host pid=12141
+[2026-07-19T08:56:43.750Z] [supervisor] ─── daemon start ─── version=2.1.215 pid=3013 origin=transient
+[2026-07-19T08:56:43.860Z] [supervisor] auth: scheduling proactive refresh in 13839s
+[2026-07-19T08:56:43.861Z] [supervisor] auth: scheduling proactive refresh in 13839s
+[2026-07-19T08:56:43.867Z] [supervisor] workers=0
+[2026-07-19T08:56:43.875Z] [bg] bg: control socket bound at /tmp/cc-daemon-501/7d296a9c/control.sock
+[2026-07-19T08:56:43.878Z] [bg] bg adopt: adopted=0 respawned=0 dead=2
+[2026-07-19T08:56:43.883Z] [bg] bg spawned 4ed04020 (slash)
+[2026-07-19T08:56:43.883Z] [bg] bg spawned 9f2a8dac (spare)
+[2026-07-19T08:56:43.891Z] [bg] bg spare spawned host pid=3024
+[2026-07-19T09:56:44.136Z] [bg] bg settled 9f2a8dac (done)
+[2026-07-20T15:29:04.270Z] [supervisor] ─── daemon start ─── version=2.1.215 pid=16574 origin=transient
+[2026-07-20T15:29:04.378Z] [supervisor] auth: scheduling proactive refresh in 18034s
+[2026-07-20T15:29:04.378Z] [supervisor] auth: scheduling proactive refresh in 18034s
+[2026-07-20T15:29:04.384Z] [supervisor] workers=0
+[2026-07-20T15:29:04.390Z] [bg] bg: control socket bound at /tmp/cc-daemon-501/7d296a9c/control.sock
+[2026-07-20T15:29:04.393Z] [bg] bg adopt: adopted=0 respawned=0 dead=1
+[2026-07-20T15:29:04.480Z] [bg] bg spare spawned host pid=16587
+[2026-07-20T15:29:04.592Z] [bg] bg claimed-spare 01253d29 (spare)
+[2026-07-20T15:29:04.593Z] [bg] bg spawned 90d6764c (slash)
+[2026-07-20T15:29:04.594Z] [bg] bg spare spawned host pid=16592
+[2026-07-20T15:29:23.209Z] [bg] bg settled 01253d29 (killed)
+[2026-07-28T12:30:06.911Z] [supervisor] ─── daemon start ─── version=2.1.220 pid=21422 origin=transient
+[2026-07-28T12:30:07.023Z] [supervisor] auth: scheduling proactive refresh in 8055s
+[2026-07-28T12:30:07.023Z] [supervisor] auth: scheduling proactive refresh in 8055s
+[2026-07-28T12:30:07.029Z] [supervisor] workers=0
+[2026-07-28T12:30:07.036Z] [bg] bg: control socket bound at /tmp/cc-daemon-501/7d296a9c/control.sock
+[2026-07-28T12:30:07.038Z] [bg] bg adopt: adopted=0 respawned=0 dead=1
+[2026-07-28T12:30:07.066Z] [bg] bg spare spawned host pid=21431
+[2026-07-28T12:30:07.240Z] [bg] bg claimed-spare e1e005de (slash)
+[2026-07-28T12:30:07.241Z] [bg] bg spawned 2c823158 (spare)
+[2026-07-28T12:30:07.243Z] [bg] bg spare spawned host pid=21439
+[2026-07-28T13:08:18.652Z] [supervisor] ─── daemon start ─── version=2.1.220 pid=2902 origin=transient
+[2026-07-28T13:08:18.762Z] [supervisor] auth: scheduling proactive refresh in 5763s
+[2026-07-28T13:08:18.762Z] [supervisor] auth: scheduling proactive refresh in 5763s
+[2026-07-28T13:08:18.769Z] [supervisor] workers=0
+[2026-07-28T13:08:18.776Z] [bg] bg: control socket bound at /tmp/cc-daemon-501/7d296a9c/control.sock
+[2026-07-28T13:08:18.778Z] [bg] bg adopt: adopted=0 respawned=0 dead=2
+[2026-07-28T13:08:18.796Z] [bg] bg spare spawned host pid=2911
+[2026-07-28T13:08:18.980Z] [bg] bg claimed-spare b6365e79 (slash)
+[2026-07-28T13:08:18.981Z] [bg] bg spawned 0ce3514a (spare)
+[2026-07-28T13:08:18.983Z] [bg] bg spare spawned host pid=2920
+[2026-07-28T13:09:52.575Z] [bg] bg claimed-spare e1e005de (fleet)
+[2026-07-28T13:09:52.579Z] [bg] bg spare spawned host pid=3321
+[2026-08-01T06:32:54.867Z] [supervisor] ─── daemon start ─── version=2.1.220 pid=7172 origin=transient
+[2026-08-01T06:32:54.977Z] [supervisor] auth: scheduling proactive refresh in 24468s
+[2026-08-01T06:32:54.977Z] [supervisor] auth: scheduling proactive refresh in 24468s
+[2026-08-01T06:32:54.984Z] [supervisor] workers=0
+[2026-08-01T06:32:54.989Z] [bg] bg: control socket bound at /tmp/cc-daemon-501/7d296a9c/control.sock
+[2026-08-01T06:32:54.992Z] [bg] bg adopt: adopted=0 respawned=0 dead=3
+[2026-08-01T06:32:55.064Z] [bg] bg spare spawned host pid=7182
+[2026-08-01T06:32:55.193Z] [bg] bg claimed-spare b838b704 (spare)
+[2026-08-01T06:32:55.194Z] [bg] bg spawned c7a33960 (slash)
+[2026-08-01T06:32:55.195Z] [bg] bg spare spawned host pid=7188
+[2026-08-01T06:34:06.804Z] [bg] bg claimed-spare 90d6764c (fleet)
+[2026-08-01T06:34:06.806Z] [bg] bg spare spawned host pid=7748
+[2026-08-01T07:32:55.112Z] [bg] bg settled b838b704 (done)

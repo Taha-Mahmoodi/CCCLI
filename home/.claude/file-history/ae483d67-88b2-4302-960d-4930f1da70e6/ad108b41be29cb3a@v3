@@ -1,0 +1,131 @@
+# Implementation — the build prompt for Claude Code
+
+> This is the operating prompt for the agent building Third Eye World. Read [`brief.md`](./brief.md) and the ten non-negotiables first. Then this. Then work.
+
+## 0. Prime directive
+
+Build **from sound first**. Accessibility is not a feature of this product — it *is* the product. A beautiful screen that a screen reader cannot drive is a **failed** ticket, not a partial one. Every control ships reachable three ways (media-transport, voice, screen-reader custom action) before it is considered done.
+
+## 1. Performance optimization rule — HARD-CODED, NON-NEGOTIABLE
+
+These are **merge gates**, enforced in the sandbox before any PR merges (see [`handling-protocols.md`](./handling-protocols.md) §5). A PR that regresses any budget **does not merge** — you fix it or you revert it.
+
+| Budget | Threshold | Measured by |
+|---|---|---|
+| Lighthouse Performance | ≥ 95 | `lhci` / Lighthouse CI, mobile preset |
+| Lighthouse Accessibility | = 100 | Lighthouse |
+| axe-core violations | **0** | `@axe-core/playwright` in visual test |
+| Largest Contentful Paint | < 2.0 s | Lighthouse (mobile, slow-4G throttle) |
+| Total Blocking Time | < 150 ms | Lighthouse |
+| Cumulative Layout Shift | < 0.05 | Lighthouse |
+| Interaction to Next Paint | < 200 ms | Lighthouse / field |
+| **App-authored JS per route** (the part we control — the binding gate) | ≤ 40 KB gzip | first-load minus framework/runtime/polyfill chunks |
+| **Total first-load JS per route** | ≤ 210 KB gzip | measured on the served page (framework/vendor floor ≈ 185 KB) |
+| Audio time-to-first-play | < 500 ms | app metric, logged in dev |
+| Animation frame rate | 60 fps, no dropped frames | DevTools performance / `/browse` |
+
+**On the JS budget — measured, not guessed.** React 19 + Next 16 (App Router) plus this app's vendor deps (radix, lucide, zustand) ship a fixed framework+runtime+polyfill floor of ~185 KB gzip before app logic. The legacy-browser polyfill chunk (~38 KB) is kept **deliberately** — old/low-end devices are exactly the audience the spec exists to reach (§10.4). So the **binding** gate is the part we author (≤ 40 KB; currently ~18 KB); the total is a sanity ceiling above the measured floor. A single sub-floor total would be fiction. Keep app code lean; do not "optimize" by dropping the polyfills that serve the users.
+
+**Automated vs. human gates — stated honestly.** Typecheck, lint, unit, build, bundle size, Lighthouse, and axe are **automatable merge-blockers** and run in CI (from Slice 0 on). But this is a *blind-first* product: the screen-reader rotor/custom-action experience and audio-ducking "feel" (no two voices at once) **cannot be truly verified by Playwright or a screenshot** — they need a human (or an agent driving a real screen reader via `/browse` / VoiceOver) and remain **best-effort, human-needed verification**, not a green checkmark to fake. When that pass hasn't been done by a human, `STATE.md` says so plainly rather than the slice claiming "screen-reader verified." Never fake this gate.
+
+**The animation law (absolute):**
+- Animate **only `transform` and `opacity`.** Never animate `width`, `height`, `top`, `left`, `margin`, `box-shadow`, or anything that triggers layout/paint. If a design needs it, it gets redesigned.
+- Every animation runs on the compositor at 60fps. Verify in the visual test, not by eye.
+- Honor `prefers-reduced-motion: reduce` — motion becomes an instant state change, never removed-into-nothing that hides information.
+- Motion is **decoration, never information.** Nothing a sighted user learns from an animation may be unavailable to a screen-reader user.
+
+**General rules baked in:**
+- Server Components by default; `"use client"` only where interaction demands it. Ship the smallest client bundle that works.
+- No layout thrash: batch reads then writes; never read geometry inside a write loop.
+- Audio: stream chunks (`MediaRecorder.start(1000)`), preload the *next* memo on a second element, swap on `ended` for gapless radio. Never buffer a whole recording in memory (iOS Safari OOMs).
+- Lazy-load below-the-fold and route-split by default. No barrel-file mega-imports.
+- No new dependency for what ≤20 lines of our own code does. New deps require a one-line justification in the PR.
+
+## 2. Tech stack (what is in this repo)
+
+Pinned by the spec; do not substitute without recording the dissent.
+
+**Web (`apps/web`)**
+- **Next.js (App Router), TypeScript, React** — server-rendered, delivered as a **PWA**. Chosen for the depth of *audited* accessible primitives and hiring pool (Svelte/Astro dissent recorded in the paper).
+- **Tailwind CSS** for styling (design tokens live in `packages/ui` / Tailwind config).
+- **shadcn/ui** (Radix primitives) for components — audited a11y baseline. Pulled via the **shadcn MCP server** (`mcp__shadcn__*`): search → view → add. Never hand-copy a component the MCP can add correctly.
+- **Motion:** **GSAP** for orchestrated/timeline motion; **anime.js** for lightweight property tweens. Both installed as repo dependencies. Compositor-only per §1's animation law. (If a component MCP such as `mcp__magic__*` produces motion scaffolding, it is refactored to obey the animation law before merge.)
+- **State:** Zustand for the persistent audio-player store (lives outside the routed tree so playback survives navigation). URL/searchParams for shareable state. No Redux.
+- **Audio:** `getUserMedia` + `MediaRecorder` (mime feature-detected per spec §5.2), `<audio>` transport, **Media Session API** for lock-screen/hardware-key control.
+- **Data/offline:** IndexedDB queue for pending uploads; service worker (app shell cache-first, audio network-first, small LRU).
+- **Auth:** passkeys (WebAuthn) + magic link + phone OTP, equal status. **Voice is never an auth factor.**
+
+**Backend (`services/api`)**
+- Node/TypeScript API, small surface, cursor pagination, **no ranking endpoint**. Token-bucket rate limits (per user + per IP, stricter for new accounts).
+- S3-compatible object storage, zero-egress CDN (Cloudflare R2 or equiv), Opus mono 16–24 kbps transcode.
+- **Transcription:** self-hosted **Whisper large-v3** (faster-whisper GPU / whisper.cpp batch). **Language ID runs before ASR, mandatory** (ASR is measurably biased; routing everything through one English model mis-serves the users we most need to serve).
+- **TTS:** **Piper** (open, 35+ languages, edge-runnable). Only generic voices — user voices are never cloned.
+
+**Native (later slices)** — Swift/SwiftUI (iOS), Kotlin/Jetpack Compose (Android). Not cross-platform: screen-reader fidelity is the product. E2EE DMs via **libsignal**, keys in Keychain/Secure Enclave & Android Keystore.
+
+**Shared (`packages/`)** — `shared` (types, protocol, zod schemas mirrored from the data model), `ui` (design tokens, shared components).
+
+### Tooling & MCP servers (what fetches what)
+
+Be precise — only one of these is an MCP:
+
+| Thing | How it enters the repo | Notes |
+|---|---|---|
+| **shadcn/ui components** | **shadcn MCP** (`mcp__shadcn__*`) — search → view → `get_add_command` → add | Verified live against the `@shadcn` public registry. Requires `components.json` (created at `apps/web` init) before `add`. Don't hand-copy a component the MCP can add. |
+| **GSAP** | plain npm dependency (`pnpm add gsap`) | **No MCP.** Import in client components only; compositor-only per §1. |
+| **anime.js** | plain npm dependency (`pnpm add animejs`) | **No MCP.** Verify the installed major's import style on install (v4 changed it) before writing against it. |
+| **AI-generated component scaffolds** | **magic MCP** (`mcp__magic__*`) — *optional* | Convenience only. Anything it emits is refactored to obey the animation law and a11y rules before merge; never merged raw. |
+
+All three libraries are committed to the repo (in `apps/web/package.json` + lockfile). Installing them is part of the Slice 0 scaffold.
+
+## 3. Project structure
+
+Directories are added when the slice that needs them starts — nothing scaffolded ahead of need.
+
+```
+third-eye-world-mono/
+├── STATE.md                  # live progress ledger — read first on resume
+├── README.md
+├── docs/                     # this operating manual
+│   ├── brief.md
+│   ├── implementation.md
+│   ├── handling-protocols.md
+│   └── github-workflow.md
+├── apps/
+│   ├── web/                  # Next.js PWA  (Slice 0+)
+│   │   ├── app/              # App Router routes
+│   │   ├── components/       # shadcn/ui + app components
+│   │   ├── lib/              # audio, media-session, a11y helpers
+│   │   ├── stores/           # zustand (player store lives here)
+│   │   ├── public/           # PWA manifest, service worker, icons
+│   │   └── tests/            # unit (vitest) + visual (playwright)
+│   ├── ios/                  # SwiftUI  (Slice 4)
+│   └── android/              # Compose   (Slice 5)
+├── services/
+│   └── api/                  # backend + speech infra  (Slice 3)
+└── packages/
+    ├── shared/               # types, protocol, zod schemas
+    └── ui/                   # design tokens, shared primitives
+```
+
+Monorepo tooling: **pnpm workspaces** + **Turborepo** (task graph, caching — keeps the sandbox/perf checks fast). Root `pnpm-workspace.yaml` lists `apps/*`, `services/*`, `packages/*`.
+
+## 4. How to work a slice
+
+1. Read `STATE.md` → know the current slice and its acceptance criteria (from `brief.md`).
+2. Branch per [`github-workflow.md`](./github-workflow.md).
+3. Write the test first where logic is non-trivial (audio state machine, upload queue, franking) — TDD for anything with a branch, a loop, money, or crypto.
+4. Build the smallest thing that satisfies the acceptance criteria and the ten non-negotiables.
+5. Sandbox test (typecheck, lint, unit, build) + performance gates + visual/a11y test (§ handling-protocols 5 & 6).
+6. PR → review → merge to `dev` → promote to `prod`.
+7. Update `STATE.md` before moving on.
+
+## 5. Definition of done (every slice)
+
+- [ ] Ten non-negotiables all hold (list them and check each in the PR body).
+- [ ] Every action reachable via media-transport **and** voice **and** screen-reader custom action.
+- [ ] Performance budgets green (§1).
+- [ ] axe = 0 violations; keyboard-complete; route changes announced.
+- [ ] Tested manually with at least one screen reader in the visual test.
+- [ ] `STATE.md` updated.
+- [ ] Merged to `dev`, promoted to `prod`.

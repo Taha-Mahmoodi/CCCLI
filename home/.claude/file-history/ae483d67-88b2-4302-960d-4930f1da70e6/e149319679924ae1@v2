@@ -1,0 +1,22 @@
+import { Eye } from "lucide-react";
+
+export function AppHeader() {
+  return (
+    <header className="border-b border-border">
+      <div className="mx-auto flex max-w-2xl items-center gap-3 px-5 py-5">
+        <span
+          aria-hidden="true"
+          className="flex size-10 items-center justify-center rounded-xl bg-primary text-primary-foreground"
+        >
+          <Eye className="size-5" />
+        </span>
+        <div className="leading-tight">
+          <p className="text-lg font-semibold tracking-tight">Third Eye World</p>
+          <p className="text-sm text-muted-foreground">
+            Voice-first radio for blind and low-vision people
+          </p>
+        </div>
+      </div>
+    </header>
+  );
+}

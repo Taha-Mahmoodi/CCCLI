@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Post-deploy smoke test. Exercises the real running container end to end.
+# Usage: scripts/smoke.sh [base_url]   (default http://localhost:3000)
+set -euo pipefail
+
+BASE="${1:-http://localhost:3000}"
+echo "Smoke test against ${BASE}"
+
+pass() { echo "  ok   $1"; }
+fail() { echo "  FAIL $1"; exit 1; }
+
+# 1. Health endpoint returns 200 and reports ok.
+code=$(curl -fsS -o /tmp/te_health.json -w '%{http_code}' "${BASE}/api/health" || true)
+[ "${code}" = "200" ] || fail "health status ${code}"
+grep -q '"status":"ok"' /tmp/te_health.json || fail "health body: $(cat /tmp/te_health.json)"
+pass "health 200 + status ok (DB reachable)"
+
+# 2. Marketing home renders and carries the mission line.
+home=$(curl -fsS "${BASE}/" || true)
+echo "${home}" | grep -qi "Feel, don" || fail "home missing mission line"
+pass "marketing home renders mission"
+
+# 3. Auth pages reachable.
+for path in /app/signup /app/login; do
+  code=$(curl -fsS -o /dev/null -w '%{http_code}' "${BASE}${path}" || true)
+  [ "${code}" = "200" ] || fail "${path} status ${code}"
+  pass "${path} 200"
+done
+
+# 4. Unauthenticated app route redirects to login (not a 500).
+code=$(curl -fsS -o /dev/null -w '%{http_code}' -L "${BASE}/app" || true)
+[ "${code}" = "200" ] || fail "/app (followed) status ${code}"
+pass "/app guarded redirect resolves"
+
+echo "SMOKE PASS"

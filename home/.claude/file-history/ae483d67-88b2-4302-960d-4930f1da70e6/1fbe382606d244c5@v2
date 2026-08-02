@@ -1,0 +1,114 @@
+import { describe, it, expect } from "vitest";
+import { seal, open, frank, verifyReport, randomBytes } from "../src/franking";
+
+const msg = (s: string) => new TextEncoder().encode(s);
+const key = () => randomBytes(32);
+const eq = (a: Uint8Array, b: Uint8Array) => Buffer.from(a).equals(Buffer.from(b));
+
+describe("DM franking (committing AEAD)", () => {
+  it("seals and opens a message (roundtrip)", async () => {
+    const k = key();
+    const sealed = await seal(k, msg("hello there"));
+    const { message } = await open(k, sealed);
+    expect(new TextDecoder().decode(message)).toBe("hello there");
+  });
+
+  it("rejects a tampered ciphertext", async () => {
+    const k = key();
+    const sealed = await seal(k, msg("secret"));
+    sealed.ciphertext[0] ^= 0xff;
+    await expect(open(k, sealed)).rejects.toThrow(/integrity/);
+  });
+
+  it("rejects the wrong key", async () => {
+    const sealed = await seal(key(), msg("secret"));
+    await expect(open(key(), sealed)).rejects.toThrow(/integrity/);
+  });
+
+  it("rejects a tampered commitment (the mac binds it)", async () => {
+    const k = key();
+    const sealed = await seal(k, msg("secret"));
+    sealed.commitment[0] ^= 0xff;
+    await expect(open(k, sealed)).rejects.toThrow(/integrity/);
+  });
+
+  it("uses a fresh opening per message (commitments differ for equal plaintext)", async () => {
+    const k = key();
+    const a = await seal(k, msg("same"));
+    const b = await seal(k, msg("same"));
+    expect(eq(a.commitment, b.commitment)).toBe(false);
+  });
+
+  it("end-to-end: the recipient can prove authenticity to the platform", async () => {
+    const platformKey = key();
+    const messageKey = key();
+    const [sender, recipient] = ["alice", "bob"];
+    const sealed = await seal(messageKey, msg("meet me at 5"));
+    // server blind-authenticates the commitment when relaying (no message key)
+    const reportTag = await frank(platformKey, sender, recipient, sealed.commitment);
+    const { message, opening } = await open(messageKey, sealed);
+    // recipient reports — platform verifies WITHOUT the message key
+    const ok = await verifyReport(
+      platformKey,
+      sender,
+      recipient,
+      message,
+      opening,
+      sealed.commitment,
+      reportTag,
+    );
+    expect(ok).toBe(true);
+  });
+
+  it("rejects a forged report claiming a different message", async () => {
+    const platformKey = key();
+    const messageKey = key();
+    const sealed = await seal(messageKey, msg("real message"));
+    const reportTag = await frank(platformKey, "a", "b", sealed.commitment);
+    const { opening } = await open(messageKey, sealed);
+    const ok = await verifyReport(
+      platformKey,
+      "a",
+      "b",
+      msg("FORGED message"),
+      opening,
+      sealed.commitment,
+      reportTag,
+    );
+    expect(ok).toBe(false);
+  });
+
+  it("length-prefixes franking fields so a `|` in a handle can't confuse identities", async () => {
+    const platformKey = key();
+    const messageKey = key();
+    const sealed = await seal(messageKey, msg("hi"));
+    const { message, opening } = await open(messageKey, sealed);
+    // platform franked for sender="a", recipient="b|c"
+    const tag = await frank(platformKey, "a", "b|c", sealed.commitment);
+    // must NOT verify as sender="a|b", recipient="c" (delimiter would collide)
+    expect(
+      await verifyReport(platformKey, "a|b", "c", message, opening, sealed.commitment, tag),
+    ).toBe(false);
+    // but DOES verify with the correct identities
+    expect(
+      await verifyReport(platformKey, "a", "b|c", message, opening, sealed.commitment, tag),
+    ).toBe(true);
+  });
+
+  it("rejects a report the platform never franked", async () => {
+    const messageKey = key();
+    const sealed = await seal(messageKey, msg("hi"));
+    const tagFromOtherPlatform = await frank(key(), "a", "b", sealed.commitment);
+    const { message, opening } = await open(messageKey, sealed);
+    const ok = await verifyReport(
+      key(), // this platform's key never produced that tag
+      "a",
+      "b",
+      message,
+      opening,
+      sealed.commitment,
+      tagFromOtherPlatform,
+    );
+    expect(ok).toBe(false);
+  });
+});

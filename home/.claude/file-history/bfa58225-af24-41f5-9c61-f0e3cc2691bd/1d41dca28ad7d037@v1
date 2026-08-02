@@ -1,0 +1,56 @@
+# PLAN.md — Atlas Field Force Build Order
+
+See [`docs/design.md`](docs/design.md) for the approved design. Detailed step-by-step implementation plan lives wherever `superpowers:writing-plans` writes it (linked from PROGRESS.md once created).
+
+## Phase 0 — Repo scaffold & state files
+- [x] 0.1 Repo created (private), README, design spec, research doc, this file, PROGRESS.md
+
+## Phase 1 — Backend core
+- [x] 1.1 FastAPI app skeleton, config, async DB session, `uv` project, Alembic init
+- [x] 1.2 Multi-tenancy base: `tenant_id` on a base model mixin, session-level filter
+- [x] 1.3 Auth: `reps`/`managers` (or a unified `users` table with a role column), JWT access+refresh, argon2
+- [x] 1.4 In-process event bus + in-process background job runner (mirrors Atlas's `core/events`, `core/jobs`)
+
+## Phase 2 — Zones & geofencing
+- [x] 2.1 `zones` (GeoJSON polygon), `zone_assignments`
+- [x] 2.2 Point-in-polygon service (pure Python), unit tests incl. edge cases (on boundary, antimeridian not required)
+
+## Phase 3 — Location pings
+- [x] 3.1 Ping ingestion endpoint (idempotency-keyed), `location_pings` table + indexes
+- [x] 3.2 Retention/downsample background job (pruning only — downsampling deferred, no consumer of historical ping data exists yet)
+
+## Phase 4 — Visits & tasks
+- [x] 4.1 `visits`: check-in/out, geofence-verified flag, notes, `external_reference` (photo upload deferred -- schema-ready `photo_path` column only, no storage backend chosen yet)
+- [x] 4.2 `tasks`: CRUD, assignment, due dates, priority, completion
+
+## Phase 5 — Goals
+- [x] 5.1 `goals`: VISIT_COUNT / TASK_COUNT / SALES_VALUE (manual entry), target-vs-achievement report endpoint (per-rep only for v1 -- no `teams` concept exists anywhere in this codebase yet, so team goals are deferred)
+
+## Phase 6 — Violations & alerts
+- [x] 6.1 Zone-violation detection (on ping ingestion, rep outside assigned zone during work hours)
+- [x] 6.2 `ZoneViolationDetected` event → web push (VAPID) to subscribed managers + dashboard flag
+
+## Phase 7 — Manager web dashboard
+- [x] 7.1 Scaffold (Vite+React+TS+Tailwind), auth, API client
+- [x] 7.2 Live map (Leaflet), polling
+- [x] 7.3 Zone drawing (leaflet-draw)
+- [x] 7.4 Task/goal admin, violations feed, push-subscription opt-in
+
+## Phase 8 — Tablet app (Android)
+- [x] 8.1 Capacitor+React scaffold, login
+- [x] 8.2 Background location plugin (open-source path) + ping posting
+- [ ] 8.3 Offline queue (pings, check-ins, task updates, photos) + sync-on-reconnect
+- [ ] 8.4 Check-in/out, task list, goal progress view
+
+## Phase 9 — Tests & CI
+- [ ] 9.1 Backend unit/integration tests mirror source; `tests/perf/` for ping ingestion
+- [ ] 9.2 CI workflow: backend lint+test, dashboard typecheck+build, tablet app build
+
+## Phase 10 — Deployability (not deployment)
+- [ ] 10.1 Dockerfile(s) + docker-compose, migrations verified end-to-end locally
+- [ ] 10.2 README quickstart
+- [ ] 10.3 Punch list of what's left that requires customer/user input (domain, VAPID keys, cloud provider, real-device GPS testing)
+
+## Scope-cut rule
+
+If time pressure forces a cut: cut dashboard polish before backend correctness, and tablet polish before offline-sync correctness (a lost visit is worse than an ugly screen).

@@ -1,0 +1,82 @@
+# Deploying Third Eye World to a VPS
+
+The whole product (marketing site + Commons) runs from one `docker compose` command
+with automatic HTTPS. No external services required beyond the VPS and a domain.
+
+## What you need
+
+- A VPS (Ubuntu 22.04+ or similar) with a public IP.
+- A domain name with a DNS **A record** (and optional **AAAA** for IPv6) pointing at the VPS IP.
+- Ports **80** and **443** open in the firewall.
+
+## 1. Install Docker on the VPS
+
+```bash
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker "$USER"   # then log out and back in
+```
+
+This installs Docker Engine and the Compose plugin.
+
+## 2. Get the code and configure
+
+```bash
+git clone https://github.com/Taha-Mahmoodi/third-eye-world-engineering-build.git
+cd third-eye-world-engineering-build
+
+cp .env.production.example .env
+# Edit .env and set:
+#   APP_DOMAIN        your domain, e.g. commons.thirdeye.world
+#   AUTH_SECRET       openssl rand -base64 32
+#   POSTGRES_PASSWORD a strong password
+nano .env
+```
+
+## 3. Launch
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+This builds the app image, starts PostgreSQL, runs database migrations and the seed
+once (the `migrate` service), starts the app, and starts **Caddy**, which fetches a
+real Let's Encrypt certificate for `APP_DOMAIN` automatically.
+
+Give it a minute on first boot (image build + certificate issuance), then open
+`https://APP_DOMAIN`. The marketing site is at `/`, the app at `/app`.
+
+Check status and logs:
+
+```bash
+docker compose -f docker-compose.prod.yml ps
+docker compose -f docker-compose.prod.yml logs -f app caddy
+```
+
+## 4. Updating to a new version
+
+```bash
+git pull
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Migrations run automatically on each deploy via the one-shot `migrate` service.
+
+## 5. Backups
+
+```bash
+# Dump the database
+docker compose -f docker-compose.prod.yml exec db \
+  pg_dump -U third_eye third_eye > backup-$(date +%F).sql
+```
+
+The database lives in the `pgdata` Docker volume and survives container restarts and rebuilds.
+
+## Notes
+
+- The app container is **not** exposed to the host; only Caddy is (80/443). All app
+  traffic goes through Caddy over the internal Docker network.
+- `AUTH_URL` is set to `https://APP_DOMAIN` automatically from your `.env`.
+- To run everything on your laptop without a domain or TLS, use the plain
+  `docker-compose.yml` instead (app on `http://localhost:3000`).
+- Health: `GET /api/health` returns `200` only when the app and database are both up
+  (Caddy and Docker use it to know the app is ready).

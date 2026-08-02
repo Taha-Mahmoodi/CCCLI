@@ -1,0 +1,14 @@
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+
+// Server-side auth boundary for everything under /app/(authed). Keeps Prisma in
+// the Node runtime (no Edge middleware).
+export default async function AuthedLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const session = await auth();
+  if (!session?.user) redirect("/app/login");
+  return <>{children}</>;
+}

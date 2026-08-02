@@ -1,0 +1,89 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { notify } from "@/lib/notify";
+import { postSchema, commentSchema } from "@/lib/validation";
+
+export type PostFormState = { error?: string; ok?: boolean };
+
+export async function createPost(
+  _prev: PostFormState,
+  formData: FormData,
+): Promise<PostFormState> {
+  const session = await auth();
+  if (!session?.user) return { error: "You are not signed in." };
+  const parsed = postSchema.safeParse({ body: formData.get("body") });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Check your post." };
+  }
+  await prisma.post.create({
+    data: { authorId: session.user.id, body: parsed.data.body },
+  });
+  revalidatePath("/app");
+  return { ok: true };
+}
+
+export type LikeResult = { count: number; liked: boolean } | { error: string };
+
+export async function togglePostLike(postId: string): Promise<LikeResult> {
+  const session = await auth();
+  if (!session?.user) return { error: "You are not signed in." };
+  const userId = session.user.id;
+
+  const existing = await prisma.postLike.findUnique({
+    where: { postId_userId: { postId, userId } },
+  });
+  if (existing) {
+    await prisma.postLike.delete({ where: { id: existing.id } });
+  } else {
+    await prisma.postLike.create({ data: { postId, userId } });
+    const post = await prisma.post.findUnique({
+      where: { id: postId },
+      select: { authorId: true },
+    });
+    if (post) {
+      await notify({ userId: post.authorId, actorId: userId, type: "LIKE", postId });
+    }
+  }
+
+  const count = await prisma.postLike.count({ where: { postId } });
+  revalidatePath("/app");
+  revalidatePath(`/app/post/${postId}`);
+  return { count, liked: !existing };
+}
+
+export type CommentFormState = { error?: string; ok?: boolean };
+
+// Bind postId first: addComment.bind(null, postId) for useActionState.
+export async function addComment(
+  postId: string,
+  _prev: CommentFormState,
+  formData: FormData,
+): Promise<CommentFormState> {
+  const session = await auth();
+  if (!session?.user) return { error: "You are not signed in." };
+  const parsed = commentSchema.safeParse({ body: formData.get("body") });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Check your reply." };
+  }
+  await prisma.comment.create({
+    data: { postId, authorId: session.user.id, body: parsed.data.body },
+  });
+  const post = await prisma.post.findUnique({
+    where: { id: postId },
+    select: { authorId: true },
+  });
+  if (post) {
+    await notify({
+      userId: post.authorId,
+      actorId: session.user.id,
+      type: "COMMENT",
+      postId,
+    });
+  }
+  revalidatePath(`/app/post/${postId}`);
+  revalidatePath("/app");
+  return { ok: true };
+}

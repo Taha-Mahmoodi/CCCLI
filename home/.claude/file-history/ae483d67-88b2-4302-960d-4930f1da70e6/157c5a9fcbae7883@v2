@@ -1,0 +1,82 @@
+// Demo seed content for the beta — a small, warm, blind-first community, so the
+// app can be tested with realistic voices instead of an empty timeline.
+//
+// `text` is what gets spoken (and becomes the clean transcript). `machineError`,
+// when present, is a slightly-wrong "machine transcript" so the correction UI
+// (machine text vs. corrected) is exercised — the spoken audio always matches
+// the clean `text`. Fictional people; clearly demo data.
+
+export const users = [
+  { handle: "mariam", name: "Mariam Khoury", voice: "Samantha" },
+  { handle: "deepak", name: "Deepak Rao", voice: "Rishi" },
+  { handle: "lena", name: "Lena Fischer", voice: "Karen" },
+  { handle: "grace", name: "Grace Okafor", voice: "Moira" },
+  { handle: "tomas", name: "Tomás Vidal", voice: "Daniel" },
+  { handle: "noor", name: "Noor Haddad", voice: "Tessa" },
+  { handle: "sam", name: "Sam Whitfield", voice: "Fred" },
+];
+
+export const channels = [
+  { id: "main", name: "Main" },
+  { id: "morning", name: "Morning Check-in" },
+  { id: "books", name: "Book Club" },
+  { id: "tech", name: "Tech & Screen Readers" },
+  { id: "walks", name: "City Walks" },
+  { id: "kitchen", name: "Cooking by Ear" },
+];
+
+// hoursAgo spreads timestamps over ~9 days, most recent first when this list is
+// read bottom-up; the generator turns them into real createdAt values.
+export const memos = [
+  // --- Main ---
+  { handle: "grace", channelId: "main", hoursAgo: 210,
+    text: "There's a listening circle on Thursday evening. Bring a memo you love, we play them one after another and just talk. No cameras, no pressure." },
+  { handle: "sam", channelId: "main", hoursAgo: 176,
+    text: "First time posting. A friend told me about this place. A whole radio of voices, no likes to chase, no feed pulling you along. It already feels calm." },
+  { handle: "mariam", channelId: "main", hoursAgo: 5, liked: true,
+    text: "Just wanted to say the transcript correction is lovely. Fixed three of my old memos over coffee. Small thing, big difference." },
+
+  // --- Morning Check-in ---
+  { handle: "deepak", channelId: "morning", hoursAgo: 188, liked: true,
+    text: "Good morning from Pune. It's already warm, the fan's on. Slept badly but the chai helps. How's everyone waking up today?" },
+  { handle: "lena", channelId: "morning", hoursAgo: 140,
+    text: "Grey and drizzly in Hamburg. Kettle's on, and the cat has decided my lap is hers. A quiet start, and that's alright." },
+  { handle: "grace", channelId: "morning", hoursAgo: 92,
+    text: "Slow morning here. I put the radio on and listened to yesterday's memos while I made breakfast. A nice way to not feel alone at six in the morning." },
+  { handle: "noor", channelId: "morning", hoursAgo: 3, liked: true,
+    text: "Big day. First day back at work after a month off. Nervous, but the good kind. Wish me luck.",
+    machineError: "Big day. First day back at work after a month of. Nervous, but the good kind. Wish me look." },
+
+  // --- Book Club ---
+  { handle: "mariam", channelId: "books", hoursAgo: 160, liked: true,
+    text: "Finished the audiobook of Piranesi last night. That echoing, tidal quality in the narration. I don't think it would land the same in print. Anyone else read it?" },
+  { handle: "tomas", channelId: "books", hoursAgo: 120,
+    text: "Three hours into a twenty-hour history of the Silk Road. Dense, but the narrator has this warm, unhurried voice. Perfect for long walks." },
+  { handle: "lena", channelId: "books", hoursAgo: 40,
+    text: "A small question. Does anyone have a narrator they'd follow into any book at all? For me it's anyone who doesn't rush the quiet parts." },
+
+  // --- Tech & Screen Readers ---
+  { handle: "deepak", channelId: "tech", hoursAgo: 150, liked: true,
+    text: "Quick tip. On the latest VoiceOver you can assign a custom rotor action to almost any app shortcut now. Took five minutes, saves me dozens of swipes a day.",
+    machineError: "Quick tip. On the latest voice over you can assign a custom roto action to almost any app shortcut now. Took five minutes, saves me dozens of swipes a day." },
+  { handle: "sam", channelId: "tech", hoursAgo: 70,
+    text: "Struggling with a banking app that fights the screen reader on every screen. If anyone's found a bank that actually labels its buttons, I'm all ears." },
+  { handle: "noor", channelId: "tech", hoursAgo: 22,
+    text: "You don't owe any company free accessibility testing. But if you do report a bug, be specific. The send button is unlabelled on the compose screen gets fixed faster than it's broken." },
+
+  // --- City Walks ---
+  { handle: "tomas", channelId: "walks", hoursAgo: 130, liked: true,
+    text: "Walked the canal path this morning. They've finally put tactile paving at the bridge crossing. Such a difference not having to hunt for the kerb with my cane." },
+  { handle: "grace", channelId: "walks", hoursAgo: 58,
+    text: "There's a bakery three streets over you can find by smell alone about a block out. Cardamom buns today. Worth the detour." },
+  { handle: "mariam", channelId: "walks", hoursAgo: 12,
+    text: "Note for anyone nearby. The crossing by the library has a broken audible signal again. I've reported it. Take care there for now." },
+
+  // --- Cooking by Ear ---
+  { handle: "lena", channelId: "kitchen", hoursAgo: 100, liked: true,
+    text: "A sheet-pan trick for doneness without sight. Listen for the sizzle. When the fast crackle slows and goes quiet, that's your cue to check. Works every time." },
+  { handle: "noor", channelId: "kitchen", hoursAgo: 48,
+    text: "Made my grandmother's lentil soup tonight. I measure the spices in my palm the way she taught me. No scale, just memory and smell. It tasted right." },
+  { handle: "deepak", channelId: "kitchen", hoursAgo: 8,
+    text: "Does anyone have a reliable way to tell when the rice is done by ear or smell rather than the timer? Mine is hit and miss." },
+];

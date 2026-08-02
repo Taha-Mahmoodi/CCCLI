@@ -1,0 +1,35 @@
+# Build artifacts
+*.o
+*.a
+*.so
+*.elf
+*.hex
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+*.log
+
+# Arduino
+build/
+dist/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Firmware artifacts
+*.ino.standard.hex
+*.ino.eep

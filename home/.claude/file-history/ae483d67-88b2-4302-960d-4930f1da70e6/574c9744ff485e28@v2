@@ -1,0 +1,35 @@
+// Transcription pipeline: language identification (LID) BEFORE ASR — a
+// mandatory step (spec §8.3): ASR is measurably biased, so routing everything
+// through one English model systematically mis-transcribes the users the
+// platform most needs to serve.
+//
+// ponytail: real ASR (self-hosted Whisper large-v3 via faster-whisper on GPU,
+// whisper.cpp for batch) is wired at deploy. This stub keeps the pipeline shape
+// identical so the swap is a one-file change. For TTS memos the source text is
+// authoritative and never machine-guessed.
+
+export interface TranscriptionInput {
+  audio: Uint8Array;
+  mime: string;
+  hintLang?: string; // client already ran LID (voice picker / locale)
+  sourceText?: string; // present for typed/TTS memos
+}
+
+export interface TranscriptionResult {
+  lang: string;
+  text: string;
+  engine: string;
+  confidence: number;
+  isMachine: boolean;
+}
+
+export type Transcriber = (input: TranscriptionInput) => Promise<TranscriptionResult>;
+
+export const stubTranscriber: Transcriber = async (input) => {
+  const lang = input.hintLang && input.hintLang.trim() ? input.hintLang.trim() : "und";
+  if (input.sourceText && input.sourceText.trim()) {
+    return { lang, text: input.sourceText.trim(), engine: "tts-source", confidence: 1, isMachine: false };
+  }
+  // No real ASR in this environment — empty machine transcript, honestly labeled.
+  return { lang, text: "", engine: "stub", confidence: 0, isMachine: true };
+};

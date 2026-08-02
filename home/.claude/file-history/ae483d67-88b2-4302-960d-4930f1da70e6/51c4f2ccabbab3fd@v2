@@ -1,0 +1,37 @@
+# apps/android — Third Eye World (Android)
+
+Native Android app (spec §6), **Kotlin + Jetpack Compose** (not cross-platform —
+screen-reader fidelity is the product).
+
+## Verified here
+
+`core/` — the shared **logic**, a faithful Kotlin port of the web/iOS engine
+(`RadioEngine`: record → radio → per-station queue → shuffle → the-stream-ends,
+transcript correction that never overwrites machine text, playback speed).
+Compile-verified with kotlinc + a JVM self-check (no Android SDK/emulator):
+
+```bash
+cd apps/android/core
+kotlinc src/main/kotlin -include-runtime -d core.jar
+java -jar core.jar            # → "✓ 19 AndroidCore checks passed"
+```
+
+Runs in CI on its own `android-core` job (Linux: install JDK + Kotlin, compile,
+run). The engine is byte-for-byte the same behavior as web (41 tests) and iOS
+(`ThirdEyeCore`, 19 checks).
+
+## Needs the Android SDK (designed)
+
+The Jetpack Compose UI + platform wiring, which need the Android SDK + Gradle to
+build and an emulator/device (with TalkBack) to verify — downloads this
+environment can't complete:
+
+- Full **TalkBack** labelling + custom actions — the screen-reader route (§6.3).
+- **Media3 `MediaSessionService`** (auto-creates the notification); foreground
+  service `type=mediaPlayback`; `FOREGROUND_SERVICE_MEDIA_PLAYBACK` started
+  within 10 s or the app crashes (§6.3).
+- `AudioAttributes.CONTENT_TYPE_SPEECH` + `setWillPauseWhenDucked(true)` so a
+  memo pauses rather than being talked over by TalkBack (§6.4).
+
+The Compose screens mirror the verified engine (as the iOS SwiftUI screens do);
+only the Android toolchain + a device are missing here.

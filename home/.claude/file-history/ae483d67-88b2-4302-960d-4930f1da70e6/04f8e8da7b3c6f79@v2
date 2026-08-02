@@ -1,0 +1,43 @@
+import assert from "node:assert/strict";
+import { createParty, publishBundle, startSession, encrypt, decrypt } from "./src/signal-dm.mjs";
+
+// Assert-based self-check of REAL libsignal E2EE (no test framework needed).
+let n = 0;
+const check = (cond, msg) => {
+  assert.ok(cond, msg);
+  n++;
+};
+
+// --- Roundtrip: Alice → Bob (first message is a PreKey message) ---
+const alice = createParty("alice");
+const bob = createParty("bob");
+await startSession(alice, bob.address, await publishBundle(bob));
+
+const msg = "meet me at the old radio tower at five";
+const box = await encrypt(alice, bob.address, msg);
+check(box.type === 3, "first message is a PreKey message (type 3)");
+check((await decrypt(bob, alice.address, box)) === msg, "Bob decrypts Alice's message exactly");
+
+// --- Ratcheted follow-up (type 2 / Whisper) ---
+const box2 = await encrypt(alice, bob.address, "and bring the tapes");
+check((await decrypt(bob, alice.address, box2)) === "and bring the tapes", "ratcheted follow-up decrypts");
+
+// --- Bidirectional: Bob → Alice ---
+const reply = await encrypt(bob, alice.address, "on my way");
+check((await decrypt(alice, bob.address, reply)) === "on my way", "reply decrypts (bidirectional)");
+
+// --- Integrity: a tampered ciphertext is rejected ---
+const a2 = createParty("alice");
+const b2 = createParty("bob");
+await startSession(a2, b2.address, await publishBundle(b2));
+const tampered = await encrypt(a2, b2.address, "secret");
+tampered.ciphertext[tampered.ciphertext.length - 1] ^= 0xff;
+let threw = false;
+try {
+  await decrypt(b2, a2.address, tampered);
+} catch {
+  threw = true;
+}
+check(threw, "a tampered ciphertext is rejected");
+
+console.log(`✓ ${n} real-libsignal E2EE checks passed`);

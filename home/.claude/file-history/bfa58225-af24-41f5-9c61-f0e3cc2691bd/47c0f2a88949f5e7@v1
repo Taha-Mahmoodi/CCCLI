@@ -1,0 +1,88 @@
+import asyncio
+
+import pytest
+
+from app.core.jobs import JobRunner
+
+pytestmark = pytest.mark.asyncio
+
+
+async def test_run_awaits_the_registered_job():
+    runner = JobRunner()
+    calls = []
+
+    async def my_job():
+        calls.append("ran")
+
+    runner.register("my-job", my_job)
+    await runner.run("my-job")
+
+    assert calls == ["ran"]
+
+
+async def test_run_unregistered_job_raises_key_error():
+    runner = JobRunner()
+    with pytest.raises(KeyError):
+        await runner.run("nope")
+
+
+async def test_start_periodic_runs_job_repeatedly_then_stops_on_stop_all():
+    runner = JobRunner()
+    calls = []
+
+    async def tick():
+        calls.append("tick")
+
+    runner.register("tick", tick)
+    runner.start_periodic("tick", interval_seconds=0.01)
+
+    await asyncio.sleep(0.05)
+    await runner.stop_all()
+
+    ran_count = len(calls)
+    assert ran_count >= 2
+
+    await asyncio.sleep(0.05)
+    assert len(calls) == ran_count
+
+
+async def test_start_periodic_survives_a_job_that_always_raises():
+    runner = JobRunner()
+    calls = []
+
+    async def flaky():
+        calls.append("tick")
+        raise RuntimeError("transient db error")
+
+    runner.register("flaky", flaky)
+    runner.start_periodic("flaky", interval_seconds=0.01)
+
+    await asyncio.sleep(0.05)
+    task = runner._periodic_tasks[0]
+    await runner.stop_all()
+
+    # the loop must keep retrying after each failure, not die after the first
+    assert len(calls) >= 2
+    # stop_all()'s task.cancel() must still take effect on a live-but-flaky loop:
+    # the `except Exception` in _loop() must not be swallowing CancelledError too.
+    assert task.cancelled()
+
+
+async def test_stop_all_tolerates_a_task_already_dead_from_another_exception():
+    runner = JobRunner()
+
+    async def _dies_immediately():
+        raise RuntimeError("boom")
+
+    # Simulate a task that already finished with a non-CancelledError exception
+    # before stop_all() ever ran (e.g. some future job implementation that bypasses
+    # run()'s error handling entirely).
+    task = asyncio.create_task(_dies_immediately())
+    await asyncio.sleep(0.01)
+    assert task.done()
+
+    runner._periodic_tasks.append(task)
+
+    await runner.stop_all()
+
+    assert runner._periodic_tasks == []

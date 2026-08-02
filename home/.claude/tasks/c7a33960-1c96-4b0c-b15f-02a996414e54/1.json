@@ -1,0 +1,9 @@
+{
+  "id": "1",
+  "subject": "Task 1: check script",
+  "description": "scripts/check.sh — placeholder scan, resident budget, JSON validity, frontmatter, links, surface-class fork, Apple number pairs",
+  "activeForm": "Building check script",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

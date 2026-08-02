@@ -1,0 +1,8 @@
+{
+  "id": "50",
+  "subject": "SDD 2b3 Task 1: TagInput chip component",
+  "description": "Controlled chip input: add on Enter (deduped/trimmed), remove on click, disabled hides input/remove.",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

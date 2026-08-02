@@ -1,0 +1,70 @@
+package com.thirdeyeworld.core
+
+// The v1 first-run wizard's script, in core so web, iOS and Android teach the
+// same four moves in the same words — copy that drifts between platforms is how
+// an onboarding stops matching the app it onboards you to.
+//
+// A step with a `practice` prompt is hands-on: the user performs the action
+// before moving on. Practice is always optional to complete (every step is
+// skippable) — encouraging familiarity must never become a trap for someone who
+// cannot perform a given gesture.
+
+enum class OnboardingStepKind { WELCOME, LIKE, SKIP, LIKE_NEXT, RECORD, READY }
+
+data class OnboardingStep(
+    val kind: OnboardingStepKind,
+    val title: String,
+    val body: String,
+    /** Non-null when the step asks the user to try the action. */
+    val practice: String? = null,
+)
+
+val onboardingSteps: List<OnboardingStep> = listOf(
+    OnboardingStep(
+        kind = OnboardingStepKind.WELCOME,
+        title = "Welcome to Third Eye World",
+        body = "This is a voice-first place for blind and low-vision people — a stream of " +
+            "short voice memos, one card at a time. Let's learn the four moves. You can " +
+            "do each one by gesture, by button, or by screen reader — whatever suits " +
+            "you. Nothing here is timed, and you can skip any step.",
+    ),
+    OnboardingStep(
+        kind = OnboardingStepKind.LIKE,
+        title = "Like a memo",
+        body = "When a card is one you like, swipe it to the right. Or press the Like " +
+            "button. Or use the Like action in your screen reader.",
+        practice = "Try it now: like this practice card.",
+    ),
+    OnboardingStep(
+        kind = OnboardingStepKind.SKIP,
+        title = "Skip a memo",
+        body = "Not for you? Swipe left to skip it and move on. Or press the Skip button. " +
+            "Or use the Skip action in your screen reader.",
+        practice = "Try it now: skip this practice card.",
+    ),
+    OnboardingStep(
+        kind = OnboardingStepKind.LIKE_NEXT,
+        title = "Like and move on",
+        body = "To like a card and jump straight to the next, swipe right twice quickly. " +
+            "Or press the Like and next button, which has no timing at all.",
+        practice = "Try it now: like and go to the next.",
+    ),
+    OnboardingStep(
+        kind = OnboardingStepKind.RECORD,
+        title = "Record your own memo",
+        body = "To speak, press and hold the record button while you talk, then let go. If " +
+            "holding is hard, a single tap starts and stops it instead — both work.",
+        practice = "Try it now: press and hold, or tap, to practise.",
+    ),
+    OnboardingStep(
+        kind = OnboardingStepKind.READY,
+        title = "You're ready",
+        body = "That's everything: like, skip, like and move on, and record. Your stream " +
+            "always has an end — no endless scroll. Be kind here; this is a place to " +
+            "feel less alone.",
+    ),
+)
+
+/** Steps that ask the user to actually perform the action. */
+val onboardingPracticeSteps: List<OnboardingStep>
+    get() = onboardingSteps.filter { it.practice != null }

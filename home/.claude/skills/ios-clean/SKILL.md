@@ -1,0 +1,1 @@
+/Users/taha/.claude/skills/gstack/ios-clean/SKILL.md

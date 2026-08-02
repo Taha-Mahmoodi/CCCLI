@@ -1,0 +1,15 @@
+"use server";
+
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+
+// Mark every unread notification for the current user as read. The caller
+// refreshes the route so the nav badge and list update.
+export async function markAllNotificationsRead(): Promise<void> {
+  const session = await auth();
+  if (!session?.user) return;
+  await prisma.notification.updateMany({
+    where: { userId: session.user.id, read: false },
+    data: { read: true },
+  });
+}

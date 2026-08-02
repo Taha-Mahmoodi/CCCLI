@@ -1,0 +1,29 @@
+## UI Slice 2b-5 — Note rename + delete
+
+Edit-capable users can now rename or delete a note directly from the file-tree sidebar.
+
+### What's in
+- **`renameNote`/`deleteNote` API** + **`useRenameNote`/`useDeleteNote`** hooks (both invalidate `['vault-tree', …]` so the sidebar refreshes).
+- **`NoteActions`** (per note): inline **rename** (name-only, slug-validated client-side; the server keeps the type and recomputes the path) and a two-step **delete** confirm (soft-delete/trash). Errors (409 collision / 400 invalid) surface via the shared `FormError` (`role="alert"`).
+- **`FileTree`** gains a `canEdit` prop; `VaultLayout` passes `canEdit(vault?.access)` — so read-only collaborators get no rename/delete affordances.
+- If the affected note is the one currently open, the editor navigates: to the new path on rename, to the vault root on delete.
+
+### Grounded in the real backend
+`POST /vaults/:id/notes-rename {from,to}` (name-only, `edit`-gated, 409/400/404) and `DELETE /vaults/:id/notes/*` (soft-delete, `edit`-gated).
+
+### ⚠️ Reviewer verdict + how it was resolved (please glance at this)
+The independent opus whole-branch review returned **Ready-to-merge: No** with a **Critical**: it argued `useParams()['*']` would be `undefined` where `NoteActions` mounts (in `VaultLayout`, the parent `/vaults/:vaultId` route, while the `*` splat lives on the child `notes/*` route), making the navigate-on-open-note branch dead code.
+
+**This was refuted empirically.** A probe replicating the exact real topology — `FileTree`/`NoteActions` in the parent route's element (sibling to `<Outlet>`), splat on the child — shows `useParams()['*'] === 'people/jane'` at `/vaults/v1/notes/people/jane`. React Router resolves the child's splat from the parent element via the `Outlet`; the reviewer mis-read the source (runtime behavior wins). **Production code is unchanged because it's correct.** The probe is now a permanent regression guard (`FileTree.test.tsx` — "renaming the currently-open note navigates the editor to the new path"), which would fail if `isOpen` ever stopped resolving.
+
+The reviewer's one *valid* point — that the original navigate tests mounted the component directly on the splat route rather than the real parent/child topology — is what that new guard fixes.
+
+### Out of scope / carried (non-blocking)
+Changing a note's type / moving between types, trash-restore UI, live-preview, wikilinks. Carried minors: rename input default not resynced on an external tree refetch (component is keyed by `note.id`, narrow); no client max-length check (server 400 surfaces); rename allows an unchanged-name no-op.
+
+### Verification
+`pnpm typecheck` (client + server), `pnpm lint` (0), **84 client tests**, `pnpm -C client build` — all green.
+
+Targets `dev` directly. Backend follow-up #66 (updateNote race) remains open.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)

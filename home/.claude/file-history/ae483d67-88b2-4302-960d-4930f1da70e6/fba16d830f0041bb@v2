@@ -1,0 +1,245 @@
+"use client";
+
+// Accessible moderator console (spec §9). The moderators are blind, so this
+// must be as accessible as the product: keyboard- and screen-reader-complete,
+// audio review via native controls (not drag-only scrubbing), every decision
+// explicit with a rationale. Talks to @tew/api.
+
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import {
+  API_BASE,
+  fetchQueue,
+  setModeratorToken,
+  submitDecision,
+  subscribeToken,
+  tokenServerSnapshot,
+  tokenSnapshot,
+  type QueueItem,
+} from "@/lib/api";
+import { announce } from "@/lib/a11y";
+import { Button } from "@/components/ui/button";
+
+const ACTIONS = [
+  { value: "keep", label: "Keep — no violation" },
+  { value: "limit", label: "Limit reach" },
+  { value: "remove", label: "Remove" },
+];
+const RATIONALES = ["ok", "spam", "harassment", "off-topic", "safety", "other"];
+
+function dueLabel(ms: number | null): string {
+  if (!ms) return "";
+  const mins = Math.round((ms - Date.now()) / 60000);
+  if (mins <= 0) return "SLA overdue";
+  if (mins < 60) return `SLA in ${mins} min`;
+  return `SLA in ${Math.round(mins / 60)} h`;
+}
+
+export function ModeratorConsole() {
+  const currentToken = useSyncExternalStore(subscribeToken, tokenSnapshot, tokenServerSnapshot);
+  const hasToken = !!currentToken;
+  const [token, setTokenState] = useState("");
+  const [items, setItems] = useState<QueueItem[]>([]);
+  const [state, setState] = useState<"idle" | "unauthorized" | "offline" | "ready">("idle");
+
+  const load = useCallback(async () => {
+    // no synchronous setState before the await — keeps the mount effect clean
+    const res = await fetchQueue("open");
+    if (res.ok) {
+      setItems(res.items);
+      setState("ready");
+      announce(`${res.items.length} report${res.items.length === 1 ? "" : "s"} awaiting review.`);
+    } else if (res.status === 401) {
+      setState("unauthorized");
+    } else {
+      setState("offline");
+    }
+  }, []);
+
+  // Load whenever a token becomes present (initial mount or after sign-in).
+  // This is a legitimate client-only, token-gated fetch; load()'s setState is
+  // post-await, so there's no synchronous cascade (the rule is a false positive).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (hasToken) void load();
+  }, [hasToken, load]);
+
+  const signIn = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!token.trim()) return;
+    setModeratorToken(token.trim()); // notifies useSyncExternalStore → effect loads
+  };
+
+  const decide = async (report: QueueItem, action: string, rationaleCode: string) => {
+    const ok = await submitDecision(report.id, action, rationaleCode);
+    if (ok) {
+      setItems((prev) => prev.filter((r) => r.id !== report.id));
+      announce(`Decision recorded: ${action}. It is disclosed to the reported user with a reason.`, true);
+    } else {
+      announce("Could not record the decision. Please try again.", true);
+    }
+  };
+
+  return (
+    <div className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-5 py-8 pb-40">
+      <div className="flex flex-col gap-2">
+        <h1 id="page-title" className="text-2xl font-semibold tracking-tight">
+          Moderation queue
+        </h1>
+        <p className="text-muted-foreground">
+          Every decision is disclosed to the reported user with a reason and a route to appeal.
+          Appeals go to a different reviewer.
+        </p>
+      </div>
+
+      {(!hasToken || state === "unauthorized") && (
+        <form onSubmit={signIn} className="flex flex-col gap-3 rounded-2xl border border-border p-6">
+          <label htmlFor="mod-token" className="font-medium">
+            Moderator access token
+          </label>
+          {state === "unauthorized" && (
+            <p role="alert" className="text-sm text-destructive">
+              That token was not accepted. Check it and try again.
+            </p>
+          )}
+          <input
+            id="mod-token"
+            type="password"
+            autoComplete="off"
+            value={token}
+            onChange={(e) => setTokenState(e.target.value)}
+            className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          />
+          <Button type="submit" className="h-11 self-start px-5">
+            Sign in
+          </Button>
+        </form>
+      )}
+
+      {hasToken && state === "idle" && (
+        <p className="text-sm text-muted-foreground" role="status">
+          Loading the queue…
+        </p>
+      )}
+
+      {state === "offline" && (
+        <p role="alert" className="rounded-xl border border-dashed border-border p-6 text-sm text-muted-foreground">
+          Can’t reach the moderation API at {API_BASE}. Start it with{" "}
+          <code>pnpm --filter @tew/api start</code>.
+        </p>
+      )}
+
+      {hasToken && state === "ready" && items.length === 0 && (
+        <p className="rounded-2xl border border-dashed border-border p-8 text-center text-muted-foreground">
+          The queue is clear. Nothing awaiting review.
+        </p>
+      )}
+
+      {hasToken && items.length > 0 && (
+        <ul className="flex flex-col gap-4">
+          {items.map((r, i) => (
+            <li key={r.id}>
+              <ReportCard report={r} index={i} onDecide={decide} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function ReportCard({
+  report,
+  index,
+  onDecide,
+}: {
+  report: QueueItem;
+  index: number;
+  onDecide: (r: QueueItem, action: string, rationale: string) => void;
+}) {
+  const [action, setAction] = useState("keep");
+  const [rationale, setRationale] = useState("ok");
+  const transcript = report.target?.transcript?.text?.trim();
+
+  return (
+    <section
+      aria-labelledby={`report-${report.id}`}
+      className="flex flex-col gap-3 rounded-2xl border border-border p-5"
+    >
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 id={`report-${report.id}`} className="text-lg font-semibold">
+          Report {index + 1}
+        </h2>
+        <span className="text-sm text-muted-foreground">{dueLabel(report.slaDueAt)}</span>
+      </div>
+
+      <p className="text-sm">
+        <span className="text-muted-foreground">Reported {report.targetType} · reason: </span>
+        {report.reason || "not given"}
+      </p>
+
+      {report.target && (
+        <div className="flex flex-col gap-2 rounded-xl bg-muted/40 p-3">
+          <audio controls preload="none" className="w-full" src={`${API_BASE}${report.target.audioUrl}`}>
+            Your browser does not support audio playback.
+          </audio>
+          <p className="text-sm">
+            {transcript ? (
+              <>
+                <span className="text-muted-foreground">Transcript: </span>
+                {transcript}
+              </>
+            ) : (
+              <span className="text-muted-foreground">No transcript — review by audio.</span>
+            )}
+          </p>
+        </div>
+      )}
+
+      <form
+        className="flex flex-col gap-3 sm:flex-row sm:items-end"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onDecide(report, action, rationale);
+        }}
+      >
+        <div className="flex flex-col gap-1">
+          <label htmlFor={`action-${report.id}`} className="text-sm font-medium">
+            Decision
+          </label>
+          <select
+            id={`action-${report.id}`}
+            value={action}
+            onChange={(e) => setAction(e.target.value)}
+            className="h-11 rounded-xl border border-border bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            {ACTIONS.map((a) => (
+              <option key={a.value} value={a.value}>
+                {a.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label htmlFor={`rationale-${report.id}`} className="text-sm font-medium">
+            Rationale
+          </label>
+          <select
+            id={`rationale-${report.id}`}
+            value={rationale}
+            onChange={(e) => setRationale(e.target.value)}
+            className="h-11 rounded-xl border border-border bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+          >
+            {RATIONALES.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </div>
+        <Button type="submit" className="h-11 px-5">
+          Record decision
+        </Button>
+      </form>
+    </section>
+  );
+}

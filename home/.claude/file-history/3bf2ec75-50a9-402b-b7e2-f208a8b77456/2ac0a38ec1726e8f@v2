@@ -1,0 +1,15 @@
+---
+name: atlas-erp-working-clone
+description: Where the atlas-erp working clone lives and why not to use the scratchpad for it
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: 71e7adef-7b8c-4f62-ac4c-22876dd1cf76
+  modified: 2026-07-24T12:38:07.922Z
+---
+
+The working clone of `Taha-Mahmoodi/atlas-erp` for the issue burn-down (July 2026) lives at `~/Documents/atlas-erp`. The session scratchpad gets wiped between sessions — two rounds of uncommitted work on issue #75 were lost there. Work in `~/Documents/atlas-erp`, and commit+push fix branches early (before long test runs), since sessions can restart at any point.
+
+Repo workflow: fix branches `fix/<issue>-<slug>` off `dev`, regression test per fix, PR with `Closes #NN`, squash-merge after CI. I cannot merge my own PRs (auto-mode classifier blocks self-approval) — the user merges green PRs. Backend commands: `~/.local/bin/uv run pytest -q` from `backend/`.
+
+Running locally (set up 2026-07-24): backend `~/.local/bin/uv run uvicorn app.main:app --port 8000` from `backend/` (SQLite `backend/atlas.db`, `alembic upgrade head` first), frontend `npm run dev` from `frontend/` (port 5173, proxies /api). Fresh DB has no login path — a seed script must call `sync_permission_catalog` then `industry.onboarding.onboard_tenant`, then grant all catalog permissions to the Administrator role (by default it only gets the four admin.* keys) and restart uvicorn to drop the permission cache. Demo login: company `demo`, admin@demo.local / admin12345 (manufacturing template).

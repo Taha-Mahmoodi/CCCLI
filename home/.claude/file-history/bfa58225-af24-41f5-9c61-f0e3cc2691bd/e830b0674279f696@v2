@@ -1,0 +1,15 @@
+---
+name: loop-background-workflow-limitation
+description: "In this local /loop session environment, backgrounded Workflow() calls die across a ScheduleWakeup boundary — run substantive multi-step work inline instead"
+metadata: 
+  node_type: memory
+  type: feedback
+  originSessionId: bfa58225-af24-41f5-9c61-f0e3cc2691bd
+  modified: 2026-07-19T08:21:26.327Z
+---
+
+A `Workflow()` call backgrounded inside a `/loop` dynamic-mode iteration does not survive to the next wakeup in this local CLI session: the underlying process appears to cycle between turns, and any workflow with real work in flight (agent_count > 0) gets killed and reports "stopped ... previous process exited" on the next check-in. A workflow that completes instantly (e.g. an immediate arg-validation error) survives fine — it's specifically long-running background work that dies.
+
+**Why:** Confirmed empirically 2026-07-19 on the `atlas tracking` field-force-app research task — two consecutive `Workflow({name: 'deep-research', ...})` launches inside a `/loop [auto]` iteration were killed mid-run (agent_count: 0 both times, nothing ever cached), while a resume call with no real work completed in 10ms. This isolates the cause to the background-worker-vs-session-boundary interaction, not the resume mechanism or the args.
+
+**How to apply:** When a `/loop` (especially `[auto]`, self-paced/dynamic mode) iteration needs to do substantive multi-step research or multi-agent work, don't hand it to `Workflow()` in the background and schedule a long wakeup to wait for it — do the work inline in the same turn instead (e.g. direct WebSearch/WebFetch calls, or a synchronous `Agent()` call with `run_in_background: false`). Reserve backgrounded `Workflow()`/`Agent()` for cases where the user is actively driving the session turn-by-turn (not a self-paced loop crossing wakeup boundaries), or suggest a cloud `/schedule` job instead if the work genuinely needs to survive across session restarts.

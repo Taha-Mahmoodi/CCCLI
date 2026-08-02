@@ -1,0 +1,147 @@
+# Third Eye AI — Conversational Layer: Minimal Viable Spec & Decision Gates
+
+**Author:** Said Mohaddes Sadeqi
+**Affiliation:** Third Eye Worldwide
+**Date:** July 2026
+
+## Abstract
+
+*Engineering specification. Target: a working prototype in 2–3 weeks. Not a research paper, not a survey, not a committee document.*
+
+**Bottom line:** The smallest real prototype is a voice-in/voice-out assistant a blind user can run end-to-end without a screen, handling three tasks at sub-1.5 s median latency — and the fastest buildable way to get there is a **hybrid pipeline (open-source faster-whisper STT + a proprietary LLM behind a swap-friendly interface + open-source Piper TTS), orchestrated with Pipecat**, with the fully-open Kyutai Unmute stack tracked as the migration target. Five concrete decision gates, resolvable in about two weeks, unlock the build.
+
+---
+
+## TL;DR
+
+- **What to build:** A screen-free voice assistant that captures speech → reasons with an LLM → speaks back, for exactly three tasks, at median voice-to-voice latency under ~1.5 s (target under 1 s), with barge-in, adjustable speech rate, and voice-only error recovery. Nothing else.
+- **What to build it on:** A **Pipecat-orchestrated hybrid** — faster-whisper (open) + a proprietary LLM behind an OpenAI-compatible endpoint (swappable) + Piper (open, MIT). This gives near-zero per-interaction cost, full control of the blind-critical voice I/O layer, and a one-config path to a fully-open stack (Kyutai Unmute) later. Avoid the fully-managed Deepgram/ElevenLabs and OpenAI Realtime options for the MVP — they are faster/nicer but proprietary top-to-bottom and cost roughly $900–$3,000/month at modest scale.
+- **What unlocks building:** Five gates — lock the pipeline, pick the LLM, set the voice-UX contract *with the existing Herat community testers*, fix the three tasks, and define the demo bar — all timeboxed in days, not months.
+
+---
+
+## Key Findings
+
+1. **The pipeline is one system; only end-to-end latency matters to the user.** Human turn-taking gaps sit near 200 ms. Across multiple industry and psycholinguistic sources, 200–500 ms feels natural, 500–800 ms is noticeable but acceptable, and beyond ~1 s conversation begins to feel broken. Sentence-boundary streaming (start TTS on the first finished sentence while the LLM still generates) is the single biggest latency lever and turns a 6–8 s cascade into a 1–2 s one on the same hardware.
+
+2. **A hybrid open/proprietary cascade is the sweet spot for a nonprofit blind-user product.** It keeps the *voice I/O layer* — the part that must be tuned specifically for blind users — fully open and under your control, while borrowing best-in-class reasoning cheaply and reversibly. Per-interaction cost is essentially just LLM tokens (a fraction of a cent), versus ~$0.03–$0.10/minute for the fully-managed and speech-to-speech options.
+
+3. **Blind users are "power users" of voice, not casual users — and the biggest, most-cited gaps are speed and verbosity control.** The accessibility literature (Abdolrahmani, Kuber & Branham 2018; Abdolrahmani et al. TACCESS 2019/2020; Branham & Mukkath Roy 2019) is explicit that commercial assistants are too verbose, too slow, and modeled on human-to-human conversation in ways that actively exclude blind users. This is the core reason a "sighted-default" voice assistant is not good enough.
+
+4. **Screen-based crutches must all be replaced by voice-native behaviors.** No "check the app," no visual confirmation, no silent status. Every confirmation, error recovery, and progress cue has to work through the one channel the user has.
+
+5. **The tempting scope traps are Kit sensor integration, multilingual support, and personalization/memory** — all should be deferred until the conversational loop demonstrably works.
+
+---
+
+## Details
+
+### Section 1 — Minimal Viable Spec (the smallest real thing)
+
+The MVP is a **voice-in, voice-out conversational assistant a blind user can operate end-to-end without ever touching a screen.** One wake action (button press or wake word), the user speaks, the assistant answers by voice, and the loop repeats. Nothing on screen is ever required to complete a task.
+
+**Must do:**
+- Full loop, hands-and-eyes free: capture speech → transcribe → reason with an LLM → speak the response.
+- Feel conversational: **median voice-to-voice under ~1.5 s, target under 1 s.**
+- Handle the **first three tasks only** (fixed at Gate 4), e.g. general Q&A, time/date/weather, and set a reminder/timer.
+- Let the user **interrupt (barge-in)** and ask it to **repeat, slow down, or stop.**
+- Recover from "I didn't catch that" entirely by voice — no visual fallback.
+- Confirm destructive/ambiguous actions by voice before acting.
+
+**Must NOT do (for the MVP):** no screen UI beyond a developer debug view; no Third Eye Kit sensor integration; no multilingual support (English only); no personalization, cross-session memory, or accounts; no offline guarantees.
+
+If it does the six "must do" items for three tasks, fully by voice, it counts as a genuine first prototype. Everything else is later.
+
+### Section 2 — Voice Pipeline Comparison (STT → LLM → TTS as one system)
+
+Cost is modeled at a **nonprofit-realistic scale of ~100 active users × ~10 one-minute interactions/day ≈ 30,000 interaction-minutes/month.** Streaming is assumed throughout.
+
+**Option A — Fully open-source self-hosted cascade (faster-whisper + Llama/Mistral via Ollama + Piper).**
+- *Latency:* ~1–2 s on a desktop GPU (RTX 3060 class) with streaming; ~5–8 s on a Raspberry Pi 5. Whisper "small" is the sweet spot — you rarely need large-v3 for an assistant.
+- *Cost:* No per-interaction fee; cost is a GPU host (cloud GPU ~$0.50–$5.00/hour, or a one-time ~$600–800 machine such as a Mac Mini or an RTX 3060 box).
+- *Voice quality:* Piper is fast and intelligible (MOS ~3.4, real-time on CPU, MIT license) but audibly below commercial TTS. Whisper real-world English WER ~8–12%.
+- *Open source:* 100%. Full data control, no lock-in — the best fit for the mandate.
+- *Tradeoffs:* You own all ops. Note the Coqui shutdown (Jan 2024): its best cloning model XTTS-v2 is non-commercial-licensed anyway, so use Piper (MIT) or Kokoro (Apache-2.0) for commercially-safe open TTS.
+
+**Option B — Hybrid: open STT/TTS + proprietary LLM (faster-whisper + Claude/GPT-class + Piper).**
+- *Latency:* ~1.5–2.5 s. Local STT/TTS are fast; the network hop to the LLM dominates.
+- *Cost:* Only the LLM is metered. At Claude Sonnet-class (introductory $2/$10 per 1M input/output through Aug 31 2026, reverting to standard $3/$15; Anthropic pricing docs) or GPT-5.4-class ($2.50/$15 per 1M), a tuned turn is a fraction of a cent → roughly **$50–$150/month** at our scale, dominated by system-prompt tokens. Prompt caching (~90% off cached input) is the main cost lever.
+- *Voice quality:* STT/TTS as Option A; reasoning best-in-class.
+- *Open source:* STT/TTS open; the "brain" proprietary but swappable.
+- *Tradeoffs:* Best reasoning at low cost with full voice-layer control; the LLM is a proprietary dependency you can later replace.
+
+**Option C — Managed cascade: Deepgram STT + Claude/GPT LLM + ElevenLabs TTS.**
+- *Latency:* Can hit sub-800 ms voice-to-voice with everything streaming. Deepgram Nova-3 streams in **under 300 ms** (Deepgram: "Sub 300 ms streaming latency"); ElevenLabs Flash v2.5 is **~75 ms model inference time only** ("generates speech in 75ms + application & network latency," per ElevenLabs docs — real time-to-first-audio is higher once network is added).
+- *Cost:* Deepgram streaming **$0.0077/min (≈$0.46/hr)** on Pay-As-You-Go (dropping to $0.0065/min on the Growth plan, per Deepgram's pricing page); ElevenLabs overage ~$0.12–$0.30 per 1,000 characters by tier; plus LLM tokens. Roughly $0.03–$0.08/min all-in → **~$900–$2,400/month** at 30k min. Most expensive per interaction.
+- *Voice quality:* Best-in-class. Deepgram Nova-3 reports **6.84% median WER streaming / 5.26% batch** (Deepgram Nova-3 benchmark).
+- *Open source:* None. Heavy vendor dependency.
+- *Tradeoffs:* Fastest, highest-quality, but proprietary end-to-end and most costly — a poor fit for the mandate except as a quality benchmark.
+
+**Option D — Unified speech-to-speech API (OpenAI Realtime / gpt-realtime).**
+- *Latency:* Best in class — OpenAI reports ~190–300 ms machine latency; independent tests measure ~300–500 ms end-to-end for short turns (rising to several seconds in long sessions). No STT-finalize or TTS-startup wait.
+- *Cost:* Per OpenAI, audio is priced per token equating to **~$0.06/min input and ~$0.24/min output**; gpt-realtime audio is $32/$64 per 1M tokens (May 2026). Real-world measured cost is **~$0.069/min** (HackerNoon analysis of 4,000 production sessions, post-caching) and **~$0.087/min average** across CallSphere's six verticals → **~$2,000–$3,000/month** at 30k min. System-prompt tokens re-charged each turn are the hidden cost; prompt caching is the main lever.
+- *Voice quality:* Excellent, emotion-preserving, with built-in turn-taking and barge-in.
+- *Open source:* None. Locked to OpenAI's STT, LLM, and TTS — no component swaps.
+- *Tradeoffs:* Simplest to build, lowest latency, but maximum lock-in and cost — violates the open-source mandate.
+
+**Option E — Open speech-to-speech / low-latency open stack (Kyutai Unmute + open LLM, or Moshi).**
+- *Latency:* Unmute wraps any text LLM with open low-latency STT/TTS; per the kyutai-labs/unmute README, **TTS latency drops from ~750 ms on a single L40S GPU to ~450 ms on Unmute.sh**, and docs cite **~450 ms response time in production.** Moshi (audio-native, full-duplex) achieves a **theoretical ~160 ms latency on an L4 GPU** (Stafford, "Shipping Real-Time Voice AI on AWS with Kyutai Unmute and Gemma 4," Apr 2026) but sacrifices tool use, reasoning depth, and LLM swappability.
+- *Cost:* Self-hosted GPU only — same profile as Option A.
+- *Voice quality:* Good, streaming, community-donated voices. Unmute is modular (swap the LLM freely); Moshi is a single model.
+- *Open source:* 100%. Unmute is the open analogue of the Realtime API.
+- *Tradeoffs:* Newer, thinner tooling than a mature cascade; more assembly than a managed API. Moshi loses function-calling.
+
+**Recommendation: build the MVP on Option B (hybrid), orchestrated with Pipecat.** It is the fastest path to a *good* prototype that respects the open-source spirit where it matters most for a blind-user product — the **voice I/O layer you fully control and tune** — while borrowing best-in-class reasoning cheaply and reversibly. The LLM sits behind an OpenAI-compatible endpoint, so swapping in a self-hosted open model (Option A/E) later is a config change, not a rewrite. It keeps per-interaction cost near-zero, avoids the lock-in and expense of Options C/D, and is more mature today than Option E. **Track Option E (Kyutai Unmute) as the fully-open migration target** once the conversational UX is nailed down. Use **Pipecat** (open-source Python, pipeline-of-processors, one-line component swaps, strong local-dev story) so STT/LLM/TTS are interchangeable from day one; LiveKit is the alternative if you later need WebRTC-native multi-participant infrastructure.
+
+### Section 3 — Voice Interface Requirements (blind-specific)
+
+A sighted-default assistant leans on a screen for confirmation, correction, and "check the app" fallbacks. For a blind user, **the voice channel is the only channel** — every crutch must become a voice-native behavior. Grounded in accessibility research:
+
+- **Latency & no dead air.** Sub-1.5 s median, and never leave silence. If the LLM or a tool call runs long, emit a short spoken filler ("one moment") — blind users interpret silence as failure and there is no spinner to see.
+- **Verbosity control — concise by default, expandable on demand.** Blind users repeatedly report commercial assistants as "too verbose, unnecessary, irrelevant" (Abdolrahmani et al. 2018). Default to short, get-to-the-point answers (the hours, not the full address), with a voice command to "tell me more," and confirm tersely ("OK, done") rather than reading everything back.
+- **Adjustable speech rate — the #1 cited gap.** Experienced screen-reader users listen at 300–500+ words/minute; the 2018 study found "VAPAs caused frustration when the user was forced to interact at a slower pace than desired, as the speed of information presented could not be easily controlled," and the TACCESS 2019/2020 paper concludes "the utility of VAPAs is hindered by an inability to adjust the speed of the voice." Ship voice-controlled "faster/slower" from day one.
+- **Interruption / barge-in.** The user must cut the assistant off mid-sentence and have it stop immediately — keep turn-detection active during playback. Power users don't wait out a response they've already understood.
+- **Confirmation without visual cues.** Destructive/ambiguous actions get spoken confirm-before-commit ("Send message to Sara — yes or no?"). Act only on high-ASR-confidence input; otherwise re-prompt with a short, specific question.
+- **Error recovery, voice-only.** No "check your screen." On low confidence, re-prompt concisely ("Did you say timer or alarm?"). Avoid the screen-reader trap the 2018 study documents — where fixing one word means re-dictating the whole message ("the time and cognitive effort needed to identify and correct errors in long messages"). Support targeted correction by voice.
+- **Ambient noise from mobility contexts.** Users may be walking near traffic. Use adaptive VAD (raise/lower the barge-in threshold to the user's baseline volume), semantic turn detection over fixed silence timeouts, and client-side echo cancellation so the assistant doesn't interrupt itself. Keep responses short so continuous speech never masks safety-critical environmental sound.
+- **Response pacing & cognitive load.** Audio is serial and non-persistent — the user can't glance back. Front-load the answer, chunk long content into short segments with natural pauses, and offer "next"/"repeat" navigation instead of one long monologue.
+
+### Section 4 — The Decision Gates (in order, before building)
+
+Five concrete choices, each with what's needed and a realistic timebox. Total ≈ **2 weeks**, running partly in parallel, leaving the rest of the 2–3 week window to build.
+
+**Gate 1 — Lock the pipeline architecture. (2–3 days)** *Decide:* confirm Option B on Pipecat, STT/LLM/TTS behind swappable interfaces. *Need:* a one-day latency spike — wire faster-whisper + one LLM + Piper in Pipecat and measure real voice-to-voice on target hardware; confirm under 1.5 s median with streaming. *What changes it:* if you can't get under ~2 s on available hardware, drop a managed component (Deepgram or ElevenLabs) into the slow stage.
+
+**Gate 2 — Pick the LLM. (2–3 days, parallel with Gate 1)** *Decide:* which model is the "brain" (Claude Sonnet-class, GPT-class, or a self-hosted open model). *Need:* run the three candidate tasks through 2–3 models; score conciseness, instruction-following for terse voice output, and tool-call reliability. Verbosity controllability is primary; cost is secondary at MVP scale. *What changes it:* if an open model (Llama/Mistral/Qwen class) hits acceptable quality on the three tasks, prefer it to advance the open-source goal.
+
+**Gate 3 — Set the voice-UX contract. (3–4 days)** *Decide:* concrete rules for default verbosity, speech-rate commands, barge-in behavior, confirmation phrasing, and error re-prompts (Section 3 turned into an implementable spec). *Need:* a short working session with the **blind community members already engaged with Third Eye** (the Kit v1 field testers in Herat) — not a new panel. Read 3–4 scripted dialogues aloud and have them react; set default speech rate, how terse "terse" is, and confirmation wording. *What changes it:* their preference on verbosity/pacing overrides any default; if they want a different first-task set, feed it to Gate 4.
+
+**Gate 4 — Fix the first three tasks. (1–2 days)** *Decide:* the exact three end-to-end tasks (e.g. general Q&A, time/weather, reminders/timers). *Need:* pull from what the existing community actually asks for; pick three that are genuinely useful, doable with the LLM plus at most one simple tool, and demoable in one breath. *What changes it:* drop any task needing a tool integration you can't stand up in the build window; defer it.
+
+**Gate 5 — Define "good enough" / the demo bar. (1 day)** *Decide:* pass/fail metrics — median voice-to-voice latency, task-completion rate fully by voice, and a subjective "usable" thumbs-up from community testers. *Need:* agree numeric thresholds up front (e.g. <1.5 s median latency; 3/3 tasks completable eyes-free; barge-in and speech-rate commands both working). *What changes it:* missing the latency bar → revisit Gate 1; missing the usability bar → revisit Gate 3.
+
+### Section 5 — What NOT to Build Yet
+
+1. **Third Eye Kit sensor integration.** The single biggest scope trap. Describing surroundings and confirming navigation from sensor data is a whole second system. Prove the conversational loop first; wire in the Kit only after the voice UX is solid.
+2. **Multilingual support.** Ship one language. Whisper and the LLMs are multilingual so this looks free, but every added language multiplies testing, prompt-tuning, TTS-voice, and community-feedback surface. Add languages after the English prototype works, informed by the Third Eye Language work.
+3. **Personalization / memory / accounts.** Cross-session memory, profiles, and adaptive behavior add state, storage, and privacy scope. Keep the MVP stateless and identical for everyone. Remembered preferences (especially preferred speech rate and verbosity) should be the *first* enhancement after MVP — but not before. Likewise, defer automatic behavioral adaptation of speech rate/verbosity (as in the AURA line of research); start with explicit user commands.
+
+---
+
+## Recommendations
+
+**Now (this week):** Run Gates 1 and 2 in parallel. Stand up the Pipecat spike (faster-whisper "small" + one LLM behind an OpenAI-compatible endpoint + Piper) and measure real voice-to-voice latency on the hardware you actually have. In parallel, bench 2–3 LLMs on conciseness and terse instruction-following. **Threshold to proceed:** sub-1.5 s median latency with streaming and an LLM that reliably produces short, get-to-the-point answers.
+
+**Next (days 4–10):** Run Gate 3 with the existing Herat testers, then lock Gates 4 and 5. Turn Section 3 into a concrete voice-UX spec (default speech rate, verbosity default, barge-in, confirmation and error-reprompt wording) that the code implements. Fix the three tasks and the numeric demo bar.
+
+**Then (remaining build window):** Implement the three tasks against the frozen voice-UX contract, instrument per-stage and end-to-end latency, and demo to the community testers against the Gate 5 thresholds.
+
+**Thresholds that change the plan:** Can't hit ~2 s latency on available hardware → move the slowest stage to a managed component (Deepgram STT or ElevenLabs Flash TTS) as a temporary crutch. An open LLM matches the proprietary one on the three tasks → switch to it immediately to advance the open-source goal. Once the conversational UX is stable and validated → begin migrating the whole stack toward the fully-open Kyutai Unmute target (Option E).
+
+## Caveats
+
+- **Latency and cost figures are drawn from vendor docs and third-party 2025–2026 benchmarks and will vary with your hardware, network geography, prompt length, and audio conditions.** Treat every number here as a planning estimate to be replaced by your own Gate 1 measurement. In particular, ElevenLabs' "~75 ms" and OpenAI's "~190 ms" are model/machine figures that *exclude* network round-trips — real time-to-first-audio is higher.
+- **Vendor-published quality/latency numbers favor the vendor.** Deepgram's WER figures come from Deepgram; OpenAI's latency from OpenAI. Where possible, corroborating third-party measurements are cited (e.g. the HackerNoon 4,000-session cost analysis), but you should validate on your own audio and tasks.
+- **The accessibility findings come primarily from studies of commercial assistants (Siri, Alexa) with modest participant counts** (e.g. 14 blind interviewees in the 2018/2019 work). They are the best available evidence and point clearly at speed and verbosity control, but your Gate 3 session with real Third Eye community members is what should settle the actual defaults — this is the "built with, not for" principle in practice.
+- **"Third Eye Worldwide" as described in this task is distinct from the many unrelated "third eye for the blind" ultrasonic-cane student projects that dominate web search results.** No public technical documentation of Third Eye Worldwide's internal projects (the WEIRD paper, Kit v1 Herat trials, Third Eye Language) was available to verify against, so this spec relies on the context you provided for those references.
+- **Model names and prices move fast.** Claude, GPT, Gemini, Llama, Deepgram, and ElevenLabs all shipped new versions and repriced during 2025–2026; re-check current rates and model IDs at Gate 2 before committing.

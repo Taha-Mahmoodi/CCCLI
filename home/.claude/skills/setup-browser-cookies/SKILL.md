@@ -1,0 +1,1 @@
+/Users/taha/.claude/skills/gstack/setup-browser-cookies/SKILL.md

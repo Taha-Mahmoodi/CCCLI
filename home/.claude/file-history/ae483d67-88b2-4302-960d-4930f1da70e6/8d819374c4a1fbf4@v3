@@ -1,0 +1,18 @@
+import type { NextConfig } from "next";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+const nextConfig: NextConfig = {
+  // Pin the workspace root so Turbopack stops inferring it from lockfiles.
+  turbopack: {
+    root: repoRoot,
+  },
+  // Standalone server for Docker: a minimal self-contained bundle. Trace from
+  // the monorepo root so workspace layout resolves inside the container.
+  output: "standalone",
+  outputFileTracingRoot: repoRoot,
+};
+
+export default nextConfig;

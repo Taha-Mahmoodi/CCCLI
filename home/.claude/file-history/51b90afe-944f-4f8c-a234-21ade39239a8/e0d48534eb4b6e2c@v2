@@ -1,0 +1,42 @@
+# Avaye Zaryab — Front-end
+
+The **Avaye Zaryab** (آوای زریاب) website: a Next.js front-end that renders content
+served by a headless WordPress backend, with motion built in via GSAP.
+
+> A [Cyborg Tech Creative Agency](https://github.com/CyborgTech-co) project.
+> Backend: [`zaryab_backend`](https://github.com/CyborgTech-co/zaryab_backend).
+
+---
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Framework | Next.js (App Router) |
+| UI | React |
+| Motion | GSAP (`@gsap/react`), react-fast-marquee |
+| Data | axios against the WordPress REST API |
+| Icons | react-icons |
+| Styling | Tailwind CSS |
+
+## Getting started
+
+```bash
+npm install
+npm run dev
+```
+
+Then open [http://localhost:3000](http://localhost:3000).
+
+Set the WordPress API base URL in the project's environment config so the
+front-end can reach the [`zaryab_backend`](https://github.com/CyborgTech-co/zaryab_backend)
+content API.
+
+## Scripts
+
+| Command | Does |
+|---|---|
+| `npm run dev` | Start the dev server |
+| `npm run build` | Production build |
+| `npm start` | Serve the production build |
+| `npm run lint` | Lint the project |

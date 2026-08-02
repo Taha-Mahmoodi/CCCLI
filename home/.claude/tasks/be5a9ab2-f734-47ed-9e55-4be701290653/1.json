@@ -1,0 +1,9 @@
+{
+  "id": "1",
+  "subject": "Phase 0: Backup &amp; pre-flight",
+  "description": "Fresh verified pg_dump of both DBs to /opt/lucifers-diary/seed-dumps/, record current commits of both checkouts as rollback refs.",
+  "activeForm": "Backing up DBs and recording rollback refs",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

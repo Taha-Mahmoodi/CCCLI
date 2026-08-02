@@ -1,0 +1,65 @@
+import Link from "next/link";
+import { Logo } from "@/components/shared/Logo";
+import { Container } from "@/components/shared/Container";
+import { t } from "@/lib/i18n";
+
+const GROUPS = [
+  {
+    headingKey: "footer.exploreHeading",
+    links: [
+      { href: "/", labelKey: "nav.home" },
+      { href: "/signin", labelKey: "nav.signIn" },
+      { href: "/signup", labelKey: "nav.signUp" },
+    ],
+  },
+  {
+    headingKey: "footer.listenersHeading",
+    links: [{ href: "/signup", labelKey: "marketing.becomeListener" }],
+  },
+] as const;
+
+/**
+ * Marketing footer — warm-ink band closing the page (DESIGN_SPEC_V2 §6).
+ * Deliberately small: main paths only, no link farm. The safety affordance
+ * lives in the persistent SafetyBanner, not here.
+ */
+export function MarketingFooter() {
+  return (
+    <footer className="bg-ink text-surface">
+      <Container className="flex flex-col gap-12 py-16 max-md:gap-9 max-md:py-12">
+        <div className="flex flex-wrap items-start justify-between gap-10">
+          <div className="flex max-w-sm flex-col gap-4">
+            <Logo height={40} tone="onPrimary" />
+            <p className="text-base leading-body text-surface/75">
+              {t("app.tagline")}
+            </p>
+          </div>
+          <div className="flex gap-16 max-sm:flex-col max-sm:gap-8">
+            {GROUPS.map((group) => (
+              <nav key={group.headingKey} aria-label={t(group.headingKey)}>
+                <h2 className="mb-3 font-body text-sm font-extrabold uppercase tracking-[0.14em] text-surface/60">
+                  {t(group.headingKey)}
+                </h2>
+                <ul className="flex flex-col gap-1">
+                  {group.links.map((link) => (
+                    <li key={link.labelKey}>
+                      <Link
+                        href={link.href}
+                        className="inline-flex min-h-11 items-center rounded-sm text-base font-semibold text-surface underline-offset-[3px] hover:underline"
+                      >
+                        {t(link.labelKey)}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+            ))}
+          </div>
+        </div>
+        <p className="border-t border-surface/15 pt-6 text-sm text-surface/60">
+          {t("footer.copyright", { year: String(new Date().getFullYear()) })}
+        </p>
+      </Container>
+    </footer>
+  );
+}

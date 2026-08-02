@@ -1,0 +1,7 @@
+from app.core.jobs import job_runner
+from app.main import create_app
+
+
+def test_create_app_registers_the_retention_job():
+    create_app()
+    assert "prune_old_pings" in job_runner._jobs

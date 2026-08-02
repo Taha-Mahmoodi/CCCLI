@@ -1,0 +1,243 @@
+# Direction — Said Mohaddes Sadeqi · sadeqi.me
+
+**Status: Loop 2a, pre-Gate-B1.** Three concepts below. One gets chosen, the rest of
+this file is completed in 2b.
+
+Reads from `BRIEF.md` § 9 translation table. Archetype **Outlaw / Caregiver**,
+"an argument delivered as an embrace."
+
+---
+
+## Fixed across all three concepts
+
+These come from the translation table and do not vary by concept.
+
+### Palette — sampled, literal AAA, both modes
+
+Sampled from a photograph of the **Hari Rud at Herat** (Wikimedia Commons,
+`Herat_Hari_Rud_bridge.jpg`), the river of the city where the subject's story starts.
+He asked for "the green colors of the rivers." Dominant cluster `#9FB4AD`, mean
+`#6C8474`. Pale mineral river-green, not eco-green, because that is what that river is.
+
+| Token | Dark (default) | Ratio | Light | Ratio |
+|---|---|---|---|---|
+| `--substrate` | `#0B0F0D` | — | `#F4F2EC` | — |
+| `--raised` | `#141A17` | — | `#E8E5DC` | — |
+| `--ink` (body) | `#F4F2EC` | 17.24:1 | `#0B0F0D` | 17.24:1 |
+| `--ink-dim` | `#C9CFCB` | 12.19:1 | `#2B443B` | 9.41:1 |
+| `--river` (accent) | `#9FB4AD` | **8.83:1** | `#375349` | **7.52:1** |
+| `--river-lift` (hover/focus) | `#B6C9C2` | 11.14:1 | `#2B443B` | 9.41:1 |
+| `--amber` (rare, second accent) | `#C99A56` | 7.57:1 | — | — |
+
+Every value clears **7:1 — literal WCAG AAA**, his explicit choice. Verified by
+computation, not by eye. Two art directions, not one inverted palette: dark is lit,
+light is printed.
+
+`--amber` is sampled from the golden-hour foliage in his own supplied photograph. It
+appears at most twice per page and never on a link.
+
+### Type
+
+Two families.
+
+- **Atkinson Hyperlegible** — body *and* display. Designed by the Braille Institute
+  for low-vision readers: disambiguated letterforms, exaggerated apertures, distinct
+  I/l/1 and O/0. Chosen because it is materially true rather than decorative — the
+  face on this site exists for the person the site is addressed to. Setting it at
+  display scale is the subversion; nobody uses it as a display face.
+- **IBM Plex Mono** — structural labels only: landmark names, status tags, focus-order
+  numbers, figures. Never body copy.
+
+Both self-hosted, subset, `font-display: swap` (`§9`). Site is English-only; if Dari
+or Persian is added later, Atkinson does not cover Arabic script and a second face is
+required (`§17`).
+
+### Banned outright (from anti-positioning)
+
+Logo wall. Badge row. Metric hero. Autoplay anything. Gradient mesh. Card grid by
+reflex. Inspiration framing. Overlay-widget aesthetics. Any version number or "beta
+built" claim on Third Eye World.
+
+### The audio rule, common to all three
+
+The voice greeting he asked for — *"welcome, you are not alone"* — is **offered, never
+fired.** No autoplay: browsers block it, and a page that talks over a screen reader is
+the exact failure this site argues against. It sits first in DOM order after the `h1`,
+as a real `<button>`, so a screen-reader user meets it immediately by traversal and a
+sighted user meets it as the first thing on the page. Recorded in his own voice, not
+synthesized. Transcript visible, not hidden.
+
+---
+
+## Concept 1 — OUTLINE  *(recommended)*
+
+### The collision
+
+> **The accessibility tree is the visible design** — the structure a screen reader
+> traverses is promoted to the artwork, and the sighted rendering is a treatment of
+> it rather than the other way round.
+
+**Structural parent:** an invented style, *Screen-reader-first / Outline* (below).
+**Surface parent:** Editorial print — generous measure, real hyphenation, warm
+substrate, marginalia. This is the Caregiver half, and it is what stops the structure
+reading as a devtools screenshot.
+
+### The invented style — *Outline*
+
+Named and specified per `STYLES.md` § guardrails ("the list is open").
+
+> Landmarks, heading levels, and focus order are the composition. Section boundaries
+> are drawn because they are real `<section>` elements with real labels. Heading rank
+> is expressed as an actual typographic scale, so `h2` and `h3` differ by more than
+> convention. The focus ring is a primary design element with its own art direction,
+> not a browser default someone forgot to remove. The skip link is not hidden — it is
+> among the largest elements on the first screen.
+> **Implies** semantic HTML rendered honestly, `:focus-visible` as a designed state,
+> a visible landmark map, monospace structure labels.
+> **Fails** as a devtools inspector panel when the typography is not beautiful enough
+> to carry it, or as a lecture when the labels explain themselves at the visitor.
+> **Right when** the subject's entire argument is that the non-visual layer deserves
+> to be the designed one — which is exactly `BRIEF.md` §4.
+
+### Opening move (first three seconds)
+
+Full-viewport, one sentence at display scale, set in the face built for low vision:
+
+> **it is ok if eyes are not at 100%**
+
+Beneath it, one control — *Listen* — and nothing else above the fold. No photo, no
+nav bar, no scroll cue. The page states its claim and offers the voice. A screen
+reader arriving here reads the `h1`, then immediately meets the button. A sighted
+visitor sees the same two objects. **Both audiences receive the same first screen in
+the same order.** That is the entire thesis, executed structurally rather than
+described.
+
+### How projects are presented
+
+Not cards. **A vertical index of numbered stops**, one per project, each carrying a
+plainly-stated status tag in mono: `SHIPPED 2022` · `REBUILDING` · `FOUNDER, NOT
+BUILDER` · `SPECIFICATION`. The proof rank is visible on the page. This is the
+anti-inflation position made into a visual system — the honest label is the design,
+and a recruiter reads the whole slate in one pass.
+
+### Navigation
+
+The heading outline itself, persistent in the left margin on desktop and as a real
+`<nav>` disclosure on mobile. It is simultaneously the table of contents, the landmark
+map, and the current-position indicator. Invented for this subject rather than a top
+bar: for a screen-reader user the outline *is* how the site is navigated, so making it
+visible hands the sighted visitor the same instrument.
+
+### Section list and order
+
+1. Hero — the claim and the Listen control
+2. What he stands for — three sentences, his own
+3. The proof — Third Eye Kit, 2022, real hardware photographs
+4. The active work — Third Eye World, and what broke
+5. The slate — all five projects with honest status
+6. Who he is — the photograph, the origin, plainly
+7. The ask — contact
+8. Footer — accessibility statement, attribution (`§19`)
+
+---
+
+## Concept 2 — FIELD REPORT
+
+### The collision
+
+> **A 2022 engineering proposal, grown up** — blueprint drafting convention carrying
+> the structure, risograph ink carrying the surface, so the site reads as a printed
+> technical document rather than a rendered page.
+
+**Structural parent:** Blueprint — dimension lines that measure real objects, section
+callouts, leader lines into annotations, a title block per sheet.
+**Surface parent:** Risograph — two spot inks (river green, amber), visible
+misregistration that drifts rather than repeats, halftone in the shadows, paper tooth.
+
+Defensible because he *has* the drawings: four real SVG schematics (system
+architecture, electronics wiring, exo state machine, haptic body map) plus a proposal
+PDF with genuine hardware photographs. The callouts annotate real work, which is the
+exact condition `STYLES.md` sets for blueprint not being decoration.
+
+### Opening move
+
+An engineering title block, full width, filled with true values: subject, project,
+sheet 1 of 7, revision, date, and the status field reading `IN REBUILD`. The Listen
+control sits in the title block as a field like any other.
+
+### How projects are presented
+
+**As drawing sheets.** Each project is a sheet with its own title block and status
+field; the specification-only projects are sheets stamped `SPECIFICATION — NOT BUILT`,
+which turns the weakest evidence into the most honest-looking object on the site.
+
+### Navigation
+
+A sheet index — the drawing-set convention, numbered, always visible.
+
+### Risk, stated
+
+It is about the hardware, and the hardware is his strongest evidence. But the thesis —
+sight is not required — becomes something the site *says* rather than something it
+*does*. It also concedes the competitive gap: it is a beautiful visual-first document,
+which is what all nine peers already ship.
+
+---
+
+## Concept 3 — THE ROUTE
+
+### The collision
+
+> **The site guides you the way his device guides someone** — wayfinding structure
+> carrying the bones, radical minimalism carrying the surface, so arriving somewhere
+> is the interaction model and there is nothing on screen that is not a landmark.
+
+**Structural parent:** Spatial wayfinding, flattened — sections are *places* with
+names, distances, and arrival states. Navigation is movement between them, announced.
+**Surface parent:** Radical minimalism — type and space only, no borders, no cards,
+one accent.
+
+Defensible because his hardware's literal job is navigation: ultrasonic distance,
+GPS, haptic guidance, "navigation was hard and required multiple gestures."
+
+### Opening move
+
+A single named place — `START` — and a distance to the next one. The Listen control
+announces where you are. Movement between places is a real route with a stated
+position, so a keyboard user and a screen-reader user get the *better* experience,
+not the equivalent one.
+
+### How projects are presented
+
+**As arrivals along a route**, in chronological order, with the distance between them
+stated in years. 2022 to now is short, and saying so is more honest than padding it.
+
+### Navigation
+
+The route itself. Previous place, current place, next place — always announced, always
+keyboard-driven.
+
+### Risk, stated
+
+`§7`. Wayfinding is memorable, and it can become more memorable than the case study it
+frames. It also risks the maze failure `STYLES.md` names for spatial work: a recruiter
+with four minutes must never have to *travel* to the evidence.
+
+---
+
+## Rejected, and why (`§4`)
+
+**"Waveform."** The site's entire visual language derived from audio and haptic
+signal traces — pulse patterns as rules, dividers, and heading underlines. Rejected on
+two counts. It is the category reflex: anything sound-adjacent reaches for a
+visualizer, and it would be guessable from "portfolio for someone who builds audio
+accessibility tools" alone. And the traces would be decorative rather than real — no
+signal logs exist in evidence — which is the precise failure `STYLES.md` names for
+data-brutalism and which `§5` bans in spirit.
+
+---
+
+## To be completed in 2b (post-B1)
+
+Technique assignment per section · motion spec · both performance budget tiers ·
+prototype results including failures · what was invented, final.

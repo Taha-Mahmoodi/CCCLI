@@ -1,0 +1,25 @@
+---
+name: chapters-project
+description: "Chapters — open-source second-brain platform, PIIIX-org/chapters; BACKEND COMPLETE incl. codebase mapping 2026-07-18, next is UI phase (page-by-page design first)"
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: f783c85b-a663-45f5-86bd-9f6de4e0011b
+  modified: 2026-07-18T12:09:03.940Z
+---
+
+Chapters is an open-source, self-hostable "second brain" / team knowledge platform: OKF markdown notes on disk, AI-navigable graph, real-time collab (Yjs), permission-scoped MCP, and (as of 2026-07-18) read-only codebase mapping — one graph/search/MCP engine spanning both notes and code. Repo: github.com/PIIIX-org/chapters. Local clone `~/Documents/chapters`.
+
+**Backend COMPLETE, all on `prod`.** Original 7 sub-projects + admin dashboard + MFA (2026-07-17). Then, after a full brainstorming session, two more sub-projects extending the platform to codebases (2026-07-18):
+- **Sub-project 8 — Repository ingestion & permissions**: new `Repository` entity mirroring Vault's owner/share pattern (simplified to owner/viewer, read-only). Three ingestion methods all converging on one sync/diff/hard-delete function: git (shallow clone + webhook/poll freshness), local path (chokidar real-time watch), agent/CLI push (token-authed, closest analog to how Graphify itself works — parse where the code already lives). AES-256-GCM credential encryption (reversible, unlike hashed tokens) — requires `CREDENTIALS_ENCRYPTION_KEY` explicitly, not auto-generated.
+- **Sub-project 9 — Code graph & unified search/MCP**: web-tree-sitter extraction (import + "contains" symbol edges; TS/JS/Python/Go) — switched from native tree-sitter mid-implementation because native bindings don't compile against Node 26's V8 headers (upstream targets an older C++ standard); WASM sidesteps this entirely and the same npm packages already ship prebuilt .wasm. `buildGraph`/`searchNotes` made polymorphic over `{vaultIds, repositoryIds}`. Had to migrate `semanticEdges` to a polymorphic `(nodeType,nodeId)` shape mid-task — the spec's claim that cross-type semantic edges need "no new mechanism" was wrong, the existing table was note-only; fixed properly rather than faked. `repo:name/path` wikilinks cross-link notes to code.
+
+**Real bug caught by the mandatory e2e smoke test, not unit tests**: extraction was scheduled per-file inside the sync loop, so import resolution could race against sibling files in the same batch still being persisted. Fixed (defer scheduling until the whole batch commits) + regression test added. This is the concrete case for why this project's `docs/agents/handling-protocols.md` visual/observable-test-protocol step is non-skippable even when unit tests are green.
+
+**How this session actually ran** (2026-07-18, in order): user asked to check codebase-mapping feasibility → researched Graphify (real product, doesn't clone — runs locally in a coding agent's own session, tree-sitter + EXTRACTED/INFERRED tagging, ~70x token reduction vs raw files) → full brainstorming skill session (many clarifying questions: AI+human as peers, read-only, all 3 ingestion methods with real-time-per-method mechanisms, Repository as independent entity not vault-attached, unified search/graph) → wrote 2 spec files → wrote 2 lighter-format plan docs (NOT the full atomized writing-plans template — user pre-empted that heavy format once at the start of the whole backend build and the lighter style stuck for all 9 sub-projects) → implemented both inline, task by task, TDD, one PR per sub-project, following the existing dev→prod workflow.
+
+**Working agreements**: operating docs in `docs/agents/` (STATE.md = resume anchor, always check it first). Branch model: `dev` (default) ← PRs, promote `dev → prod` when verified. Merging authorized ([[chapters-pr-merge-authorization]]); branch rename/delete is not (classifier blocks it — old `main` branch still exists, user can delete via GitHub UI). README updated same-PR ([[chapters-readme-workflow]]).
+
+**Deferred/tracked**: cross-file call-graph resolution (symbol references, not just declarations — deliberately out of scope, real language-server territory), symbol-level embeddings, cloud storage/backups, codebase-exploration-direction issue is now resolved into specs 8+9 (was previously an open README gap), cli-visualizer issue #9 (assigned @snavid-dev, blocked on a CLI existing), Leiden upgrade over Louvain, restore-backup CLI not yet written.
+
+Dev environment: colima must be running for Postgres (`docker compose up -d db`); test DB `chapters_test` auto-created; e2e smoke admin: taha@piiix.org / smoke-test-password on local dev DB only. `CREDENTIALS_ENCRYPTION_KEY` needed for private-repo/webhook features (32-byte hex).

@@ -1,0 +1,35 @@
+# Copy to .env before running docker-compose.prod.yml:
+#   cp deploy.env.example .env
+# Fill in every value below, then:
+#   docker compose -f docker-compose.prod.yml up -d --build
+
+# Your domain's A record must already point at this VPS's public IP before
+# starting the stack -- Caddy requests a Let's Encrypt certificate for this
+# exact domain on first boot and needs port 80 reachable from the internet
+# to complete that challenge.
+DOMAIN=example.com
+
+# Any long random string. Do NOT reuse the docker-compose.yml (local dev)
+# default -- the backend refuses to boot with that default once
+# ENVIRONMENT=production (see backend/app/config.py's validator).
+JWT_SECRET=
+
+# Real Postgres password for this deployment (not the local-dev "fieldforce").
+POSTGRES_PASSWORD=
+
+# Optional -- web push notifications stay wired-but-inert without these.
+# Generate a real keypair in the raw base64url form pywebpush expects
+# (verified against pywebpush's actual Vapid.from_string() code path, not a
+# PEM -- a PEM string will NOT work here):
+#
+#   cd backend && uv run python -c "
+#   from py_vapid import Vapid01
+#   from py_vapid.utils import b64urlencode
+#   from cryptography.hazmat.primitives import serialization
+#   v = Vapid01(); v.generate_keys()
+#   print('VAPID_PRIVATE_KEY=' + b64urlencode(v.private_key.private_numbers().private_value.to_bytes(32, 'big')))
+#   print('VAPID_PUBLIC_KEY=' + b64urlencode(v.public_key.public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)))
+#   "
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_CLAIM_EMAIL=mailto:admin@example.com

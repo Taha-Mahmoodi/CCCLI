@@ -1,0 +1,32 @@
+import * as React from "react";
+import { type LucideIcon } from "lucide-react";
+import { Card } from "@/components/ui/Card";
+
+/**
+ * A labeled number (not a chart) — the accessibility-first way to surface a
+ * metric. The label and value are plain text, read in order by a screen reader.
+ */
+export function StatCard({
+  label,
+  value,
+  hint,
+  icon: Icon,
+}: {
+  label: string;
+  value: string | number;
+  hint?: string;
+  icon?: LucideIcon;
+}) {
+  return (
+    <Card className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        {Icon ? (
+          <Icon size={18} strokeWidth={2} aria-hidden="true" className="text-ink-soft" />
+        ) : null}
+        <span className="text-sm font-bold text-ink-soft">{label}</span>
+      </div>
+      <span className="font-display text-h1 text-ink">{value}</span>
+      {hint ? <span className="text-sm text-ink-soft">{hint}</span> : null}
+    </Card>
+  );
+}

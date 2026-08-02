@@ -1,0 +1,20 @@
+---
+name: chapters-project
+description: "Chapters — open-source second-brain platform, PIIIX-org/chapters; BACKEND COMPLETE 2026-07-17, next is UI phase (page-by-page design first)"
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: f783c85b-a663-45f5-86bd-9f6de4e0011b
+---
+
+Chapters is an open-source, self-hostable "second brain" / team knowledge platform: OKF markdown notes on disk, AI-navigable graph, real-time collab (Yjs), permission-scoped MCP. Repo: github.com/PIIIX-org/chapters. Local clone `~/Documents/chapters`.
+
+**Backend COMPLETE as of 2026-07-17, all on `prod`.** Built in one marathon session ("build everything that is backend and do not stop"): scaffold #16, auth #18, notes #21, graph+search #23, realtime #25, MCP #28, export #30, admin dashboard #32, MFA #33; final promote #34. 64 tests, 13 suites, CI green throughout. Stack: Node/Fastify + Drizzle/Postgres(pgvector) + Hocuspocus on COLLAB_PORT 3001 + MCP TS SDK at /mcp + local ONNX embeddings (fake embedder in dev/test). All security-audit hardening implemented; deviations documented in plan docs: Louvain not Leiden, read-only live view is SSE not Yjs (enforces presence rule structurally), collab on own port (crossws fought foreign upgrade). `ponytail:` comments mark in-process ceilings (lockout, embedding queue, rate limits, event bus — multi-process needs pg NOTIFY/job table).
+
+**Next: UI phase — but it must NOT start until the page-by-page UI structure is designed with the user** (their explicit instruction: "we are only implementing the back end till we can finish the UI page by page structure"). UI mandates: React+Vite+CM6+y-codemirror, Tailwind + shadcn via shadcn MCP, GSAP via magic MCP (no GSAP MCP exists), anime.js as client dependency. See `docs/agents/STATE.md` (resume anchor) + `docs/agents/implementation.md`.
+
+**Working agreements**: operating docs in `docs/agents/` (session read order, outage-resume via STATE.md + push-often, sandbox/visual test protocols, token rules). Branch model: `dev` (default) ← PRs, promote `dev → prod` when verified; old `main` still exists — classifier blocks deletion, user can remove it in GitHub UI. Merging authorized ([[chapters-pr-merge-authorization]]); branch rename/delete is not. README updated same-PR ([[chapters-readme-workflow]]).
+
+**Deferred/tracked**: cloud storage + scheduled backups (unspecced), codebase-exploration direction (needs brainstorming), cli-visualizer issue #9 (external contributor snavid-dev, assigned, blocked on a CLI existing), Leiden upgrade, restore-backup CLI not yet written (backup format supports it).
+
+Dev environment: colima must be running for Postgres (`docker compose up -d db`); test DB `chapters_test` auto-created; e2e smoke admin: taha@piiix.org / smoke-test-password on local dev DB only.

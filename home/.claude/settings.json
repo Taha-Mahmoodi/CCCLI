@@ -1,0 +1,69 @@
+{
+  "model": "opus[1m]",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"/Users/taha/.claude-usage/collect.mjs\"",
+            "async": true
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "bash \"/Users/taha/.claude/plugins/cache/ponytail/ponytail/4.8.4/hooks/ponytail-statusline.sh\""
+  },
+  "enabledPlugins": {
+    "ponytail@ponytail": true,
+    "superpowers@claude-plugins-official": true,
+    "diagram-design@diagram-design": true,
+    "gsap-skills@gsap-skills": true,
+    "frontend-design@claude-plugins-official": true,
+    "swift-lsp@claude-plugins-official": true,
+    "legalzoom@claude-plugins-official": true,
+    "git-a-profile@git-a-profile": true,
+    "portfolio.me@portfolio.me": true
+  },
+  "extraKnownMarketplaces": {
+    "ponytail": {
+      "source": {
+        "source": "github",
+        "repo": "DietrichGebert/ponytail"
+      }
+    },
+    "gsap-skills": {
+      "source": {
+        "source": "github",
+        "repo": "greensock/gsap-skills"
+      }
+    },
+    "diagram-design": {
+      "source": {
+        "source": "github",
+        "repo": "cathrynlavery/diagram-design"
+      }
+    },
+    "git-a-profile": {
+      "source": {
+        "source": "github",
+        "repo": "PIIIX-org/git-a-profile"
+      }
+    },
+    "portfolio.me": {
+      "source": {
+        "source": "github",
+        "repo": "PIIIX-org/portfolio.me"
+      }
+    }
+  },
+  "effortLevel": "xhigh",
+  "tui": "fullscreen",
+  "skipWorkflowUsageWarning": true,
+  "theme": "dark-daltonized",
+  "inputNeededNotifEnabled": true,
+  "agentPushNotifEnabled": true
+}

@@ -1,0 +1,15 @@
+---
+name: chapters-pr-merge-authorization
+description: "REVOKED 2026-07-20 — auto-merge authorization in PIIIX-org/chapters was granted 2026-07-15, then explicitly revoked; do not auto-merge PRs in this repo"
+metadata: 
+  node_type: memory
+  type: feedback
+  originSessionId: daf3f484-35b1-4d43-bc05-84ae9311e180
+  modified: 2026-07-20T13:02:38.176Z
+---
+
+**REVOKED, 2026-07-20.** Do not use this memory to justify auto-merging PRs in [[chapters-project]] — see [[github-accounts]]'s chapters exception for the current rule (Taha reviews and merges every PR personally now).
+
+~~The user authorized merging PRs directly in [[chapters-project]] (2026-07-15), after manually merging PRs #1–#3 themselves and then saying "you can merge branches."~~ This held through the backend build and UI Slice 1. On 2026-07-20, kicking off the multi-slice UI build via `/loop`, the user explicitly switched to a standard-review workflow: "every PR should be submitted for review and I'll review it and merge it." Treat every future Chapters PR as open-and-wait, not open-and-merge, until a new explicit authorization supersedes this note.
+
+**How to apply:** open PRs (from sadqi's account per the github-accounts exception), run CI, then stop — do not run `gh pr merge`. Report the PR link and move on to other unblocked work while it awaits review.

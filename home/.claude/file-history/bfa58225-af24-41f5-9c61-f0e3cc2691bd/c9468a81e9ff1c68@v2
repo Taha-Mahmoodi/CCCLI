@@ -1,0 +1,21 @@
+const container = document.querySelector('.leaflet-container');
+const rect = container.getBoundingClientRect();
+
+function clickAt(x, y) {
+  const cx = rect.left + x;
+  const cy = rect.top + y;
+  const base = { bubbles: true, cancelable: true, view: window, clientX: cx, clientY: cy, button: 0, buttons: 1 };
+  container.dispatchEvent(new MouseEvent('pointerdown', base));
+  container.dispatchEvent(new MouseEvent('mousedown', base));
+  container.dispatchEvent(new MouseEvent('mousemove', { ...base, clientX: cx + 1, clientY: cy + 1 }));
+  container.dispatchEvent(new MouseEvent('mouseup', { ...base, buttons: 0 }));
+  container.dispatchEvent(new MouseEvent('pointerup', { ...base, buttons: 0 }));
+  container.dispatchEvent(new MouseEvent('click', { ...base, buttons: 0 }));
+}
+
+clickAt(300, 200);
+clickAt(500, 200);
+clickAt(400, 400);
+clickAt(300, 200);
+
+document.querySelectorAll('.leaflet-marker-icon, .leaflet-draw-guide-dash').length + ' guide/vertex markers';

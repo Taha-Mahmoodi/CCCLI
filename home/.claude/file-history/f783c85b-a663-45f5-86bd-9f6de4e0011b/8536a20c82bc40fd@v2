@@ -1,0 +1,26 @@
+## UI Slice 2b-2 — Permission-aware editor lock
+
+Makes the note editor honor the user's effective vault permission. A **read**-access collaborator now gets the note rendered but genuinely non-editable (no caret, no autosave); **edit**/**owner** keep the full editor from 2b-1.
+
+This closes a real gap: after 2b-1, a read-only user got an editable-looking editor whose debounced saves silently 404'd server-side. The client now stops offering edits it knows the server will reject.
+
+### What's in
+- **`useCodeMirrorEditor`** gains a `readOnly?: boolean` option — applies CodeMirror's `EditorState.readOnly.of(true)` + `EditorView.editable.of(false)` (only when set). No new dependencies.
+- **`canEdit(access)`** helper in `api/vaults.ts` — true only for `edit`/`owner`. Finally uses the `Vault.access` field that's been on the client since Slice 2a.
+- **`NoteView`** derives `readOnly = !canEdit(vault?.access)`, passes it to the editor, guards the debounced save (`if (readOnly) return`), shows a subtle "· read-only" marker, and folds edit-capability into the remount key.
+
+### Fail-safe by design
+Unknown access (vault not yet loaded / query error) → **read-only**. The editor never falsely opens; the server is still the real gate (write routes guard `edit` and 404 below it) — this is the UX layer on top.
+
+### Out of scope (later increments)
+The editable frontmatter property panel (the `<dl>` stays read-only display — 2b-3), note create/rename/delete (2b-4), save-error surfacing, live-preview, wikilinks (2c).
+
+### Verification
+- `pnpm typecheck` (client + server), `pnpm lint` (0), **56 client tests**, `pnpm -C client build` — all green.
+- Read-only test is non-tautological: identical programmatic edit yields 1 PUT under `edit` access, 0 under `read`.
+- Whole-branch review (independent) → **Ready to merge: Yes**. Two of its minor coverage findings were fixed on-branch (`80e13d0`) — including a genuine unknown-access lock test that caught a default-parameter footgun silently skipping that path.
+
+### Stacking
+Branches off `feat/ui-editor-2b1` (**#64**), so this PR targets `feat/ui-editor-2b1` as base. Review order: #60 → #62 → #64 → this. Retarget to `dev` as the stack merges down.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)

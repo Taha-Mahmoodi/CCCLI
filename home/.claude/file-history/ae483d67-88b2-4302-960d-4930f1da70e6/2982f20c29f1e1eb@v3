@@ -1,0 +1,322 @@
+"use client";
+
+// The persistent radio player. Rendered in the root layout, OUTSIDE the routed
+// view tree, so playback survives navigation (spec §5.1).
+//
+// Three routes to every action (non-negotiable #5):
+//   1. Media Session API      — headphones / lock screen / hardware keys
+//   2. Voice commands         — see VoiceCommands.tsx
+//   3. On-screen buttons      — large, labelled, keyboard- & screen-reader-operable
+//
+// Gapless radio: two <audio> elements. Even indices play on A, odd on B; the
+// inactive element preloads the NEXT memo, so advancing plays already-buffered
+// audio. Only one element ever plays — two voices at once is the fastest way to
+// make a blind user quit.
+
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { Heart, Pause, Play, RotateCcw, SkipBack, SkipForward } from "lucide-react";
+import { usePlayer } from "@/stores/player";
+import { orderedQueue } from "@/lib/channels";
+import { setNowPlaying, setPlaybackState, setupMediaSession } from "@/lib/media-session";
+import { announce, prefersReducedMotion } from "@/lib/a11y";
+import { formatDuration, spokenDuration } from "@/lib/format";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+const CONTROL = "size-12 rounded-full"; // 48px — above the 44px target-size floor
+
+export function RadioPlayer() {
+  const memos = usePlayer((s) => s.memos);
+  const activeChannel = usePlayer((s) => s.activeChannel);
+  const shuffle = usePlayer((s) => s.shuffle);
+  const shuffleOrder = usePlayer((s) => s.shuffleOrder);
+  const urls = usePlayer((s) => s.urls);
+  const currentIndex = usePlayer((s) => s.currentIndex);
+  const isPlaying = usePlayer((s) => s.isPlaying);
+  const status = usePlayer((s) => s.status);
+  const replayNonce = usePlayer((s) => s.replayNonce);
+  const play = usePlayer((s) => s.play);
+  const pause = usePlayer((s) => s.pause);
+  const togglePlay = usePlayer((s) => s.togglePlay);
+  const next = usePlayer((s) => s.next);
+  const previous = usePlayer((s) => s.previous);
+  const replay = usePlayer((s) => s.replay);
+  const toggleLike = usePlayer((s) => s.toggleLike);
+  const playbackRate = usePlayer((s) => s.playbackRate);
+  const cyclePlaybackRate = usePlayer((s) => s.cyclePlaybackRate);
+
+  const aRef = useRef<HTMLAudioElement>(null);
+  const bRef = useRef<HTMLAudioElement>(null);
+  const eqRef = useRef<HTMLDivElement>(null);
+  const announceTimer = useRef<number | null>(null);
+  const prevStatus = useRef(status);
+
+  const queue = useMemo(
+    () => orderedQueue(memos, activeChannel, shuffle ? shuffleOrder : null),
+    [memos, activeChannel, shuffle, shuffleOrder],
+  );
+  const current = queue[currentIndex];
+  const hasMemos = queue.length > 0;
+  const activeIsA = currentIndex % 2 === 0;
+
+  const activeEl = () => (activeIsA ? aRef.current : bRef.current);
+  const inactiveEl = () => (activeIsA ? bRef.current : aRef.current);
+
+  // Media Session — the hardware route. Set once; handlers are stable.
+  useEffect(() => {
+    setupMediaSession({ play, pause, next, previous });
+  }, [play, pause, next, previous]);
+
+  // Keep the active element loaded with the current memo, and preload the next
+  // into the inactive element. Guard src comparisons so already-buffered audio
+  // is never reloaded (that's what makes the transition gapless).
+  useEffect(() => {
+    if (!hasMemos) return;
+    const active = activeEl();
+    const inactive = inactiveEl();
+    const curUrl = current ? urls[current.id] : undefined;
+    const nextMemo = queue[currentIndex + 1];
+    const nextUrl = nextMemo ? urls[nextMemo.id] : undefined;
+
+    if (active && curUrl && active.getAttribute("src") !== curUrl) {
+      active.src = curUrl;
+      active.load();
+    }
+    if (inactive) {
+      if (nextUrl && inactive.getAttribute("src") !== nextUrl) {
+        inactive.src = nextUrl;
+        inactive.load(); // buffer ahead
+      } else if (!nextUrl) {
+        inactive.removeAttribute("src");
+      }
+    }
+
+    if (current) {
+      setNowPlaying(`Memo ${currentIndex + 1} of ${queue.length}`);
+      const label = `Now playing memo ${currentIndex + 1} of ${queue.length}, ${spokenDuration(
+        current.durationMs,
+      )}`;
+      if (announceTimer.current) window.clearTimeout(announceTimer.current);
+      // Debounce so rapid skipping doesn't flood the screen reader.
+      announceTimer.current = window.setTimeout(() => announce(label), 350);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, queue, urls, hasMemos]);
+
+  // Reflect play/pause onto the active element. Never let both elements play.
+  useEffect(() => {
+    const active = activeEl();
+    const inactive = inactiveEl();
+    if (inactive && !inactive.paused) inactive.pause();
+    if (!active) return;
+    if (isPlaying) {
+      void active.play().catch(() => pause()); // autoplay blocked / not ready
+      setPlaybackState("playing");
+    } else {
+      active.pause();
+      setPlaybackState(status === "ended" ? "none" : "paused");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPlaying, currentIndex, status]);
+
+  // Apply playback speed to both elements (a new src resets rate to 1).
+  useEffect(() => {
+    if (aRef.current) aRef.current.playbackRate = playbackRate;
+    if (bRef.current) bRef.current.playbackRate = playbackRate;
+  }, [playbackRate, currentIndex]);
+
+  // Replay: seek the current memo back to the start.
+  useEffect(() => {
+    if (replayNonce === 0) return;
+    const active = activeEl();
+    if (active) {
+      active.currentTime = 0;
+      void active.play().catch(() => pause());
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [replayNonce]);
+
+  // Announce the end of the stream once (#3: the stream ends).
+  useEffect(() => {
+    if (status === "ended" && prevStatus.current !== "ended") {
+      announce("End of the stream. You're all caught up.", true);
+    }
+    prevStatus.current = status;
+  }, [status]);
+
+  // Decorative equalizer (GSAP) — compositor-only (scaleY), reduced-motion-safe.
+  // GSAP is dynamically imported so it stays out of the first-load bundle.
+  useEffect(() => {
+    const el = eqRef.current;
+    if (!el || !isPlaying || prefersReducedMotion()) return;
+    let ctx: { revert: () => void } | undefined;
+    let cancelled = false;
+    void import("gsap")
+      .then(({ default: gsap }) => {
+        if (cancelled || !el) return;
+        ctx = gsap.context(() => {
+          gsap.to("[data-eq-bar]", {
+            scaleY: 1,
+            transformOrigin: "center bottom",
+            duration: 0.42,
+            ease: "sine.inOut",
+            repeat: -1,
+            yoyo: true,
+            stagger: { each: 0.11, from: "center" },
+          });
+        }, el);
+      })
+      .catch(() => {
+        // animation must never break playback
+      });
+    return () => {
+      cancelled = true;
+      ctx?.revert();
+    };
+  }, [isPlaying]);
+
+  const onEnded = useCallback(() => next(), [next]);
+
+  return (
+    <section
+      aria-label="Radio player"
+      className="sticky bottom-0 z-40 border-t border-border bg-background/95 backdrop-blur"
+    >
+      {/* Two audio elements drive gapless playback. No native controls — we
+          provide accessible ones below. */}
+      <audio ref={aRef} preload="auto" onEnded={activeIsA ? onEnded : undefined} />
+      <audio ref={bRef} preload="auto" onEnded={!activeIsA ? onEnded : undefined} />
+
+      <div className="mx-auto flex max-w-2xl flex-col gap-3 px-5 py-4">
+        <div className="flex items-center gap-3">
+          <div
+            ref={eqRef}
+            aria-hidden="true"
+            className="flex h-8 w-8 items-end justify-center gap-[3px]"
+          >
+            {[0, 1, 2, 3].map((i) => (
+              <span
+                key={i}
+                data-eq-bar
+                className={cn(
+                  "w-[3px] rounded-full bg-primary",
+                  isPlaying ? "h-6" : "h-1.5",
+                )}
+                style={{ transform: isPlaying ? "scaleY(0.35)" : "scaleY(1)" }}
+              />
+            ))}
+          </div>
+
+          <p className="min-w-0 flex-1 truncate text-sm" aria-live="off">
+            {hasMemos ? (
+              <>
+                <span className="font-medium">
+                  Memo {currentIndex + 1} of {queue.length}
+                </span>
+                <span className="text-muted-foreground">
+                  {" · "}
+                  {current ? formatDuration(current.durationMs) : "0:00"}
+                  {status === "ended" ? " · end of stream" : ""}
+                </span>
+              </>
+            ) : (
+              <span className="text-muted-foreground">
+                Nothing to play yet — record a memo to start your radio.
+              </span>
+            )}
+          </p>
+
+          {current && (
+            <Button
+              type="button"
+              variant={current.liked ? "default" : "outline"}
+              size="icon"
+              className={cn(CONTROL, "size-11")}
+              aria-pressed={current.liked}
+              aria-label={current.liked ? "Unlike this memo" : "Like this memo"}
+              onClick={() => toggleLike(current.id)}
+            >
+              <Heart className={cn("size-5", current.liked && "fill-current")} aria-hidden="true" />
+            </Button>
+          )}
+        </div>
+
+        <div className="flex items-center justify-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className={CONTROL}
+            aria-label="Previous memo"
+            disabled={!hasMemos || currentIndex === 0}
+            onClick={previous}
+          >
+            <SkipBack className="size-5" aria-hidden="true" />
+          </Button>
+
+          {status === "ended" ? (
+            <Button
+              type="button"
+              size="icon"
+              className={cn(CONTROL, "size-14")}
+              aria-label="Play the stream again from the start"
+              onClick={() => usePlayer.getState().reset()}
+            >
+              <RotateCcw className="size-6" aria-hidden="true" />
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="icon"
+              className={cn(CONTROL, "size-14")}
+              aria-label={isPlaying ? "Pause" : "Play"}
+              disabled={!hasMemos}
+              onClick={togglePlay}
+            >
+              {isPlaying ? (
+                <Pause className="size-6" aria-hidden="true" />
+              ) : (
+                <Play className="size-6" aria-hidden="true" />
+              )}
+            </Button>
+          )}
+
+          <Button
+            type="button"
+            variant="outline"
+            size="icon"
+            className={CONTROL}
+            aria-label="Skip to next memo"
+            disabled={!hasMemos || status === "ended"}
+            onClick={next}
+          >
+            <SkipForward className="size-5" aria-hidden="true" />
+          </Button>
+
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={CONTROL}
+            aria-label="Replay this memo from the start"
+            disabled={!hasMemos}
+            onClick={replay}
+          >
+            <RotateCcw className="size-5" aria-hidden="true" />
+          </Button>
+
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-12 rounded-full px-3 text-sm font-medium tabular-nums"
+            aria-label={`Playback speed ${playbackRate}×. Tap to change.`}
+            disabled={!hasMemos}
+            onClick={cyclePlaybackRate}
+          >
+            {playbackRate}×
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
+}

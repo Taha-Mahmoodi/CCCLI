@@ -1,0 +1,92 @@
+import Link from "next/link";
+import { getProfile, homeForRole } from "@/lib/auth";
+import { signOutAction } from "@/app/(auth)/actions";
+import { Logo } from "@/components/shared/Logo";
+import { Container } from "@/components/shared/Container";
+import { NavLink } from "@/components/shared/NavLink";
+import { Button } from "@/components/ui/Button";
+import { t } from "@/lib/i18n";
+import { type UserRole } from "@/lib/supabase/types";
+
+const NAV_BY_ROLE: Record<
+  UserRole,
+  {
+    href: string;
+    labelKey:
+      | "nav.browse"
+      | "nav.account"
+      | "nav.dashboard"
+      | "nav.sessions"
+      | "admin.navOverview"
+      | "admin.navApprovals"
+      | "admin.navReports"
+      | "admin.navUsers"
+      | "admin.navActivity";
+  }[]
+> = {
+  customer: [
+    { href: "/browse", labelKey: "nav.browse" },
+    { href: "/account", labelKey: "nav.account" },
+  ],
+  provider: [
+    { href: "/provider/dashboard", labelKey: "nav.dashboard" },
+    { href: "/provider/sessions", labelKey: "nav.sessions" },
+  ],
+  admin: [
+    { href: "/admin", labelKey: "admin.navOverview" },
+    { href: "/admin/providers", labelKey: "admin.navApprovals" },
+    { href: "/admin/reports", labelKey: "admin.navReports" },
+    { href: "/admin/users", labelKey: "admin.navUsers" },
+    { href: "/admin/activity", labelKey: "admin.navActivity" },
+  ],
+};
+
+export async function AppHeader() {
+  const profile = await getProfile();
+
+  return (
+    <header className="border-b border-border bg-bg">
+      <Container className="flex items-center justify-between gap-4 py-4">
+        <Link
+          href={profile ? homeForRole(profile.role) : "/"}
+          className="rounded-sm"
+          aria-label={`${t("app.name")}, ${t("nav.home").toLowerCase()}`}
+        >
+          <Logo height={38} />
+        </Link>
+
+        <nav aria-label={t("nav.menu")}>
+          <ul className="flex items-center gap-0.5 sm:gap-1.5">
+            {profile ? (
+              <>
+                {NAV_BY_ROLE[profile.role].map((item) => (
+                  <li key={item.href}>
+                    <NavLink href={item.href}>{t(item.labelKey)}</NavLink>
+                  </li>
+                ))}
+                <li>
+                  <form action={signOutAction}>
+                    <Button type="submit" variant="quiet">
+                      {t("nav.signOut")}
+                    </Button>
+                  </form>
+                </li>
+              </>
+            ) : (
+              <>
+                <li>
+                  <NavLink href="/signin">{t("nav.signIn")}</NavLink>
+                </li>
+                <li>
+                  <Link href="/signup" className="rounded-pill">
+                    <Button>{t("nav.signUp")}</Button>
+                  </Link>
+                </li>
+              </>
+            )}
+          </ul>
+        </nav>
+      </Container>
+    </header>
+  );
+}

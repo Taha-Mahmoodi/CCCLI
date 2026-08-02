@@ -1,0 +1,189 @@
+// ⚠️ UNAUDITED REFERENCE IMPLEMENTATION — functionally tested only.
+// The spec (§7) mandates libsignal for real E2EE DMs. This module is a
+// self-contained, readable reference of the franking construction so the
+// protocol shape is nailed down and testable now; it MUST be replaced by
+// libsignal's audited primitives before any real messaging ships. Unit tests
+// here prove functional behavior (roundtrip, tamper/forgery rejection), NOT the
+// formal security properties (binding/hiding/r-BIND), which require review
+// against the literature. Do not treat this as production-secure.
+//
+// Message franking for E2EE direct messages (spec §7).
+//
+// Goal: a recipient can cryptographically PROVE to the platform that a reported
+// message is authentic, WITHOUT the platform having standing access to anyone's
+// messages. This is Facebook-style franking: a per-message commitment to the
+// plaintext travels with the message; the platform blind-authenticates that
+// commitment; on report the recipient reveals (message, opening) and the
+// platform verifies both bindings.
+//
+// CRITICAL (spec §7): a COMMITTING scheme is required. AES-GCM is deliberately
+// NOT used — it is non-committing (the "invisible salamanders" attack, Dodis et
+// al. / Grubbs-Lu-Ristenpart, broke exactly this in a major product: one
+// ciphertext can decrypt under two keys to two valid plaintexts). We use
+// AES-CTR + Encrypt-then-HMAC for transit, and an HMAC commitment (keyed by a
+// fresh random opening) as the franking tag — which binds one plaintext.
+
+const subtle = globalThis.crypto.subtle;
+
+export interface Sealed {
+  iv: Uint8Array; // AES-CTR counter block (16 bytes)
+  ciphertext: Uint8Array; // encrypts message || opening
+  mac: Uint8Array; // HMAC over iv || ciphertext || commitment (Encrypt-then-MAC)
+  commitment: Uint8Array; // HMAC(opening, message) — hiding; travels in the clear
+}
+
+const OPENING_LEN = 32;
+const enc = new TextEncoder();
+
+function bytes(s: string): Uint8Array {
+  return enc.encode(s);
+}
+
+function concat(...arrs: Uint8Array[]): Uint8Array {
+  const total = arrs.reduce((n, a) => n + a.length, 0);
+  const out = new Uint8Array(total);
+  let o = 0;
+  for (const a of arrs) {
+    out.set(a, o);
+    o += a.length;
+  }
+  return out;
+}
+
+export function randomBytes(n: number): Uint8Array {
+  const a = new Uint8Array(n);
+  globalThis.crypto.getRandomValues(a);
+  return a;
+}
+
+/** Constant-time equality — never leak where two tags differ. */
+export function timingSafeEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
+}
+
+// Hand WebCrypto a guaranteed ArrayBuffer-backed copy (the DOM BufferSource
+// type rejects the generic Uint8Array<ArrayBufferLike>).
+function ab(x: Uint8Array): Uint8Array<ArrayBuffer> {
+  const c = new Uint8Array(x.length);
+  c.set(x);
+  return c;
+}
+
+async function hmac(key: Uint8Array, data: Uint8Array): Promise<Uint8Array> {
+  const k = await subtle.importKey("raw", ab(key), { name: "HMAC", hash: "SHA-256" }, false, [
+    "sign",
+  ]);
+  return new Uint8Array(await subtle.sign("HMAC", k, ab(data)));
+}
+
+async function hkdf(ikm: Uint8Array, info: string, len: number): Promise<Uint8Array> {
+  const k = await subtle.importKey("raw", ab(ikm), "HKDF", false, ["deriveBits"]);
+  const bits = await subtle.deriveBits(
+    { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(0), info: ab(bytes(info)) },
+    k,
+    len * 8,
+  );
+  return new Uint8Array(bits);
+}
+
+async function aesCtr(
+  key: Uint8Array,
+  iv: Uint8Array,
+  data: Uint8Array,
+  op: "encrypt" | "decrypt",
+): Promise<Uint8Array> {
+  const k = await subtle.importKey("raw", ab(key), "AES-CTR", false, ["encrypt", "decrypt"]);
+  const params: AesCtrParams = { name: "AES-CTR", counter: ab(iv), length: 64 };
+  const out =
+    op === "encrypt" ? await subtle.encrypt(params, k, ab(data)) : await subtle.decrypt(params, k, ab(data));
+  return new Uint8Array(out);
+}
+
+// length-prefix a field so message||opening can be split unambiguously
+function lenPrefixed(data: Uint8Array): Uint8Array {
+  const len = new Uint8Array(4);
+  new DataView(len.buffer).setUint32(0, data.length, false);
+  return concat(len, data);
+}
+function readLenPrefixed(buf: Uint8Array): { value: Uint8Array; rest: Uint8Array } {
+  const len = new DataView(buf.buffer, buf.byteOffset, 4).getUint32(0, false);
+  return { value: buf.subarray(4, 4 + len), rest: buf.subarray(4 + len) };
+}
+
+async function deriveKeys(messageKey: Uint8Array) {
+  return {
+    encKey: await hkdf(messageKey, "tew-dm-enc", 32),
+    macKey: await hkdf(messageKey, "tew-dm-mac", 32),
+  };
+}
+
+/** Seal a message under a shared per-message key. Returns the wire object. */
+export async function seal(messageKey: Uint8Array, message: Uint8Array): Promise<Sealed> {
+  const opening = randomBytes(OPENING_LEN);
+  const commitment = await hmac(opening, message); // franking commitment to the plaintext
+  const { encKey, macKey } = await deriveKeys(messageKey);
+  const iv = randomBytes(16);
+  const payload = concat(lenPrefixed(message), opening);
+  const ciphertext = await aesCtr(encKey, iv, payload, "encrypt");
+  const mac = await hmac(macKey, concat(iv, ciphertext, commitment));
+  return { iv, ciphertext, mac, commitment };
+}
+
+/** Open a sealed message. Throws on any integrity or commitment failure. */
+export async function open(
+  messageKey: Uint8Array,
+  sealed: Sealed,
+): Promise<{ message: Uint8Array; opening: Uint8Array }> {
+  const { encKey, macKey } = await deriveKeys(messageKey);
+  const expectedMac = await hmac(macKey, concat(sealed.iv, sealed.ciphertext, sealed.commitment));
+  if (!timingSafeEqual(expectedMac, sealed.mac)) throw new Error("integrity check failed");
+  const payload = await aesCtr(encKey, sealed.iv, sealed.ciphertext, "decrypt");
+  const { value: message, rest: opening } = readLenPrefixed(payload);
+  if (opening.length !== OPENING_LEN) throw new Error("malformed payload");
+  // committing check: the revealed opening must reproduce the commitment
+  const check = await hmac(opening, message);
+  if (!timingSafeEqual(check, sealed.commitment)) throw new Error("commitment mismatch");
+  return { message: new Uint8Array(message), opening: new Uint8Array(opening) };
+}
+
+// --- Platform-side franking (the server never sees the message key) ---
+
+/** The server blind-authenticates a message's commitment when relaying it.
+ *  Fields are length-prefixed (NOT delimiter-joined) so the encoding is
+ *  injective even when a handle contains the separator character. */
+export async function frank(
+  platformKey: Uint8Array,
+  sender: string,
+  recipient: string,
+  commitment: Uint8Array,
+): Promise<Uint8Array> {
+  return hmac(
+    platformKey,
+    concat(lenPrefixed(bytes(sender)), lenPrefixed(bytes(recipient)), lenPrefixed(commitment)),
+  );
+}
+
+/**
+ * On report, the recipient reveals (message, opening, commitment, reportTag).
+ * The platform verifies BOTH bindings without ever holding the message key:
+ *  1. the opening binds the commitment to this exact plaintext, and
+ *  2. the reportTag proves the platform itself franked this commitment for
+ *     this (sender, recipient) pair.
+ */
+export async function verifyReport(
+  platformKey: Uint8Array,
+  sender: string,
+  recipient: string,
+  message: Uint8Array,
+  opening: Uint8Array,
+  commitment: Uint8Array,
+  reportTag: Uint8Array,
+): Promise<boolean> {
+  const c = await hmac(opening, message);
+  if (!timingSafeEqual(c, commitment)) return false;
+  const t = await frank(platformKey, sender, recipient, commitment);
+  return timingSafeEqual(t, reportTag);
+}

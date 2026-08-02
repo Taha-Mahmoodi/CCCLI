@@ -1,0 +1,8 @@
+{
+  "id": "35",
+  "subject": "SDD 2a final whole-branch review",
+  "description": "After all 7 tasks, dispatch final code-reviewer, then decide on PR (stacked, don't open until told).",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

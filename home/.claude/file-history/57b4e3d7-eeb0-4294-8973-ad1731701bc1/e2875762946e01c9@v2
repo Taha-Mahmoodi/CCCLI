@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gate B1 comp — Concept 1 OUTLINE — sadeqi.me</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ---- tokens: sampled Hari Rud green, literal AAA both modes ---- */
+:root{
+  --substrate:#0B0F0D; --raised:#141A17;
+  --ink:#F4F2EC; --ink-dim:#C9CFCB;
+  --river:#9FB4AD; --river-lift:#B6C9C2; --amber:#C99A56;
+  --rule:color-mix(in oklch, var(--river) 22%, transparent);
+  --measure:34ch;
+  --step--1:clamp(.78rem,.74rem + .2vw,.88rem);
+  --step-0:clamp(1.05rem,1rem + .3vw,1.2rem);
+  --step-2:clamp(1.35rem,1.15rem + 1vw,2.2rem);
+  --step-5:clamp(2.05rem,1.1rem + 5.2vw,6.6rem);
+  --gap:clamp(1rem,.6rem + 1.8vw,2.4rem);
+}
+@media (prefers-color-scheme: light){
+  /* --river was #375349: 7.52:1 by token maths but only 7.13:1 measured on
+     rendered glyphs. AAA is a hard promise here, so it takes real headroom. */
+  :root{ --substrate:#F4F2EC; --raised:#E8E5DC; --ink:#0B0F0D; --ink-dim:#2B443B;
+         --river:#2E4A40; --river-lift:#22382F; --amber:#5D3C11; }
+}
+@property --ring{ syntax:'<length>'; inherits:false; initial-value:0px; }
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--substrate); color:var(--ink);
+  font-family:'Atkinson Hyperlegible',system-ui,sans-serif;
+  font-size:var(--step-0); line-height:1.6;
+  text-wrap:pretty;
+}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;
+  font-size:var(--step--1); letter-spacing:.09em; text-transform:uppercase;}
+
+/* ---- the designed focus ring: the run's signature state ---- */
+:where(a,button,[tabindex]):focus-visible,
+.is-focused{
+  outline:2px solid var(--river-lift);
+  outline-offset:6px;
+  border-radius:2px;
+  background:color-mix(in oklch, var(--river) 12%, transparent);
+  transition:outline-offset .18s cubic-bezier(.2,.9,.3,1), background .18s linear;
+}
+@media (prefers-reduced-motion: reduce){
+  :where(a,button,[tabindex]):focus-visible,.is-focused{transition:none}
+}
+
+/* ---- skip link: deliberately visible, deliberately large ---- */
+.skip{
+  display:inline-block; margin:0 0 calc(var(--gap)*1.1);
+  font-family:'IBM Plex Mono',monospace; font-size:var(--step-0);
+  letter-spacing:.06em; text-transform:uppercase;
+  color:var(--substrate); background:var(--river);
+  text-decoration:none; padding:.7em 1.1em;
+}
+.skip:hover{background:var(--river-lift)}
+
+/* ---- layout ---- */
+.shell{max-width:96rem; margin:0 auto;
+  padding:clamp(1.2rem,3vw,2.6rem) clamp(1.2rem,5vw,5rem) clamp(3rem,8vw,7rem);}
+/* hero is full-bleed and FIRST in source order. the outline follows it, so a
+   screen reader meets the claim before it meets seven nav links. */
+.body-grid{display:grid; grid-template-columns:minmax(0,15rem) minmax(0,1fr);
+  gap:clamp(1.5rem,5vw,6rem); margin-top:clamp(2.5rem,7vw,6rem);}
+@media (max-width:60rem){ .body-grid{grid-template-columns:1fr; gap:2.5rem} }
+
+.outline{position:sticky; top:clamp(1.5rem,4vw,4rem); align-self:start;}
+.outline h2{ font:inherit; margin:0 0 .9rem; }
+.outline ol{list-style:none; margin:0; padding:0; border-left:1px solid var(--rule)}
+.outline li{margin:0}
+.outline a{
+  display:flex; gap:.7rem; padding:.42rem 0 .42rem .9rem;
+  color:var(--ink-dim); text-decoration:none;
+  font-family:'IBM Plex Mono',monospace; font-size:var(--step--1); letter-spacing:.06em;
+}
+.outline a:hover{color:var(--ink)}
+.outline .lv3{padding-left:2rem}
+.outline [aria-current="true"]{
+  color:var(--river); box-shadow:inset 2px 0 0 var(--river); font-weight:500;
+}
+.outline .num{color:var(--river); opacity:.75}
+
+/* ---- landmark labels: real boundaries, named ---- */
+.landmark{
+  display:block; color:var(--river); opacity:.85;
+  border-top:1px solid var(--rule); padding-top:.55rem; margin:0 0 var(--gap);
+  overflow-wrap:anywhere;
+}
+/* grid and flex children default to min-width:auto, which lets long mono
+   strings blow out the viewport. this is the fix, not a workaround. */
+.body-grid > *, .row > *, .hero-foot > *{min-width:0}
+
+/* ---- hero ---- */
+.hero h1{
+  font-size:var(--step-5); line-height:1.03; font-weight:700;
+  margin:.4em 0 calc(var(--gap)*1.15); max-width:16ch;
+  overflow-wrap:break-word; text-wrap:balance; hanging-punctuation:first;
+}
+@media (min-width:48rem){ .hero h1{letter-spacing:-.02em} }
+.hero-foot{display:flex; flex-wrap:wrap; align-items:flex-end; gap:1.4rem 2.4rem}
+.listen{
+  display:inline-flex; align-items:center; gap:.85rem;
+  font-family:'Atkinson Hyperlegible',sans-serif; font-size:var(--step-2);
+  font-weight:700; color:var(--substrate); background:var(--river);
+  border:0; padding:.62em 1.15em; cursor:pointer; text-align:left;
+}
+.listen:hover{background:var(--river-lift)}
+.listen .glyph{
+  width:.62em;height:.72em; flex:none;
+  background:currentColor; clip-path:polygon(0 0,100% 50%,0 100%);
+}
+.listen-note{ color:var(--ink-dim); margin:.9rem 0 0; max-width:var(--measure);
+  font-size:var(--step--1); line-height:1.55; }
+
+/* ---- the slate ---- */
+.slate{margin-top:calc(var(--gap)*2.4)}
+.slate h2{font-size:var(--step-2); margin:0 0 var(--gap); font-weight:700}
+.slate ol{list-style:none;margin:0;padding:0}
+.row{
+  display:grid; grid-template-columns:minmax(0,1fr) auto;
+  gap:1.2rem 2rem; align-items:baseline;
+  padding:1.15rem .6rem 1.15rem 0; border-top:1px solid var(--rule);
+  text-decoration:none; color:inherit;
+}
+.row:last-child{border-bottom:1px solid var(--rule)}
+.row .name{font-size:var(--step-2); font-weight:700; line-height:1.15; display:block}
+.row .desc{color:var(--ink-dim); font-size:var(--step--1); line-height:1.5;
+  display:block; margin-top:.3rem; max-width:46ch}
+.tag{color:var(--river); white-space:nowrap}
+@media (max-width:38rem){
+  .row{grid-template-columns:minmax(0,1fr)}
+  .tag{margin-top:.55rem}
+}
+.note{margin:calc(var(--gap)*1.6) 0 0; color:var(--ink-dim);
+  font-size:var(--step--1); max-width:var(--measure); border-top:1px solid var(--rule);
+  padding-top:.8rem}
+</style>
+</head>
+<body>
+<div class="shell">
+  <a class="skip" href="#slate">Skip to the work</a>
+
+  <main id="main">
+    <section class="hero" id="hero" aria-labelledby="h-claim">
+      <span class="landmark mono">Said Mohaddes Sadeqi · assistive technology</span>
+      <h1 id="h-claim">it is ok if eyes are not at 100%</h1>
+
+      <div class="hero-foot">
+        <button class="listen is-focused" type="button">
+          <span class="glyph" aria-hidden="true"></span>
+          Listen · 6 seconds
+        </button>
+        <p class="listen-note">
+          Said's own voice. It does not play on its own, and it never
+          talks over a screen reader. The transcript sits under it, always visible.
+        </p>
+      </div>
+    </section>
+
+  <div class="body-grid">
+  <nav class="outline" aria-label="Page outline">
+    <h2 class="mono">Outline</h2>
+    <ol>
+      <li><a href="#hero" aria-current="true"><span class="num">01</span> The claim</a></li>
+      <li><a href="#stands"><span class="num">02</span> What he stands for</a></li>
+      <li><a href="#proof"><span class="num">03</span> The proof</a></li>
+      <li><a href="#active"><span class="num">04</span> The active work</a></li>
+      <li><a href="#slate"><span class="num">05</span> The slate</a></li>
+      <li><a href="#who"><span class="num">06</span> Who he is</a></li>
+      <li><a href="#ask"><span class="num">07</span> The ask</a></li>
+    </ol>
+  </nav>
+
+    <section class="slate" id="slate" aria-labelledby="h-slate">
+      <span class="landmark mono">Region · the work</span>
+      <h2 id="h-slate">The work, and what state it is actually in</h2>
+      <ol>
+        <li><a class="row" href="#">
+
+          <span><span class="name">Third Eye World</span>
+            <span class="desc">An accessibility-first social network for blind users. Closed beta tested, then torn down. The first beta still leaned on sight.</span></span>
+          <span class="tag mono">Rebuilding</span>
+        </a></li>
+        <li><a class="row" href="#">
+
+          <span><span class="name">Third Eye Kit</span>
+            <span class="desc">Glasses, vibrating shoes, GPS. $112. Built at seventeen and field-tested with blind users in Herat.</span></span>
+          <span class="tag mono">Shipped 2022</span>
+        </a></li>
+        <li><a class="row is-focused" href="#">
+
+          <span><span class="name">Heard</span>
+            <span class="desc">A voice line for blind and low-vision callers.</span></span>
+          <span class="tag mono">Founder, not builder</span>
+        </a></li>
+        <li><a class="row" href="#">
+
+          <span><span class="name">Third Eye Kit v2</span>
+            <span class="desc">Full-body haptic wearable. Four schematics exist. Nothing has been built.</span></span>
+          <span class="tag mono">Specification</span>
+        </a></li>
+        <li><a class="row" href="#">
+
+          <span><span class="name">Third Eye AI</span>
+            <span class="desc">A conversational layer for non-visual navigation.</span></span>
+          <span class="tag mono">Specification</span>
+        </a></li>
+      </ol>
+      <p class="note">Every status above is the real one. Two of these are documents,
+      and saying so is what makes the first two worth reading.</p>
+    </section>
+  </div>
+  </main>
+</div>
+</body>
+</html>

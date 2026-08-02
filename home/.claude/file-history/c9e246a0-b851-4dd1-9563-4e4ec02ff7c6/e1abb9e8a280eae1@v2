@@ -1,0 +1,6 @@
+# Caddy fetches and renews a real Let's Encrypt certificate for APP_DOMAIN
+# automatically. Point the domain's A/AAAA record at the VPS first.
+{$APP_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy app:3000
+}

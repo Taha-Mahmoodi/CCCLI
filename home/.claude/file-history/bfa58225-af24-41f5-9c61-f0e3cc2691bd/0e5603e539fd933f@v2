@@ -1,0 +1,10 @@
+const container = document.querySelector('.leaflet-container');
+function dblClickAt(x, y) {
+  const opts = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y };
+  container.dispatchEvent(new MouseEvent('dblclick', opts));
+}
+dblClickAt(85, 118);
+dblClickAt(85, 118);
+dblClickAt(85, 118);
+dblClickAt(85, 118);
+'zoomed';

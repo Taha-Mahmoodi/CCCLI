@@ -1,0 +1,1 @@
+/Users/taha/.claude/skills/gstack/review/SKILL.md

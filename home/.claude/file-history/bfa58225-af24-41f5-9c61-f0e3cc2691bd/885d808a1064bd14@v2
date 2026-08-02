@@ -1,0 +1,952 @@
+# Location Pings Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Add rep-authenticated, idempotency-keyed location ping ingestion and a retention job that prunes old pings — PLAN.md Phase 3.
+
+**Architecture:** New `app/pings/` package mirrors `app/zones/`'s anatomy. `record_ping` is idempotent (get-or-create on `(tenant_id, rep_id, idempotency_key)`) so a tablet's offline-queue retry can never double-count a location fix. The retention job reuses Phase 1's `job_runner`, wired into `create_app()`'s new FastAPI `lifespan` handler — the first real consumer of that infrastructure.
+
+**Tech Stack:** Same as Phases 1-2 — Python 3.12, FastAPI, SQLAlchemy 2.0 async, Alembic, Pydantic v2, pytest.
+
+## Global Constraints
+
+- `tenant_id` on every table via `TenantScopedMixin` — per `docs/design.md` Core data model.
+- Idempotency: a ping is identified by `(tenant_id, rep_id, idempotency_key)`. Submitting the same `idempotency_key` twice for the same rep returns the existing row, not an error and not a duplicate — per `docs/design.md` Offline section ("a client-generated idempotency key per queued item... so a replayed sync can't double-count").
+- `recorded_at` is **client-supplied** (when the GPS fix was captured, which may be well before the server receives it if the tablet was offline) — distinct from `created_at` (server receipt time). Both use `DateTime(timezone=True)`, matching the fix from Phase 1's final review.
+- Pings are always attributed to `current_user.id` — a rep can only ever post their own location, never spoof another rep's `rep_id`. Enforced by deriving `rep_id` from `get_current_user`/`require_rep`, never accepting it in the request body.
+- Real-time model: periodic refresh (tablet posts every 15-60s), no WebSocket/SSE — per `docs/design.md`.
+- **Retention scope decision for this phase:** the design spec describes "prune raw pings after ~30 days and downsample older data." This phase implements pruning (deletion past a retention window) only. Downsampling is deliberately deferred — nothing in the product yet reads historical ping data (no route-playback UI exists before Phase 7+), so building an aggregation pipeline now would be speculative. `# ponytail: pruning only, add downsampling when a consumer needs historical-but-lower-resolution data` marks this in the code.
+- **The retention job intentionally runs with no tenant context set** (`current_tenant_id` stays `None`) — it must prune old pings across ALL tenants, not one. This is the opposite of every other write path in this codebase (which always run inside an authenticated, tenant-scoped request) — call this out explicitly in the job's docstring so it's never "fixed" by someone trying to add tenant scoping to it.
+- Service layer owns business rules; routers thin; models logic-free — per `docs/design.md` Stack section.
+
+---
+
+## File Structure
+
+```
+backend/
+  app/
+    auth/
+      deps.py                    # MODIFY: add require_rep (mirrors require_manager)
+    pings/
+      __init__.py                 # NEW
+      models.py                    # NEW: LocationPing
+      schemas.py                    # NEW: PingCreate, PingOut
+      service.py                     # NEW: record_ping, prune_old_pings
+      router.py                       # NEW: POST /api/v1/pings
+    main.py                     # MODIFY: lifespan handler registers + starts the retention job
+  alembic/versions/
+    <new migration>              # NEW: create location_pings table
+  tests/
+    auth/
+      test_deps.py                # MODIFY: add require_rep tests
+    pings/
+      __init__.py                  # NEW
+      test_models.py                # NEW
+      test_service.py                # NEW
+      test_router.py                  # NEW
+    test_main.py                      # NEW: retention job registration smoke test
+```
+
+**Interfaces summary (for cross-task consistency):**
+- `app.auth.deps.require_rep(current_user: User = Depends(get_current_user)) -> User` — raises `HTTPException(403)` if `current_user.role != "rep"`.
+- `app.pings.models.LocationPing` — `id: Mapped[uuid.UUID]` (PK), `tenant_id` (via mixin), `rep_id: Mapped[uuid.UUID]` (FK → `users.id`), `recorded_at: Mapped[datetime]` (client-supplied, `DateTime(timezone=True)`), `latitude: Mapped[float]`, `longitude: Mapped[float]`, `accuracy: Mapped[float | None]`, `idempotency_key: Mapped[str]`, `created_at: Mapped[datetime]` (server default, `DateTime(timezone=True)`). Unique on `(tenant_id, rep_id, idempotency_key)`. Index on `(tenant_id, rep_id, recorded_at)`.
+- `app.pings.service.record_ping(db, tenant_id, rep_id, recorded_at, latitude, longitude, accuracy, idempotency_key) -> LocationPing` — idempotent get-or-create.
+- `app.pings.service.prune_old_pings(db, retention_days: int = 30) -> int` — bulk-deletes `LocationPing` rows with `recorded_at` older than the cutoff; returns the number deleted. Runs unscoped by tenant (see Global Constraints).
+- `app.pings.schemas.PingCreate` (`recorded_at: datetime`, `latitude: float`, `longitude: float`, `accuracy: float | None = None`, `idempotency_key: str`), `PingOut` (`id`, `recorded_at`, `latitude`, `longitude`, `accuracy`).
+
+---
+
+### Task 1: `require_rep` auth dependency
+
+**Files:**
+- Modify: `backend/app/auth/deps.py`
+- Modify: `backend/tests/auth/test_deps.py`
+
+**Interfaces:**
+- Consumes: `app.auth.deps.get_current_user`, `app.auth.models.User` (Phase 1).
+- Produces: `require_rep(current_user: User = Depends(get_current_user)) -> User`.
+
+- [ ] **Step 1: Read the current `backend/app/auth/deps.py` and `backend/tests/auth/test_deps.py` in full** before editing — `require_manager` was added in Phase 2 Task 2; this task adds its mirror image.
+
+- [ ] **Step 2: Append the failing tests to `backend/tests/auth/test_deps.py`**
+
+```python
+from app.auth.deps import require_rep
+
+
+async def test_require_rep_allows_rep():
+    rep = _make_user("rep")
+    result = await require_rep(current_user=rep)
+    assert result is rep
+
+
+async def test_require_rep_rejects_manager():
+    manager = _make_user("manager")
+    with pytest.raises(HTTPException) as exc_info:
+        await require_rep(current_user=manager)
+    assert exc_info.value.status_code == 403
+```
+
+(Add the `require_rep` import to the existing `from app.auth.deps import require_manager` line rather than a new import line. `_make_user` and the `pytest`/`HTTPException` imports already exist in this file from Task 2 of Phase 2 — reuse them, don't redefine.)
+
+- [ ] **Step 3: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/auth/test_deps.py -v`
+Expected: FAIL — `ImportError: cannot import name 'require_rep'`
+
+- [ ] **Step 4: Add `require_rep` to `app/auth/deps.py`**
+
+Append directly below the existing `require_manager` function:
+
+```python
+async def require_rep(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role != "rep":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="rep role required",
+        )
+    return current_user
+```
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/auth/test_deps.py -v`
+Expected: all 4 tests (2 existing `require_manager` + 2 new `require_rep`) `PASSED`.
+
+- [ ] **Step 6: Run the full suite**
+
+Run: `cd backend && uv run pytest -v`
+Expected: all previously-passing tests (86) plus the 2 new ones pass.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/auth/deps.py backend/tests/auth/test_deps.py
+git commit -m "feat(backend): require_rep auth dependency
+
+Refs PLAN 3.1"
+```
+
+---
+
+### Task 2: LocationPing model + migration
+
+**Files:**
+- Create: `backend/app/pings/__init__.py`
+- Create: `backend/app/pings/models.py`
+- Create: `backend/tests/pings/__init__.py` (empty)
+- Create: `backend/tests/pings/test_models.py`
+
+**Interfaces:**
+- Consumes: `app.db.Base`, `app.core.tenancy.TenantScopedMixin`, `app.auth.models.User` (Phase 1).
+- Produces: `LocationPing` (columns per the plan header's Interfaces summary).
+
+- [ ] **Step 1: Write `backend/app/pings/__init__.py`** (empty)
+
+```python
+# backend/app/pings/__init__.py
+```
+
+- [ ] **Step 2: Write `backend/tests/pings/__init__.py`** (empty)
+
+```python
+# backend/tests/pings/__init__.py
+```
+
+- [ ] **Step 3: Write the failing test**
+
+```python
+# backend/tests/pings/test_models.py
+import uuid
+from datetime import datetime, timedelta, timezone
+
+import pytest
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+
+from app.auth.models import User
+from app.pings.models import LocationPing
+
+pytestmark = pytest.mark.asyncio
+
+
+async def _make_rep(db_session, tenant_id):
+    rep = User(
+        id=uuid.uuid4(), tenant_id=tenant_id, email=f"{uuid.uuid4()}@example.com",
+        hashed_password="irrelevant", role="rep",
+    )
+    db_session.add(rep)
+    await db_session.flush()
+    return rep
+
+
+async def test_create_and_fetch_ping(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+    recorded_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+
+    ping = LocationPing(
+        id=uuid.uuid4(), tenant_id=tenant_id, rep_id=rep.id,
+        recorded_at=recorded_at, latitude=37.7749, longitude=-122.4194,
+        accuracy=12.5, idempotency_key="ping-001",
+    )
+    db_session.add(ping)
+    await db_session.commit()
+
+    result = await db_session.execute(select(LocationPing).where(LocationPing.idempotency_key == "ping-001"))
+    fetched = result.scalar_one()
+
+    assert fetched.rep_id == rep.id
+    assert fetched.latitude == 37.7749
+    assert fetched.accuracy == 12.5
+    assert fetched.recorded_at.tzinfo is not None
+    assert fetched.created_at.tzinfo is not None
+
+
+async def test_accuracy_is_optional(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+
+    ping = LocationPing(
+        id=uuid.uuid4(), tenant_id=tenant_id, rep_id=rep.id,
+        recorded_at=datetime.now(timezone.utc), latitude=0.0, longitude=0.0,
+        accuracy=None, idempotency_key="ping-002",
+    )
+    db_session.add(ping)
+    await db_session.commit()
+
+    result = await db_session.execute(select(LocationPing).where(LocationPing.idempotency_key == "ping-002"))
+    assert result.scalar_one().accuracy is None
+
+
+async def test_duplicate_idempotency_key_for_same_rep_rejected(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+    recorded_at = datetime.now(timezone.utc)
+
+    db_session.add(LocationPing(
+        id=uuid.uuid4(), tenant_id=tenant_id, rep_id=rep.id,
+        recorded_at=recorded_at, latitude=1.0, longitude=1.0, idempotency_key="dup-key",
+    ))
+    await db_session.commit()
+
+    db_session.add(LocationPing(
+        id=uuid.uuid4(), tenant_id=tenant_id, rep_id=rep.id,
+        recorded_at=recorded_at, latitude=2.0, longitude=2.0, idempotency_key="dup-key",
+    ))
+    with pytest.raises(IntegrityError):
+        await db_session.commit()
+```
+
+- [ ] **Step 4: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/pings/test_models.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'app.pings.models'`
+
+- [ ] **Step 5: Write `app/pings/models.py`**
+
+```python
+# backend/app/pings/models.py
+import uuid
+from datetime import datetime, timezone
+
+from sqlalchemy import DateTime, Float, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.core.tenancy import TenantScopedMixin
+from app.db import Base
+
+
+class LocationPing(Base, TenantScopedMixin):
+    __tablename__ = "location_pings"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "rep_id", "idempotency_key", name="uq_location_pings_tenant_rep_key"),
+        Index("ix_location_pings_tenant_rep_recorded_at", "tenant_id", "rep_id", "recorded_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    rep_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    longitude: Mapped[float] = mapped_column(Float, nullable=False)
+    accuracy: Mapped[float | None] = mapped_column(Float, nullable=True)
+    idempotency_key: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+```
+
+- [ ] **Step 6: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/pings/test_models.py -v`
+Expected: all 3 tests `PASSED`.
+
+- [ ] **Step 7: Register the model with Alembic**
+
+Edit `backend/alembic/env.py` — add a new import line directly below the existing `from app.zones.models import Zone, ZoneAssignment  # noqa: E402, F401` line:
+
+```python
+from app.pings.models import LocationPing  # noqa: E402, F401
+```
+
+- [ ] **Step 8: Generate the migration**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/backend
+uv run alembic revision --autogenerate -m "create location_pings table"
+```
+
+Expected: a new file under `alembic/versions/` with `op.create_table("location_pings", ...)` using `sa.Uuid()` for `id`/`tenant_id`/`rep_id`, `sa.Float()` for `latitude`/`longitude`/`accuracy`, `sa.String()` for `idempotency_key`, `sa.DateTime(timezone=True)` for BOTH `recorded_at` and `created_at`, the `uq_location_pings_tenant_rep_key` unique constraint, and the `ix_location_pings_tenant_rep_recorded_at` composite index. If autogenerate omits `timezone=True` on either datetime column, manually add it — this is the same class of mistake Phase 1's final review caught; do not reintroduce it.
+
+- [ ] **Step 9: Verify the migration applies cleanly**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/backend
+DATABASE_URL="sqlite+aiosqlite:///./alembic_check.db" uv run alembic upgrade head
+rm -f alembic_check.db
+```
+
+Expected: no errors.
+
+- [ ] **Step 10: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/
+git commit -m "feat(backend): LocationPing model, Alembic migration
+
+Refs PLAN 3.1"
+```
+
+---
+
+### Task 3: `record_ping` service (idempotent ingestion)
+
+**Files:**
+- Create: `backend/app/pings/schemas.py`
+- Create: `backend/app/pings/service.py`
+- Test: `backend/tests/pings/test_service.py`
+
+**Interfaces:**
+- Consumes: `app.pings.models.LocationPing` (Task 2).
+- Produces: `app.pings.schemas.PingCreate`, `PingOut`. `app.pings.service.record_ping(db, tenant_id, rep_id, recorded_at, latitude, longitude, accuracy, idempotency_key) -> LocationPing`.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# backend/tests/pings/test_service.py
+import uuid
+from datetime import datetime, timedelta, timezone
+
+import pytest
+
+from app.pings.service import record_ping
+
+pytestmark = pytest.mark.asyncio
+
+
+async def test_record_ping_creates_a_row(db_session):
+    tenant_id = uuid.uuid4()
+    rep_id = uuid.uuid4()
+    recorded_at = datetime.now(timezone.utc) - timedelta(minutes=2)
+
+    ping = await record_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep_id, recorded_at=recorded_at,
+        latitude=1.5, longitude=2.5, accuracy=10.0, idempotency_key="key-1",
+    )
+
+    assert ping.tenant_id == tenant_id
+    assert ping.rep_id == rep_id
+    assert ping.latitude == 1.5
+    assert ping.idempotency_key == "key-1"
+
+
+async def test_record_ping_with_same_idempotency_key_returns_existing_row_not_a_new_one(db_session):
+    tenant_id = uuid.uuid4()
+    rep_id = uuid.uuid4()
+    recorded_at = datetime.now(timezone.utc)
+
+    first = await record_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep_id, recorded_at=recorded_at,
+        latitude=1.0, longitude=1.0, accuracy=None, idempotency_key="dup-key",
+    )
+    second = await record_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep_id, recorded_at=recorded_at,
+        latitude=999.0, longitude=999.0, accuracy=None, idempotency_key="dup-key",
+    )
+
+    assert second.id == first.id
+    # The second call's (deliberately different) coordinates must NOT overwrite
+    # the first — idempotent replay returns what was already recorded.
+    assert second.latitude == 1.0
+
+
+async def test_record_ping_same_key_different_rep_creates_separate_rows(db_session):
+    tenant_id = uuid.uuid4()
+    recorded_at = datetime.now(timezone.utc)
+
+    first = await record_ping(
+        db_session, tenant_id=tenant_id, rep_id=uuid.uuid4(), recorded_at=recorded_at,
+        latitude=1.0, longitude=1.0, accuracy=None, idempotency_key="shared-key",
+    )
+    second = await record_ping(
+        db_session, tenant_id=tenant_id, rep_id=uuid.uuid4(), recorded_at=recorded_at,
+        latitude=2.0, longitude=2.0, accuracy=None, idempotency_key="shared-key",
+    )
+
+    assert first.id != second.id
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/pings/test_service.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'app.pings.service'`
+
+- [ ] **Step 3: Write `app/pings/schemas.py`**
+
+```python
+# backend/app/pings/schemas.py
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel
+
+
+class PingCreate(BaseModel):
+    recorded_at: datetime
+    latitude: float
+    longitude: float
+    accuracy: float | None = None
+    idempotency_key: str
+
+
+class PingOut(BaseModel):
+    id: uuid.UUID
+    recorded_at: datetime
+    latitude: float
+    longitude: float
+    accuracy: float | None
+
+    model_config = {"from_attributes": True}
+```
+
+- [ ] **Step 4: Write `app/pings/service.py`**
+
+```python
+# backend/app/pings/service.py
+import uuid
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.pings.models import LocationPing
+
+
+async def record_ping(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    rep_id: uuid.UUID,
+    recorded_at: datetime,
+    latitude: float,
+    longitude: float,
+    accuracy: float | None,
+    idempotency_key: str,
+) -> LocationPing:
+    existing = await db.execute(
+        select(LocationPing).where(
+            LocationPing.tenant_id == tenant_id,
+            LocationPing.rep_id == rep_id,
+            LocationPing.idempotency_key == idempotency_key,
+        )
+    )
+    found = existing.scalar_one_or_none()
+    if found is not None:
+        return found
+
+    ping = LocationPing(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        rep_id=rep_id,
+        recorded_at=recorded_at,
+        latitude=latitude,
+        longitude=longitude,
+        accuracy=accuracy,
+        idempotency_key=idempotency_key,
+    )
+    db.add(ping)
+    await db.commit()
+    await db.refresh(ping)
+    return ping
+
+
+async def prune_old_pings(db: AsyncSession, retention_days: int = 30) -> int:
+    """Deletes LocationPing rows older than retention_days. Runs with no
+    tenant context set (current_tenant_id is None) so it prunes across ALL
+    tenants — this is intentional; do not add tenant scoping here.
+
+    # ponytail: pruning only, add downsampling when a consumer needs
+    # historical-but-lower-resolution data (nothing reads old pings yet).
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+    result = await db.execute(delete(LocationPing).where(LocationPing.recorded_at < cutoff))
+    await db.commit()
+    return result.rowcount
+```
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/pings/test_service.py -v`
+Expected: all 3 tests `PASSED`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/pings/schemas.py backend/app/pings/service.py backend/tests/pings/test_service.py
+git commit -m "feat(backend): idempotent ping ingestion + retention pruning service
+
+Refs PLAN 3.1, PLAN 3.2"
+```
+
+---
+
+### Task 4: Retention pruning tests (dedicated coverage for `prune_old_pings`)
+
+**Files:**
+- Modify: `backend/tests/pings/test_service.py` (append — do not replace)
+
+**Interfaces:**
+- Consumes: `app.pings.service.prune_old_pings` (Task 3, already implemented — this task is pure test coverage since the function's logic was already written to satisfy Task 3's own scope, but it has no dedicated tests yet).
+
+- [ ] **Step 1: Append these tests to `backend/tests/pings/test_service.py`**
+
+Add this import to the top of the file (merge with existing imports):
+
+```python
+from app.pings.service import prune_old_pings
+```
+
+Append:
+
+```python
+async def test_prune_old_pings_deletes_pings_older_than_retention_window(db_session):
+    tenant_id = uuid.uuid4()
+    rep_id = uuid.uuid4()
+    old_time = datetime.now(timezone.utc) - timedelta(days=45)
+    recent_time = datetime.now(timezone.utc) - timedelta(days=5)
+
+    await record_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep_id, recorded_at=old_time,
+        latitude=1.0, longitude=1.0, accuracy=None, idempotency_key="old-ping",
+    )
+    await record_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep_id, recorded_at=recent_time,
+        latitude=2.0, longitude=2.0, accuracy=None, idempotency_key="recent-ping",
+    )
+
+    deleted_count = await prune_old_pings(db_session, retention_days=30)
+
+    assert deleted_count == 1
+
+    from sqlalchemy import select
+
+    from app.pings.models import LocationPing
+
+    remaining = await db_session.execute(select(LocationPing))
+    remaining_keys = [p.idempotency_key for p in remaining.scalars().all()]
+    assert remaining_keys == ["recent-ping"]
+
+
+async def test_prune_old_pings_prunes_across_all_tenants(db_session):
+    # The retention job intentionally has no tenant scoping — verify it
+    # actually deletes old pings belonging to more than one tenant in a
+    # single call, proving it isn't accidentally scoped to just one.
+    old_time = datetime.now(timezone.utc) - timedelta(days=45)
+
+    await record_ping(
+        db_session, tenant_id=uuid.uuid4(), rep_id=uuid.uuid4(), recorded_at=old_time,
+        latitude=1.0, longitude=1.0, accuracy=None, idempotency_key="tenant-a-old",
+    )
+    await record_ping(
+        db_session, tenant_id=uuid.uuid4(), rep_id=uuid.uuid4(), recorded_at=old_time,
+        latitude=2.0, longitude=2.0, accuracy=None, idempotency_key="tenant-b-old",
+    )
+
+    deleted_count = await prune_old_pings(db_session, retention_days=30)
+
+    assert deleted_count == 2
+
+
+async def test_prune_old_pings_returns_zero_when_nothing_to_prune(db_session):
+    tenant_id = uuid.uuid4()
+    rep_id = uuid.uuid4()
+    await record_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep_id,
+        recorded_at=datetime.now(timezone.utc), latitude=1.0, longitude=1.0,
+        accuracy=None, idempotency_key="fresh-ping",
+    )
+
+    deleted_count = await prune_old_pings(db_session, retention_days=30)
+
+    assert deleted_count == 0
+```
+
+- [ ] **Step 2: Run test to verify it passes** (this is coverage-only, not new production code — there is no RED step; `prune_old_pings` already exists from Task 3)
+
+Run: `cd backend && uv run pytest tests/pings/test_service.py -v`
+Expected: all 6 tests (3 from Task 3 + 3 new) `PASSED`.
+
+- [ ] **Step 3: Run the full suite**
+
+Run: `cd backend && uv run pytest -v`
+Expected: no regressions.
+
+- [ ] **Step 4: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/tests/pings/test_service.py
+git commit -m "test(backend): dedicated coverage for prune_old_pings retention logic
+
+Refs PLAN 3.2"
+```
+
+---
+
+### Task 5: Ping ingestion router
+
+**Files:**
+- Create: `backend/app/pings/router.py`
+- Modify: `backend/app/main.py` (mount the router)
+- Test: `backend/tests/pings/test_router.py`
+
+**Interfaces:**
+- Consumes: `app.pings.service.record_ping`, `app.pings.schemas.*` (Task 3), `app.auth.deps.require_rep` (Task 1).
+- Produces: `POST /api/v1/pings` → 201 `PingOut` (rep only; a duplicate `idempotency_key` returns 200 with the existing ping, not a new 201 — see Step 3's status-code logic).
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# backend/tests/pings/test_router.py
+import uuid
+from datetime import datetime, timezone
+
+import pytest
+
+pytestmark = pytest.mark.asyncio
+
+TENANT_HEADER = "X-Tenant-Id"
+
+
+async def _register(client, tenant_id, email, role):
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": "hunter2pass", "role": role},
+        headers={TENANT_HEADER: tenant_id},
+    )
+    return response.json()["access_token"]
+
+
+def _ping_payload(idempotency_key="key-1"):
+    return {
+        "recorded_at": datetime.now(timezone.utc).isoformat(),
+        "latitude": 37.7749,
+        "longitude": -122.4194,
+        "accuracy": 15.0,
+        "idempotency_key": idempotency_key,
+    }
+
+
+async def test_rep_can_submit_a_ping(client):
+    tenant_id = str(uuid.uuid4())
+    token = await _register(client, tenant_id, "rep@example.com", "rep")
+
+    response = await client.post(
+        "/api/v1/pings", json=_ping_payload(), headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["latitude"] == 37.7749
+    assert body["accuracy"] == 15.0
+
+
+async def test_manager_cannot_submit_a_ping(client):
+    tenant_id = str(uuid.uuid4())
+    token = await _register(client, tenant_id, "mgr@example.com", "manager")
+
+    response = await client.post(
+        "/api/v1/pings", json=_ping_payload(), headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert response.status_code == 403
+
+
+async def test_resubmitting_same_idempotency_key_returns_200_with_original_ping(client):
+    tenant_id = str(uuid.uuid4())
+    token = await _register(client, tenant_id, "rep@example.com", "rep")
+    payload = _ping_payload(idempotency_key="replay-key")
+
+    first = await client.post("/api/v1/pings", json=payload, headers={"Authorization": f"Bearer {token}"})
+    assert first.status_code == 201
+    first_id = first.json()["id"]
+
+    replay_payload = {**payload, "latitude": 0.0, "longitude": 0.0}
+    second = await client.post(
+        "/api/v1/pings", json=replay_payload, headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert second.status_code == 200
+    assert second.json()["id"] == first_id
+    assert second.json()["latitude"] == 37.7749  # original value, not the replay's
+
+
+async def test_ping_is_attributed_to_the_authenticated_rep_not_a_spoofed_one(client):
+    # PingCreate has no rep_id field at all -- confirm the endpoint doesn't
+    # accept one even if a client tries to sneak it into the request body.
+    tenant_id = str(uuid.uuid4())
+    token = await _register(client, tenant_id, "rep@example.com", "rep")
+    payload = {**_ping_payload(), "rep_id": str(uuid.uuid4())}
+
+    response = await client.post(
+        "/api/v1/pings", json=payload, headers={"Authorization": f"Bearer {token}"}
+    )
+
+    # Extra/unknown fields are ignored by Pydantic's default config -- the
+    # request still succeeds, just with the field silently dropped.
+    assert response.status_code == 201
+
+
+async def test_submit_ping_without_token_returns_401(client):
+    response = await client.post("/api/v1/pings", json=_ping_payload())
+    assert response.status_code == 401
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/pings/test_router.py -v`
+Expected: FAIL — `404` on `/api/v1/pings` (router not mounted) or `ModuleNotFoundError` for `app.pings.router`.
+
+- [ ] **Step 3: Write `app/pings/router.py`**
+
+The endpoint needs to return 201 for a newly-created ping and 200 for a replayed (already-existing) one. `record_ping` (Task 3) doesn't expose a created/found flag, and Task 3 is already committed and reviewed — rather than reopening it, this task does its own existence check first, purely to pick the right status code, then delegates the actual get-or-create work to `record_ping` as normal. This runs the lookup query twice (once here, once inside `record_ping`) — a deliberate, accepted small inefficiency for this phase (two cheap indexed lookups, not a hot path yet), not an oversight; note it in your self-review.
+
+```python
+# backend/app/pings/router.py
+from fastapi import APIRouter, Depends, Response, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth.deps import require_rep
+from app.auth.models import User
+from app.db import get_db
+from app.pings.models import LocationPing
+from app.pings.schemas import PingCreate, PingOut
+from app.pings.service import record_ping
+
+router = APIRouter(prefix="/api/v1/pings", tags=["pings"])
+
+
+@router.post("", response_model=PingOut)
+async def submit_ping_endpoint(
+    body: PingCreate,
+    response: Response,
+    current_user: User = Depends(require_rep),
+    db: AsyncSession = Depends(get_db),
+) -> PingOut:
+    existing = await db.execute(
+        select(LocationPing).where(
+            LocationPing.tenant_id == current_user.tenant_id,
+            LocationPing.rep_id == current_user.id,
+            LocationPing.idempotency_key == body.idempotency_key,
+        )
+    )
+    already_existed = existing.scalar_one_or_none() is not None
+
+    ping = await record_ping(
+        db,
+        tenant_id=current_user.tenant_id,
+        rep_id=current_user.id,
+        recorded_at=body.recorded_at,
+        latitude=body.latitude,
+        longitude=body.longitude,
+        accuracy=body.accuracy,
+        idempotency_key=body.idempotency_key,
+    )
+    response.status_code = status.HTTP_200_OK if already_existed else status.HTTP_201_CREATED
+    return ping
+```
+from fastapi import APIRouter, Depends, Response, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth.deps import require_rep
+from app.auth.models import User
+from app.db import get_db
+from app.pings.models import LocationPing
+from app.pings.schemas import PingCreate, PingOut
+from app.pings.service import record_ping
+from sqlalchemy import select
+
+router = APIRouter(prefix="/api/v1/pings", tags=["pings"])
+
+
+@router.post("", response_model=PingOut)
+async def submit_ping_endpoint(
+    body: PingCreate,
+    response: Response,
+    current_user: User = Depends(require_rep),
+    db: AsyncSession = Depends(get_db),
+) -> PingOut:
+    existing = await db.execute(
+        select(LocationPing).where(
+            LocationPing.tenant_id == current_user.tenant_id,
+            LocationPing.rep_id == current_user.id,
+            LocationPing.idempotency_key == body.idempotency_key,
+        )
+    )
+    already_existed = existing.scalar_one_or_none() is not None
+
+    ping = await record_ping(
+        db,
+        tenant_id=current_user.tenant_id,
+        rep_id=current_user.id,
+        recorded_at=body.recorded_at,
+        latitude=body.latitude,
+        longitude=body.longitude,
+        accuracy=body.accuracy,
+        idempotency_key=body.idempotency_key,
+    )
+    response.status_code = status.HTTP_200_OK if already_existed else status.HTTP_201_CREATED
+    return ping
+```
+
+- [ ] **Step 4: Mount the router in `app/main.py`**
+
+Read the current `backend/app/main.py` in full first (it currently mounts `auth_router` and `zones_router`, and calls `install_tenancy_filter()` — all of that must stay). Add, following the exact existing pattern:
+
+```python
+from app.pings.router import router as pings_router
+```
+
+```python
+app.include_router(pings_router)
+```
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/pings/test_router.py -v`
+Expected: all 5 tests `PASSED`.
+
+- [ ] **Step 6: Run the full suite and ruff**
+
+Run: `cd backend && uv run pytest -v && uv run ruff check .`
+Expected: all tests pass (86 before this phase + 2 from Task 1 + 3 from Task 2 + 3 from Task 3 + 3 from Task 4 + 5 from Task 5 = 102), ruff clean.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/pings/router.py backend/app/main.py backend/tests/pings/test_router.py
+git commit -m "feat(backend): ping ingestion router
+
+Refs PLAN 3.1"
+```
+
+---
+
+### Task 6: Wire the retention job into `job_runner` + FastAPI lifespan
+
+**Files:**
+- Modify: `backend/app/main.py`
+- Test: `backend/tests/test_main.py`
+
+**Interfaces:**
+- Consumes: `app.core.jobs.job_runner` (Phase 1, currently unused — this is its first real consumer), `app.pings.service.prune_old_pings` (Task 3).
+- Produces: `create_app()` registers a `"prune_old_pings"` job with `job_runner` synchronously (safe at import time — `JobRunner.register` only populates a dict, no event loop needed); a new `lifespan` context manager starts periodic pruning on app startup and calls `job_runner.stop_all()` on shutdown (needs a running event loop — this is why it's in `lifespan`, not in `create_app()` directly).
+
+- [ ] **Step 1: Read `backend/app/main.py` and `backend/app/core/jobs.py` in full** before editing. `main.py` currently has no `lifespan` parameter on its `FastAPI(...)` call — you're adding one for the first time. `jobs.py`'s `JobRunner.register(name, func)` takes a zero-argument `Callable[[], Awaitable[None]]`; `start_periodic(name, interval_seconds)` schedules it; `stop_all()` cancels and awaits every scheduled task.
+
+- [ ] **Step 2: Write the failing test**
+
+```python
+# backend/tests/test_main.py
+from app.core.jobs import job_runner
+from app.main import create_app
+
+
+def test_create_app_registers_the_retention_job():
+    create_app()
+    assert "prune_old_pings" in job_runner._jobs
+```
+
+- [ ] **Step 3: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/test_main.py -v`
+Expected: FAIL — `AssertionError` (job not registered yet).
+
+- [ ] **Step 4: Add the retention job wiring to `app/main.py`**
+
+Add these imports (merge with existing ones — don't duplicate `FastAPI` or anything already imported):
+
+```python
+from contextlib import asynccontextmanager
+
+from app.core.jobs import job_runner
+from app.db import async_session_maker
+from app.pings.service import prune_old_pings
+
+RETENTION_JOB_INTERVAL_SECONDS = 24 * 60 * 60  # once a day
+
+
+async def _run_prune_old_pings_job() -> None:
+    async with async_session_maker() as db:
+        await prune_old_pings(db)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    job_runner.start_periodic("prune_old_pings", interval_seconds=RETENTION_JOB_INTERVAL_SECONDS)
+    yield
+    await job_runner.stop_all()
+```
+
+In `create_app()`, add the registration call right after the `FastAPI(...)` instantiation (before the router mounts), and pass `lifespan=lifespan` to the `FastAPI(...)` constructor call:
+
+```python
+def create_app() -> FastAPI:
+    app = FastAPI(title="Atlas Field Force", version="0.1.0", lifespan=lifespan)
+    install_tenancy_filter()
+    job_runner.register("prune_old_pings", _run_prune_old_pings_job)
+    ...
+```
+
+(Keep every existing line — `install_tenancy_filter()`, the `/health` route, all three `include_router` calls — exactly where they are; only add the `lifespan=lifespan` argument and the `job_runner.register(...)` line.)
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/test_main.py -v`
+Expected: `PASSED`.
+
+- [ ] **Step 6: Run the full suite and ruff**
+
+Run: `cd backend && uv run pytest -v && uv run ruff check .`
+Expected: all 103 tests pass (102 + 1 new), ruff clean. Note: `create_app()` is called multiple times across the test suite (once per test via the `app` fixture) — `job_runner.register()` on the same name is idempotent-safe (it just overwrites the dict entry, per `JobRunner`'s Phase-1 implementation), so this should not cause failures, but if you see unexpected behavior from repeated registration across tests, report it rather than working around it silently.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/main.py backend/tests/test_main.py
+git commit -m "feat(backend): wire retention job into job_runner + app lifespan
+
+Refs PLAN 3.2"
+```
+
+---
+
+## After this plan
+
+Update `PROGRESS.md` with a new entry (append, don't replace) summarizing Phase 3: idempotent ping ingestion (rep-only, tenant-scoped, replay-safe), `LocationPing` model + migration, retention pruning wired into the (previously unused) `job_runner` via a new FastAPI `lifespan` handler — downsampling deliberately deferred (no consumer yet). Tick PLAN.md 3.1 and 3.2. Then a final whole-branch review before merge (same as Phases 1-2), then plan Phase 4 (visits & tasks) fresh against the actual code.

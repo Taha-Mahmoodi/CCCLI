@@ -1,0 +1,22 @@
+// Audio blob storage. Filesystem for local/dev; swap for S3-compatible +
+// zero-egress CDN (Cloudflare R2) at deploy (spec §8.1) — same interface.
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+
+export interface Storage {
+  put(key: string, data: Uint8Array): Promise<void>;
+  get(key: string): Promise<Uint8Array>;
+}
+
+export function createStorage(dir: string): Storage {
+  return {
+    async put(key, data) {
+      const p = join(dir, key);
+      await mkdir(dirname(p), { recursive: true });
+      await writeFile(p, data);
+    },
+    async get(key) {
+      return new Uint8Array(await readFile(join(dir, key)));
+    },
+  };
+}

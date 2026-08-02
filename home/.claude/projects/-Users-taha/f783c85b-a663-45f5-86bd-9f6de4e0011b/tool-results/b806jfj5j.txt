@@ -1,0 +1,962 @@
+==========================
+FILE: docs/superpowers/specs/2026-07-09-auth-vault-sharing-design.md
+### Explicitly out of scope for this sub-project
+
+- Editor, graph rendering, search, and real-time collaboration are separate
+  sub-projects (2–6 above) and build on top of this data/permission model,
+  not part of it.
+- Binary attachments — notes are markdown-only (decided for the whole
+  product, not just this sub-project).
+- Multi-organization / cross-company tenancy or billing — one deployment
+  serves one organization; the open-source code itself is what enables
+  other organizations to self-host separately.
+- Fine-grained team roles beyond owner/member (e.g. per-team custom roles) —
+  can be added later if flat ownership proves insufficient.
+- A cap on the number of MCP connections a user may generate — unlimited
+  for v1.
+
+## Security hardening (audit follow-up, 2026-07-12)
+
+Adopted from a dedicated security audit of all six specs — see
+`2026-07-12-security-audit-findings.md` for the full findings list and
+severity ranking. This section amends the design above; where it conflicts
+with earlier wording, this section wins.
+
+### Bootstrap (closes: first-user race condition)
+
+- The first-admin bootstrap is **not** "whoever signs up first." Instead,
+  a one-time setup token is generated at deploy time (printed to the
+  deploy log / set via an env var) and must be presented once, out of
+  band from public signup, to claim the initial admin account. Public
+  signup only becomes reachable after this one-time setup completes. This
+  closes a real exploit: an org's instance can be reachable before the
+  founder actually visits `/signup`, letting an attacker who finds the
+  URL first claim permanent admin control.
+
+### Account lifecycle (closes: no offboarding, no ownership transfer)
+
+- User `status` gains a third value: `deactivated` (admin-triggered).
+  Deactivation immediately invalidates all active sessions for that user
+  and stops their `MCPConnection`s from resolving any access (consistent
+  with "access is always checked live").
+- Vault ownership is transferable: an admin may reassign a vault's owner
+  when its current owner is deactivated or unreachable. Ownership
+  transfer is otherwise owner-initiated (hand a vault to someone else
+  directly).
+- Deleting a Team or deactivating a user cascades: dangling `VaultShare`
+  and `TeamMembership` rows referencing them are cleaned up rather than
+  left pointing at a removed entity.
+
+### Password & session security (closes: no reset flow, no transport/session requirements, no brute-force protection)
+
+- **Password reset**: a reset flow exists, gated by a verified email
+  address (email verification is therefore now part of signup, not just
+  password reset). Reset tokens are single-use, short-lived, and their
+  request endpoint is rate-limited to resist enumeration and abuse.
+- **Transport & cookies**: the deployment requires TLS; session cookies
+  must be `Secure`, `HttpOnly`, and `SameSite`. Sessions are invalidated
+  on logout, password change, and admin-triggered deactivation — not left
+  to expire naturally.
+- **Brute-force protection**: login attempts are throttled per-account
+  and per-source.
+- **MFA**: not in v1, but explicitly tracked as a near-term follow-up
+  given the sensitivity of the data this platform holds — noted here so
+  it isn't silently forgotten.
+
+### Team-based sharing (closes: unreviewed privilege escalation via team membership)
+
+- When a team's membership changes, vault owners who have shared a vault
+  with that team are notified of the change.
+- A vault owner can view, at any time, the *current, expanded* list of
+  everyone with access to their vault through a team share (not just the
+  grant record naming the team) — closing the gap where a vault owner has
+  no visibility into who a team's own owner has since added.
+- Open team creation (any active user, no admin gate) remains as
+  originally specced, but is explicitly re-flagged here as a
+  social-engineering surface: sharing a vault to a team should get the
+  same scrutiny as sharing to an individual you don't fully trust yet.
+
+### Merge preference re-validation (closes: stale preference after revocation)
+
+- `VaultGraphPreference` is only meaningful in combination with the
+  user's *current* effective access — merge-time inclusion always
+  re-resolves live access to each candidate vault, never trusting the
+  stored preference flag as a proxy for still having access.
+- Setting a `VaultGraphPreference` itself requires currently having
+  access to that vault (prevents using the preference toggle to probe the
+  existence of vault IDs the user can't otherwise reach).
+
+### MCP connection token lifecycle (closes: unspecified token handling)
+
+- Tokens are stored **hashed** server-side (same posture as passwords),
+  never recoverable in plaintext after initial creation.
+- Tokens support expiry and rotation.
+- Every user gets a visible list of their own connections showing
+  creation time, last-used time, and scope — with one-click revoke. This
+  is a safety-critical property the rest of the MCP design (sub-project 6)
+  depends on, not an optional nicety.
+
+### Security-event logging (closes: no auth/access observability)
+
+- Alongside the content audit trail (sub-project 6), the platform logs
+  security-relevant *access* events: failed logins, permission-denied
+  responses, admin approvals/promotions, and MCP token
+  creation/use/revocation — the telemetry needed to detect the issues
+  above after the fact.
+
+### Deployment requirements for self-hosters (closes: no secrets/backup guidance)
+
+- Secrets (DB credentials, session signing material) must come from
+  environment/secret-manager configuration, never hardcoded or committed.
+- Backup/restore procedures must preserve soft-delete and audit-trail
+  consistency — restoring an old backup must not silently resurrect
+  content that was since hard-purged, without that being an explicit,
+  visible action.
+
+### Terminology clarification
+
+- Throughout these specs, "account" means an individual **User**, not an
+  organization/tenant — there is no `Organization` entity; a deployment
+  *is* the org (per the README). "Cross-account isolation" (sub-project 6)
+  means isolation between users, not between tenants.
+
+### Assumptions carried forward (revisit if wrong)
+
+- Vault `mergeable` defaults to **off** (private-by-default is the safer
+  assumption for a company knowledge base).
+- Sharing is always vault-owner-initiated; there is no request-access flow
+  in this sub-project.
+- Team creation is open to any active user, not admin-gated.
+==========================
+FILE: docs/superpowers/specs/2026-07-09-editor-design.md
+## Explicitly out of scope for this sub-project
+
+- **Backlinks / "linked mentions" panel** — deferred to the Graph engine
+  sub-project (#3), which already needs to scan links vault-wide to build
+  the graph; building link-indexing twice would be wasted work.
+- **Multi-user concurrent editing** — deferred to the Real-time
+  collaboration sub-project (#5). This sub-project is single-user save/load
+  only; two people editing the same note at once is not handled here.
+- **Full-text search** — sub-project #4.
+- **Attachments** — out of scope for the whole product (notes are
+  markdown-only, decided in sub-project 1's spec).
+
+## Security hardening (audit follow-up, 2026-07-12)
+
+Adopted from the security audit — see
+`2026-07-12-security-audit-findings.md`.
+
+### Server-side OKF validation (closes: validation was only a UI guarantee)
+
+- OKF-schema and path validation (valid `type`, valid frontmatter shape,
+  correct `type/name` placement, no path collisions) is enforced by a
+  single shared server-side function, called by **every** write path —
+  the browser editor's save, and the MCP write tool (sub-project 6) alike.
+  The structured property panel described above is a UI convenience on
+  top of this; it is never the only enforcement point.
+- Type/name collisions (two notes that would resolve to the same path)
+  are rejected at that same validation point, not just avoided by UI
+  convention.
+
+## Assumptions carried forward (revisit if wrong)
+
+- `owner` permission behaves identically to `edit` for editing purposes —
+  ownership only matters for vault-level actions (sharing, mergeable
+  toggle), not note-level editing rights.
+- Type inference on link-created notes is a best-effort convenience, not a
+  guarantee — the type-first creation flow is always the fallback.
+==========================
+FILE: docs/superpowers/specs/2026-07-09-graph-engine-design.md
+  built here also powers the backlinks panel deferred from the Editor spec.
+
+## Shares a dependency with sub-project 4 (Search)
+
+Both this sub-project's semantic INFERRED edges and sub-project 4's
+AI-accurate search rely on the same **embedding index**: one embedding
+computed per note at save-time, stored once, reused by both. This is a
+deliberate shared building block, not duplicated work — and computing
+embeddings at save-time (rather than per query) means no per-query LLM
+calls, which keeps graph rendering and search both fast and avoids sending
+note content to an external API on every interaction.
+
+## Goals
+
+- Build a queryable knowledge graph per vault, in the OKF/Graphify-inspired
+  style: explicit vs inferred relationships, automatic community detection.
+- Let a user visually explore a vault's graph, with real customization —
+  clustering mode, filtering, physics, appearance — not fixed defaults.
+- Support an opt-in merged view spanning every vault a user has connected
+  to their personal graph, with real cross-vault edges.
+
+## Graph engine (data layer)
+
+### Edge types
+
+- **EXTRACTED** — explicit `[[wikilinks]]`, found by scanning notes
+  vault-wide. This is the same link index the Editor sub-project's
+  backlinks panel reads from — built once here, consumed there.
+- **INFERRED**, two tiers:
+  - **Structural** — two notes share a `type` or have overlapping `tags`.
+    Computed directly from OKF frontmatter; no AI involved, cheap to
+    recompute whenever frontmatter changes.
+  - **Semantic** — two notes are related by meaning even without shared
+    links, type, or tags. Derived from the shared embedding index (see
+    above): notes whose embeddings are sufficiently similar get a semantic
+    inferred edge.
+
+### Community detection
+
+- Leiden algorithm run over the full edge graph (extracted + both inferred
+  tiers) to detect natural groupings/subsystems within a vault, independent
+  of how the user manually typed/tagged things.
+
+## Graph view (UI layer)
+
+### Scope
+
+- **Per-vault by default**: opening a vault shows that vault's graph only.
+- **Merged view**: a separate, opt-in view combining every vault the
+  current user has marked via `VaultGraphPreference` (and whose owner has
+  `mergeable` on, per sub-project 1). Cross-vault relationships (a link,
+  shared type/tag, or semantic similarity between notes in *different*
+  merged vaults) draw a real edge — the point of merging vaults is one
+  interconnected graph, not several side-by-side ones.
+
+### Coloring modes
+
+- **By type/tag** (manual): node color reflects the OKF `type` or a chosen
+  tag — shows how the user organized things.
+- **By detected community** (Leiden): node color reflects automatic
+  clustering — shows how the vault is actually structured.
+- Only one mode active at a time, switchable via a toggle — layering both
+  was considered and rejected for this sub-project to keep the view
+  readable.
+
+### Filtering
+
+- Filter panel scoped by `type`, `tags`, and date range (`timestamp`
+  frontmatter), live-updating which nodes/edges are shown.
+
+### Physics & appearance
+
+- Exposed, adjustable controls (not hidden fixed defaults): force
+  strength, link distance, clustering tightness, plus cosmetic controls
+  (node size, color palette, edge styling).
+
+## Explicitly out of scope for this sub-project
+
+- **Full-text search UI** — sub-project 4, though it shares the embedding
+  index built here.
+- **Real-time collaborative graph updates** (e.g. live-updating as a
+  teammate edits) — sub-project 5's concern once collaborative editing
+  exists; this sub-project assumes the graph reflects the vault's saved
+  state.
+- **MCP-exposed graph queries** — sub-project 6 wraps this engine for AI
+  access; this spec only covers the engine and its human-facing view.
+
+## Security hardening (audit follow-up, 2026-07-12)
+
+Adopted from the security audit — see
+`2026-07-12-security-audit-findings.md`.
+
+### Merge-time access re-validation
+
+- As stated in sub-project 1's amended spec: the merged cross-vault graph
+  always re-resolves each candidate vault's live access at query time. A
+  vault whose share was revoked since the user last set their
+  `VaultGraphPreference` never surfaces nodes, edges, titles, or snippets
+  in the merged view, regardless of the stored preference value.
+
+## Assumptions carried forward (revisit if wrong)
+
+- Semantic similarity threshold for creating an inferred edge is a tunable
+  parameter, not fixed — exact value decided at implementation time.
+- Embeddings are recomputed whenever a note's body or frontmatter changes,
+  not on a schedule — keeps the graph consistent with the latest save
+  without a separate reindexing job to manage.
+- Community detection (Leiden) reruns whenever the underlying edge graph
+  changes meaningfully, not on every single edit — exact recompute
+  trigger/frequency is an implementation-time decision.
+==========================
+FILE: docs/superpowers/specs/2026-07-11-realtime-collaboration-design.md
+## Explicitly out of scope for this sub-project
+
+- **Full offline-first editing** (indefinite local editing with no
+  connection, explicit local persistence, long-offline conflict surfacing)
+  — a possible future iteration if v1's reconnect-and-merge proves
+  insufficient, not part of this design.
+- **Version history / undo across sessions** — not addressed here; revisit
+  if collaborative editing surfaces a need for point-in-time recovery
+  beyond the CRDT's live state.
+- **Comments/annotations** — not part of this sub-project's scope.
+
+## Security hardening (audit follow-up, 2026-07-12)
+
+Adopted from the security audit — see
+`2026-07-12-security-audit-findings.md`.
+
+### Per-operation permission enforcement (closes: permission checked only at handshake)
+
+- The sync relay validates a connection's live permission on receipt of
+  **every** inbound edit operation, not only when the connection is first
+  opened. A revocation event (share revoked, `mergeable` changed,
+  deactivation) triggers an immediate server-initiated kick or downgrade
+  of any affected open socket — the relay does not wait for the socket to
+  naturally reconnect or for a periodic recheck. This is what actually
+  delivers on the "access is always checked live" guarantee for an
+  already-open collaboration session; without it, a revoked editor's
+  already-open connection could keep emitting valid edits for some window
+  after their access was pulled.
+
+### Presence visibility (closes: identity disclosure to unauthorized viewers)
+
+- Presence identity (name/avatar/cursor) is visible only to users who
+  could otherwise see who has access to the vault (i.e., who could see
+  its share/membership list) — not to every viewer regardless of their
+  relationship to the vault's owner or team. A read-only user with
+  individual access to a vault does not automatically get visibility into
+  which team members are concurrently editing it.
+
+## Assumptions carried forward (revisit if wrong)
+
+- Collaborator color assignment is per-session (reassigned each time
+  someone joins), not a persistent per-user color identity — exact
+  assignment scheme is an implementation-time decision.
+- The "reconnecting" window during which local edits are buffered is short
+  (network blip scale), not designed to tolerate extended offline periods —
+  extended disconnects are expected to eventually surface as a full
+  disconnect rather than silently buffering indefinitely.
+==========================
+FILE: docs/superpowers/specs/2026-07-11-search-design.md
+  atomic unit; chunk-level (paragraph/section) indexing is deferred (see
+  Out of scope).
+- **Fields covered**: note title/path (e.g. `people/john-doe`), every
+  frontmatter value (`type`, `resource`, `tags`, `timestamp`, and any
+  extensible OKF keys), and the markdown body. Together this is the
+  entire textual content of a note — nothing is excluded from the index.
+- **Embeddings**: reuses the embedding index from sub-project 3 (recomputed
+  whenever a note's body or frontmatter changes, per that spec). No
+  separate embedding computation happens here.
+
+## Query
+
+- **Hybrid retrieval**: every query runs two matches in parallel —
+  - a keyword/full-text match against the indexed fields (catches exact
+    terms, names, IDs, code snippets), and
+  - a semantic similarity match against the embedding index (catches
+    conceptually related notes even when they don't share vocabulary) —
+  then merges both into one ranked result set. Neither mode alone
+  satisfies the "AI shouldn't miss relevant data" requirement: keyword
+  alone misses conceptual matches, semantic alone misses exact-term
+  lookups.
+- **Scope**:
+  - Default: scoped to the vault currently open, matching the Graph
+    engine's per-vault default.
+  - Optional: a "search everywhere" mode across every vault the querying
+    user currently has access to (owned, shared, or included in their
+    merged graph view) — useful when the user doesn't remember which
+    vault a note lives in.
+- **Result shape**: note path, matching snippet, frontmatter, and a
+  relevance score — the same shape regardless of caller.
+
+## Consumers
+
+- **One search function, two callers.** The human search UI and the
+  MCP search tool (sub-project 6) both call the same underlying search
+  path — same hybrid retrieval, same ranking, same result shape. There is
+  no separate AI-optimized query mode; keeping one path avoids the two
+  consumers' results silently diverging over time.
+- **Permission enforcement is uniform**: every query, whether issued from
+  the UI or through an MCP connection, is filtered by the caller's live
+  effective permissions before results are returned — a search never
+  surfaces a note the requester couldn't otherwise open.
+
+## Explicitly out of scope for this sub-project
+
+- **Chunk-level (paragraph/section) indexing** — v1 indexes whole notes
+  only. Revisit if long notes make whole-note snippets insufficiently
+  precise.
+- **MCP tool definition itself** (the actual connection/token plumbing
+  that exposes this search function to an AI assistant) — sub-project 6;
+  this spec only defines the search function those tools will call.
+- **Real-time index updates during collaborative editing** — sub-project 5's
+  concern once multi-user live editing exists; this spec assumes the index
+  updates on save, consistent with how the embedding index (sub-project 3)
+  already updates.
+
+## Security hardening (audit follow-up, 2026-07-12)
+
+Adopted from the security audit — see
+`2026-07-12-security-audit-findings.md`.
+
+### No existence/content leakage across permission boundaries
+
+- Every result — keyword, semantic, or merged "search everywhere" — is
+  filtered by the caller's live effective permission *before* being
+  returned, not just before its full content is shown. A vault the
+  searcher can't access must never surface even indirectly: not as a
+  snippet, not as a title, not as a match count, not as an "N more
+  results you don't have access to" hint. Absence of access means
+  absence from the result set entirely.
+- This applies identically to human UI queries and MCP queries (per the
+  "one search function, N callers" design) — there is no separate,
+  looser check for either caller.
+
+## Assumptions carried forward (revisit if wrong)
+
+- Merge/ranking strategy between keyword and semantic results (e.g.
+  weighting, score normalization) is an implementation-time decision, not
+  fixed here.
+- "Search everywhere" mode is opt-in per query (a toggle/mode switch), not
+  a separate default — per-vault stays the default entry point.
+==========================
+FILE: docs/superpowers/specs/2026-07-12-mcp-integration-design.md
+- This is new scope relative to sub-project 5, which explicitly deferred
+  version history. Autonomous AI writes are why it can no longer stay
+  deferred: a bad AI edit or delete needs a recovery path even if nobody
+  was watching the live collaboration session when it happened.
+- The audit log and the live collaboration presence (sub-project 5) serve
+  different purposes and both stay: presence is real-time transparency
+  while something is happening; the audit trail is after-the-fact
+  accountability and recovery.
+
+## Isolation & safety
+
+- **Every MCP connection's access is recomputed live on every call**,
+  against that connection's own current resolved permissions — this was
+  already the rule from sub-project 1, restated here as a hard constraint
+  because it's the property this entire sub-project depends on for safety.
+- **No caching layer may span connections or accounts.** Any performance
+  caching (search results, embedding lookups, graph query results, etc.)
+  must be keyed strictly to the requesting connection's live permission
+  scope. A cache entry computed for one connection is never reused to
+  answer a different connection's request, even if both happen to resolve
+  to the same vault — the permission check must always run per-request,
+  not be shortcut by a shared cache hit.
+- **Cross-account isolation is absolute, with no exceptions.** No code
+  path, admin role, or caching layer may allow one account's MCP
+  connection to observe or affect another account's data. This holds
+  regardless of circumstance — there is no "trusted" or "internal" bypass
+  of the permission model for MCP traffic.
+- **Concurrent agents don't corrupt each other's work.** Whether multiple
+  MCP connections belong to the same account or to entirely different
+  accounts, simultaneous access to a shared vault is handled the same way
+  sub-project 5 already handles simultaneous human editors: each
+  connection is an independent participant in the CRDT sync, which
+  guarantees conflict-free merging by construction — no additional
+  agent-specific locking or coordination logic is needed.
+
+## Explicitly out of scope for this sub-project
+
+- **The MCP connection creation/management UI** (generating a token,
+  naming a connection, revoking it) — that UI and the `MCPConnection` data
+  model itself belong to sub-project 1; this spec only defines what an
+  already-issued connection is allowed to *do*.
+- **Rate limiting / abuse prevention specifics** (e.g. request quotas per
+  connection) — a real operational concern, but a tuning/implementation
+  decision rather than a structural one, deferred to implementation time.
+- **Trash retention window length and permanent-purge policy** — the
+  soft-delete mechanism is specified here; how long deleted notes remain
+  recoverable before permanent purge is an implementation-time decision.
+
+## Security hardening (audit follow-up, 2026-07-12)
+
+Adopted from the security audit — see
+`2026-07-12-security-audit-findings.md`.
+
+### Scope enforcement on account-wide operations (closes: vault-scoped tokens could reach account-wide surfaces)
+
+- Every MCP operation first checks the calling connection's declared
+  `scope`. Account-wide operations — the merged cross-vault graph,
+  "search everywhere," listing all of a user's vaults — are **hard
+  rejected** for `scope=vault` connections, never silently narrowed to
+  "just this vault's slice of the account-wide result." A vault-scoped
+  token stays exactly as narrow as its name implies.
+
+### Audit/revert access control (closes: revert exposed at plain-read level, no purge)
+
+- Viewing a note's change history and invoking revert both require
+  `edit`/`owner` permission on the vault, not merely `read` — read-only
+  access shows current state, not history.
+- A separate, explicit **hard purge** action exists (owner or admin
+  triggered) that permanently removes a specific prior revision from
+  history — distinct from soft-delete/revert — for cases like an
+  accidentally-committed secret, where "recoverable" is the wrong
+  property to have.
+
+### Prompt-injection awareness (closes: no stated boundary between note content and instructions)
+
+- Note content read via MCP (through read, search, or graph-query
+  results) is data, never instructions — this platform makes no attempt
+  to sanitize note content for "safety," but MCP client integrations are
+  expected to treat retrieved note text as untrusted data in their own
+  system-prompt contract, the same way a browser treats fetched HTML as
+  data rather than code.
+- Bulk or destructive MCP-triggered operations (mass edit across many
+  notes, mass delete, cross-vault write in a single call) require
+  explicit human confirmation before executing — closing the risk of one
+  poisoned note's embedded instructions causing a wide-blast-radius
+  action via an unsupervised agent.
+
+### Rate limiting is structural, not deferred (closes: no throttling despite "unsupervised concurrent agents" framing)
+
+- Per-connection and per-user request throttling is a v1 structural
+  requirement, not an implementation-time nice-to-have — a single
+  runaway or malicious agent must not be able to degrade the shared
+  instance for every other user. Exact quota numbers remain an
+  implementation-time decision; the presence of *some* throttling does
+  not.
+
+## Assumptions carried forward (revisit if wrong)
+
+- An MCP connection's "AI" presence label in the collaboration engine is
+  derived from the connection's name/metadata (set at creation, per
+  sub-project 1), not a separate identity system.
+- The audit trail's revert capability restores a note to a prior recorded
+  state; it does not need to support arbitrary point-in-time branching or
+  merge-conflict resolution between two reverts — simple linear history is
+  assumed sufficient for v1.
+==========================
+FILE: docs/superpowers/specs/2026-07-12-security-audit-findings.md
+15. **Rate limiting fully deferred** despite the design explicitly
+    assuming multiple unsupervised concurrent AI agents — a single
+    runaway agent could degrade the entire (single-org) shared instance.
+    *Resolved in: `2026-07-12-mcp-integration-design.md` (Rate limiting
+    section) — reclassified as structural, not deferred.*
+16. **No data export / bulk backup / migration mechanism specified** —
+    directly contradicts the README's "no proprietary database holding
+    your notes hostage" promise. *Resolved in: `README.md` roadmap
+    (added as a tracked future sub-project — see below).*
+17. **No security-event logging/observability** for auth/access events
+    (failed logins, permission-denied, admin approvals, token
+    creation/use/revocation), despite the content audit trail being
+    otherwise thorough. *Resolved in:
+    `2026-07-09-auth-vault-sharing-design.md` (Security-event logging
+    section).*
+
+## Medium
+
+18. **No on-demand hard-delete/purge**, only automatic trash retention —
+    compounds finding 5. *Resolved alongside finding 5's fix.*
+19. **No secrets-management / backup-restore guidance for
+    self-hosters.** *Resolved in:
+    `2026-07-09-auth-vault-sharing-design.md` (Deployment requirements
+    section).*
+20. **Revert not permission-scoped** — unclear who could invoke it.
+    *Resolved alongside finding 5's fix (edit/owner only).*
+21. **No anomaly detection / circuit breaker for runaway AI edit
+    loops** beyond generic recoverability. *Partially addressed by the
+    rate-limiting fix (finding 15); full anomaly detection remains
+    future work, not respecced here.*
+22. **No MFA/2FA mentioned, even as a roadmap note.** *Resolved in:
+    `2026-07-09-auth-vault-sharing-design.md` (Password & session
+    security — tracked as near-term follow-up, not built in v1).*
+23. **Cascading deletes unaddressed** for team/account removal.
+    *Resolved in: `2026-07-09-auth-vault-sharing-design.md` (Account
+    lifecycle section).*
+24. **No notification/activity-feed system** anywhere — no one is told
+    when they're shared with, added to a team, or reverted. *Partially
+    resolved: team-membership-change notifications landed in finding 9's
+    fix; a general activity feed remains tracked as future work in the
+    README, not fully respecced.*
+
+## Low
+
+25. **Terminology ambiguity**: "account" used inconsistently for
+    "user" vs. implied org/tenant. *Resolved in:
+    `2026-07-09-auth-vault-sharing-design.md` (Terminology clarification
+    section).*
+26. **Open team creation as a social-engineering surface** — reinforces
+    an assumption the original spec already flagged for revisiting.
+    *Reinforced in: `2026-07-09-auth-vault-sharing-design.md` (Team-based
+    sharing section); still an open assumption, not fully closed.*
+27. **Note name/type collision on type-first creation unaddressed.**
+    *Resolved in: `2026-07-09-editor-design.md` (Server-side OKF
+    validation section).*
+
+## Missing functionality (tracked, not respecced here)
+
+These are real capability gaps, not hardening items. Fully speccing each
+would need its own brainstorming pass; for now they're tracked explicitly
+in the README roadmap so they aren't silently absent:
+
+- **Data export / vault backup / migration** (finding 16) — directly
+  ties to the README's data-portability promise.
+- **Notifications / activity feed** (finding 24, partially).
+- **Admin oversight dashboard** beyond the approval queue (vault counts,
+  storage usage, activity).
+- **MFA** as a built feature (currently just a tracked intent).
+
+## What the specs already got right
+
+Noted briefly, since the bulk of this audit is intentionally the gap list:
+
+- MCP's "no caching layer may span connections or accounts" was already a
+  hard constraint, not an aspiration.
+- Owner-only re-sharing (editors can't re-share) already blocks the most
+  obvious escalation path.
+- `mergeable` defaulting off (private-by-default) was already the right
+  default.
+- Soft-delete-always + an audit trail, specifically motivated by
+  unsupervised AI agents, was already a sound defensive default before
+  this audit tightened its access control.
+- AI writes already routed through the same CRDT engine as humans, with
+  visible attributed presence — no silent AI edits, by design.
+- "One search function, N callers" and "graph queries reuse the same
+  engine" were already the right structural instinct — this audit mainly
+  closed boundary cases (findings 3, 4, 10) rather than redesigning the
+  approach.
+==========================
+FILE: docs/superpowers/specs/2026-07-15-admin-oversight-dashboard-design.md
+## Explicitly out of scope for this sub-project
+
+- **Any content-reading capability for admins** — see "Content visibility"
+  above; this is a hard boundary, not a deferred feature.
+- **Editing a vault's content, structure, or a note's frontmatter on an
+  admin's behalf** — force-revoke removes access; it does not grant the
+  admin any write capability into the vault itself.
+- **Configurable dashboard views, custom reports, or data export from the
+  dashboard itself** — the dashboard surfaces existing data; building
+  its own export/reporting layer is separate from (and would depend on)
+  sub-project 7's data-export primitives if ever built.
+
+## Assumptions carried forward (revisit if wrong)
+
+- Storage size shown per vault/instance is a size-on-disk figure for the
+  OKF markdown files themselves — exact measurement/aggregation approach
+  is an implementation-time decision, not fixed here.
+- Force-revoke actions taken by an admin are themselves recorded in the
+  security-event log (consistent with sub-project 1's logging
+  requirement covering "admin approvals/promotions" — force-revoke is the
+  same category of admin action and should be logged the same way).
+==========================
+FILE: docs/superpowers/specs/2026-07-15-data-export-portability-design.md
+**Explicitly deferred, tracked but not designed here:**
+- **Cloud storage integrations** (Google Drive, Dropbox, S3, etc.) — each
+  provider needs its own OAuth flow and API integration; a separate
+  technical surface from export itself, not a detail of it.
+- **Automated/scheduled recurring backups** — needs job-scheduling
+  infrastructure; more naturally a convenience layer built on top of the
+  manual export/import primitives defined here, once those exist.
+
+## Export
+
+### Permission
+
+Exporting a vault (in any form — per-note, per-vault, or via a share link)
+requires `edit` or `owner` permission on that vault, not merely `read`.
+Read-only viewers can see content in the app but cannot take a portable
+copy of it — export is treated as a stronger action than viewing, since a
+downloaded archive persists even after the viewer's access is later
+revoked, which plain in-app viewing does not.
+
+### Per-note export
+
+A single note exports as one `.md` file, exactly as stored (frontmatter +
+body) — no transformation.
+
+### Per-vault export
+
+A zip archive containing two things, kept separate:
+- The vault's exact OKF file tree (notes + frontmatter), untouched —
+  identical to what's already on disk. Note files are never mixed with
+  export-specific metadata.
+- A sidecar manifest file (e.g. `manifest.json`) holding everything that
+  isn't part of the OKF file format itself: the vault's name, its
+  `mergeable` flag, and its current share list (grantee, grantee type,
+  permission level).
+
+Keeping the manifest separate from the notes preserves the "plain files,
+always" guarantee for the content itself — the manifest is instance
+metadata, not knowledge content.
+
+### Shareable download link
+
+A vault owner (or anyone with `edit`/`owner`, consistent with the export
+permission rule) can generate a signed URL for a specific export. The link:
+- Expires after a set window (exact duration is an implementation-time
+  decision, not fixed here).
+- Can be revoked manually before it expires.
+- Grants download access to anyone who has the link during its valid
+  window — same trade-off inherent to any "share this download link"
+  feature, deliberately time-boxed so a forgotten link doesn't become a
+  standing, unguarded backdoor to that export.
+
+## Import
+
+- Any active user can trigger an import by uploading an export archive.
+  They become the owner of the newly created vault — consistent with the
+  existing rule that any active user can create vaults.
+- Vault-level settings (name, `mergeable` flag) are recreated from the
+  archive's manifest.
+- **Share list resolution**: each entry in the manifest's share list is
+  matched by email against the destination instance's existing user
+  accounts.
+  - A match is re-shared automatically at the same permission level
+    recorded in the manifest.
+  - An unmatched entry is skipped — no new account is silently created —
+    and reported back to the importer as "these people need manual
+    re-sharing on this instance."
+- **Notes** are recreated via the same shared server-side OKF-validation
+  write path used everywhere else in the product (editor saves, MCP
+  writes, per sub-project 2's hardening). Import gets no special-cased
+  validation bypass.
+
+## Full-instance admin backup
+
+- Admin-only action.
+- Bundles every vault's export (notes + manifest, as defined above)
+  together, **plus** a full account-layer dump: all Users, Teams,
+  TeamMemberships, VaultShares, MCPConnections (hashed tokens only — raw
+  secrets are never recoverable, consistent with sub-project 1's token
+  hardening), and the security/audit event log.
+- Restoring this backup on a fresh instance recreates full state — content
+  *and* who owns/can access what. A backup that restores notes but no
+  accounts or permissions isn't a real disaster-recovery restore, so the
+  account layer is included by design, not treated as optional.
+
+## Explicitly out of scope for this sub-project
+
+- Cloud storage integrations (see "Scope" above).
+- Automated/scheduled recurring backups (see "Scope" above).
+- Partial/selective restore from a full-instance backup (e.g. restoring
+  just one vault out of a full backup) — the backup format supports this
+  in principle (it's just per-vault bundles plus an account dump), but the
+  restore *tooling* for partial restores isn't designed here.
+
+## Assumptions carried forward (revisit if wrong)
+
+- Export link expiry duration is an implementation-time tuning decision.
+- Import always creates a *new* vault; this spec does not define an
+  "import into / overwrite an existing vault" flow.
+- Manifest format (e.g. `manifest.json` vs. another structured format) is
+  an implementation-time decision — the requirement here is only that
+  vault metadata and share-list data live outside the note files
+  themselves, not the exact serialization.
+==========================
+FILE: docs/superpowers/specs/2026-07-15-mfa-design.md
+## Explicitly out of scope for this sub-project
+
+- **WebAuthn/passkeys** — a possible future addition, not designed here.
+- **"Remember this device" / reduced-frequency challenges** — every login
+  is challenged; no device-trust exception is part of this design.
+- **Admin-initiated TOTP reset on a user's behalf** (e.g. if both the
+  device and all backup codes are lost) — a real operational need
+  eventually, but not designed here; for now this would fall under the
+  existing admin deactivation/account-management actions from sub-project
+  1 and the admin dashboard, without a dedicated MFA-reset flow.
+
+## Assumptions carried forward (revisit if wrong)
+
+- The exact number of backup codes issued and their format is an
+  implementation-time decision.
+- The instance-wide "require MFA" setting is a simple on/off toggle, not
+  a more granular per-team or per-role requirement — if that granularity
+  is ever needed, it's a revision to this spec, not assumed here.
+==========================
+FILE: docs/superpowers/specs/2026-07-15-notifications-activity-feed-design.md
+## Explicitly out of scope for this sub-project
+
+- **Live/real-time push delivery** — deferred; load-time refresh is
+  sufficient for v1, as established above.
+- **Per-type notification preferences** (e.g. opting out of email for
+  specific trigger types, digest/batching options) — every trigger gets
+  both channels uniformly for now; per-type control is a v2 refinement,
+  not designed here.
+- **Push notifications to mobile/desktop OS-level notification centers** —
+  not addressed; in-app + email only.
+
+## Assumptions carried forward (revisit if wrong)
+
+- No automatic expiry/retention limit on notification history — treated
+  as a persistent activity feed, not an ephemeral toast queue. Exact
+  retention policy (if any is ever needed) is an implementation-time
+  decision.
+- A notification's "human-readable snapshot" text is generated once at
+  creation time and does not update if the referenced entity is later
+  renamed — this is what makes the historical-record property in the
+  section above meaningful (the notification reflects what was true when
+  it fired, not a live-updating reference).
+==========================
+FILE: docs/superpowers/specs/2026-07-17-cli-visualizer-design.md
+(proposed by @snavid-dev), deferred until a CLI exists to visualize.
+
+## Status: deferred, assigned
+
+Chapters has no code yet, so there is no command execution to visualize.
+This spec records the idea and its constraints so it isn't lost; the issue
+is assigned to @snavid-dev to implement once the backend and its CLI
+surface exist.
+
+## Depends on
+
+- Backend implementation (in particular whatever CLI entry points it
+  ships — server management, import/export from sub-project 7, etc.).
+  Until those exist this spec is intentionally not designed further.
+
+## What it is
+
+An optional visualization mode for CLI command execution, so the internal
+flow of a command can be followed without reading raw logs. Useful for
+development, debugging, onboarding contributors, and demos.
+
+## Constraints (from the issue, adopted as acceptance criteria)
+
+- Strictly opt-in — a flag (e.g. `--visualize`) or environment variable;
+  default behavior of every command is unchanged.
+- No measurable overhead when disabled.
+- A development/debugging tool, not a product feature: it must never
+  become something the normal CLI experience depends on.
+- Documented once it exists.
+
+## Open questions (to answer when it's picked up)
+
+- Which visualization approach — the `cli-visualizer` tool the issue
+  names, or something simpler (structured/tree-formatted trace output)?
+  Decide against the real CLI's shape, not in the abstract.
+- Which commands are worth instrumenting first.
+==========================
+FILE: docs/superpowers/specs/2026-07-17-hosted-ui-structure-design.md
+- Multiplayer presence in the Sky itself (deferred with Yildizim v2).
+==========================
+FILE: docs/superpowers/specs/2026-07-17-tech-stack-decision.md
+==========================
+FILE: docs/superpowers/specs/2026-07-18-code-graph-integration-design.md
+  precedent — chunk-level code search is deferred, same as chunk-level
+  note search was deferred in sub-project 4.
+
+**Explicitly deferred**: cross-file call-graph resolution (which
+function calls which, across files) — genuinely valuable, but close to
+building a lightweight language server. Symbol declarations (cheap) ship
+in v1; resolving references between them (expensive) does not.
+
+## Graph integration
+
+`buildGraph` (sub-project 3) takes a resource set — vault IDs *and*
+repository IDs — instead of vault IDs alone. Node set is the union of
+live notes and live repository files across that resource set.
+
+Edge kinds, extending the existing EXTRACTED/INFERRED model:
+
+- **EXTRACTED, existing**: note wikilinks, unchanged.
+- **EXTRACTED, new**: code import edges (file → file, within one
+  repository).
+- **EXTRACTED, new — cross-type**: a new wikilink form,
+  `[[repo:<repository-name>/<path>]]`, lets a note link directly into a
+  specific file, resolved against whatever repositories the caller can
+  currently reach. This is the concrete mechanism behind "notes and code
+  cross-reference each other."
+- **INFERRED structural, existing**: shared note type/tag, unchanged.
+- **INFERRED structural, new**: same top-level directory or same
+  language between two files — a cheap, capped signal (reusing the
+  existing structural-edge group-cap mechanism), not a new concept.
+- **INFERRED semantic**: no new mechanism needed. Notes and code already
+  share one embedding model and one vector space (see above) — semantic
+  similarity edges between a design note and the code it describes fall
+  out of the existing per-note-or-file KNN neighbor search automatically,
+  once both content types are embedded into it.
+
+**Symbols are not first-class graph nodes** in the main graph view —
+exposing every function/class as a node would make a large codebase's
+graph unreadably dense, the same concern that already motivated
+group-capping structural note edges. Declared symbols are instead
+queryable per-file (an "outline" for a given path) rather than rendered
+in the main graph.
+
+Louvain communities run over the unioned edge graph exactly as today —
+this means a cluster can now span a note and the files it documents,
+which is a direct, useful consequence of unification rather than a
+feature that needed separate design.
+
+## Search integration
+
+The search function (sub-project 4) takes the same extended resource
+set as the graph function. Hybrid retrieval extends symmetrically: full-
+text search adds a `repository_files.fts` generated column (path +
+code content) alongside the existing `notes.fts`; vector KNN already
+spans both once both are embedded into the same space. Results merge via
+the same Reciprocal Rank Fusion approach already used for notes-only
+search — one function, one ranking approach, now two content types,
+still the same "one search path for every caller" rule from sub-project
+4 (unchanged, just a larger input domain).
+
+## MCP integration
+
+New tools, added under the same rules sub-project 6 already established
+(every call re-resolves live access; account-wide surfaces hard-rejected
+for narrower-scoped connections, never silently narrowed):
+
+- **`list_repositories`** — parallel to `list_vaults`; account-scoped
+  connections only.
+- **`browse_repository`** — a repository's file tree.
+- **`read_file`** — a file's content plus its declared-symbol outline.
+- **`search`** and **`graph`** (existing tools) extend to accept
+  repository IDs alongside vault IDs — same tools, larger domain, no new
+  tool needed.
+- **`repository_status`** — last-synced time and sync state, so an agent
+  can judge freshness before trusting results, given sync isn't
+  necessarily instantaneous (polling fallback, agent-push cadence).
+
+**No write/delete/revert tools for repository files** — consistent with
+sub-project 8's read-only boundary. There is no audit trail to expose
+here because there is nothing to attribute; git remains the record of
+change history for code.
+
+### Connection scope
+
+`MCPConnection.scope` gains a `repository` value alongside the existing
+`account`/`vault`, with a nullable `repositoryId` paired the same way
+`vaultId` already is. A repository-scoped connection is pinned to one
+repository and hard-rejected from every other surface (other
+repositories, vaults, account-wide tools) — identical enforcement
+posture to vault-scoped connections today. Account-scoped connections
+resolve live to whatever vaults *and* repositories the owning user
+currently has access to.
+
+## Explicitly out of scope for this sub-project
+
+- **Cross-file call-graph resolution** — see extraction pipeline above.
+- **Symbol-level embeddings / chunk-level code search** — file-level
+  granularity for v1, matching the notes precedent.
+- **Rendering symbols in the graph view** — outline-on-demand instead;
+  see graph integration above.
+- **Editing code through Chapters** — sub-project 8's boundary, unchanged
+  here.
+
+## Assumptions carried forward (revisit if wrong)
+
+- Which languages ship a tree-sitter grammar at launch is an
+  implementation-time decision — the extractor's pluggability is the
+  requirement, not a fixed language list.
+- The `repo:` prefix disambiguating cross-type wikilinks from plain note
+  links is a convention, not a protocol requirement — exact syntax is an
+  implementation-time detail as long as it's unambiguous against the
+  existing `[[type/name]]` note-link form.
+- Structural edge thresholds (directory/language grouping cap) reuse
+  the existing note structural-edge cap value unless profiling suggests
+  otherwise.
+==========================
+FILE: docs/superpowers/specs/2026-07-18-repository-ingestion-design.md
+## Explicitly out of scope for this sub-project
+
+- **The extraction/parsing pipeline itself** (tree-sitter, import/symbol
+  edges) — sub-project 9; this spec only defines how file content
+  arrives and is stored, not what's derived from it.
+- **Multi-modal ingestion** (PDFs, images, non-code docs) — Chapters
+  already has notes as its documentation layer; this isn't a gap the
+  platform has.
+- **Manual/selective sync** (choosing specific paths/branches to
+  include) — v1 syncs the whole default branch; narrower scoping is a
+  future refinement if a real need surfaces.
+- **Any write path back to the source** — read-only per the goals above,
+  not a deferred feature but a hard boundary.
+
+## Assumptions carried forward (revisit if wrong)
+
+- Default branch only, for git-sourced repositories — no branch
+  selection in v1.
+- Polling interval and webhook-staleness threshold are implementation-
+  time tuning decisions, not fixed here.
+- File size cap for indexed content (to bound embedding/storage cost per
+  file) is an implementation-time decision, consistent with how note
+  content has no explicit cap today.

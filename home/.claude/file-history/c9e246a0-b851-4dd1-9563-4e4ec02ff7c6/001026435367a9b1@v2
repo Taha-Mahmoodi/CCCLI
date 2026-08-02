@@ -1,0 +1,9 @@
+import { NextResponse } from "next/server";
+
+// Liveness endpoint for container healthchecks. A DB-reachability check is
+// added in the Docker/production slice.
+export const dynamic = "force-dynamic";
+
+export async function GET() {
+  return NextResponse.json({ status: "ok", ts: Date.now() });
+}

@@ -1,0 +1,80 @@
+import Combine
+import Foundation
+import ThirdEyeCore
+
+/// Drives the SwiftUI layer off the verified `RadioEngine` (identical logic to
+/// web), wiring in audio capture/playback + the hardware transport route.
+@MainActor
+public final class RadioViewModel: ObservableObject {
+  @Published public private(set) var engine = RadioEngine()
+  @Published public private(set) var isRecording = false
+
+  private let audio: AudioService
+  private var audioUrls: [String: URL] = [:]
+
+  public init(audio: AudioService = StubAudioService()) {
+    self.audio = audio
+    audio.configureSession()
+    audio.bindRemoteCommands(
+      play: { [weak self] in self?.play() },
+      pause: { [weak self] in self?.pause() },
+      next: { [weak self] in self?.next() },
+      previous: { [weak self] in self?.previous() },
+    )
+  }
+
+  // Derived state the views read.
+  public var queue: [Memo] { engine.queue }
+  public var current: Memo? { engine.current }
+  public var channels: [Channel] { engine.channels }
+  public var activeChannel: String { engine.activeChannel }
+  public var isPlaying: Bool { engine.isPlaying }
+  public var status: PlayerStatus { engine.status }
+  public var playbackRate: Double { engine.playbackRate }
+  public var position: Int { engine.currentIndex + 1 }
+
+  public func startRecording() {
+    do {
+      try audio.startRecording()
+      isRecording = true
+    } catch {
+      isRecording = false
+    }
+  }
+
+  public func stopRecording() {
+    isRecording = false
+    guard let (url, ms) = try? audio.stopRecording() else { return }
+    let memo = Memo(
+      id: UUID().uuidString,
+      createdAt: Int(Date().timeIntervalSince1970 * 1000),
+      durationMs: ms,
+      mime: "audio/m4a",
+      channelId: activeChannel == allChannels ? "main" : activeChannel,
+    )
+    audioUrls[memo.id] = url
+    engine.addMemo(memo)
+  }
+
+  private func playCurrent() {
+    guard engine.isPlaying, let c = engine.current, let url = audioUrls[c.id] else { return }
+    audio.setNowPlaying(title: "Memo \(position) of \(queue.count)")
+    audio.play(url: url, rate: engine.playbackRate)
+  }
+
+  public func play() { engine.play(); playCurrent() }
+  public func pause() { engine.pause(); audio.pause() }
+  public func togglePlay() { engine.isPlaying ? pause() : play() }
+  public func next() { engine.next(); playCurrent() }
+  public func previous() { engine.previous(); playCurrent() }
+  public func playFrom(_ index: Int) { engine.playFrom(index); playCurrent() }
+  public func toggleLike(_ id: String) { engine.toggleLike(id) }
+  public func correctTranscript(_ id: String, _ text: String) { engine.correctTranscript(id, text) }
+  public func setActiveChannel(_ id: String) { engine.setActiveChannel(id) }
+  public func createChannel(_ name: String) { engine.createChannel(name) }
+  public func cyclePlaybackRate() { engine.cyclePlaybackRate(); audio.setRate(engine.playbackRate) }
+
+  public func stationName(_ id: String) -> String {
+    id == allChannels ? "All" : (channels.first { $0.id == id }?.name ?? id)
+  }
+}

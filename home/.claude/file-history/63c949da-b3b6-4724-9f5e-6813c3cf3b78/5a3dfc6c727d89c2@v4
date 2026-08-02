@@ -1,0 +1,171 @@
+# -*- coding: utf-8 -*-
+import os
+import subprocess
+
+OUT_DIR = os.path.expanduser("~/Documents/letters-of-intent")
+REC_DIR = os.path.join(OUT_DIR, "recommendations")
+PDF_DIR = os.path.join(REC_DIR, "pdf")
+os.makedirs(REC_DIR, exist_ok=True)
+os.makedirs(PDF_DIR, exist_ok=True)
+
+PDF_BIN = os.path.expanduser("~/.claude/skills/gstack/make-pdf/dist/pdf")
+
+# Recommender templates
+NASIM_RESEARCH = """I have known Taha for over three years through our collaboration on multiple enterprise software projects, most notably the Metal ERP system, Hesabras (a money exchange management platform deployed nationwide in Afghanistan), and Octane, a comprehensive ERP system spanning the entire oil and gas supply chain. What has impressed me most is not merely his technical ability, but his systematic approach to understanding complex domain problems before writing code — he conducts field research, identifies architectural constraints, and designs systems that don't just work, but scale. This methodical, research-informed approach to systems engineering is precisely what doctoral-level computer science study demands. Taha is ready for it."""
+
+NASIM_PRACTICAL = """I have known Taha for over three years, and we have built several production systems together: Metal ERP, Hesabras (now serving money exchange shops nationwide in Afghanistan), and Octane, an ERP for the oil and gas industry. Taha's strength is taking a messy real-world problem and building a system that actually solves it — he does field research, understands the constraints, and ships code that works. His ability to bridge the gap between business complexity and technical implementation is exactly what an engineering master's program needs."""
+
+SAID_RESEARCH = """I have known Taha for eighteen years — we learned to program together and have co-founded a company and built multiple systems over that time. What stands out is his intellectual discipline: he approaches every problem with the same question — why does this work this way, and how can we design it better? That instinct, combined with his ability to learn deeply in new domains, is what I would expect to see in a doctoral researcher. The Canin DCMP dental clinic management platform we built together is now used by over eighty clinics and hospitals nationwide, and Taha's fingerprints are on every part of its success — from the research phase through to the product in production."""
+
+SAID_PRACTICAL = """I have known Taha for eighteen years and we co-founded Cyborgtech Creative Agency together, building several systems including Metal ERP, Hesabras, and Canin DCMP, a dental clinic management platform now serving over eighty clinics and hospitals nationwide. Taha's approach is always the same: understand the problem deeply, design the system right, and ship it. That combination of rigor and pragmatism — the willingness to do field research but also to build something that works — is rare, and it's exactly what makes a strong engineer."""
+
+ALPINDALE_RESEARCH = """I have known Taha for nine years and we co-founded Pygmalion.chat together. More recently, Taha has worked with us as an LLM model tester, evaluating large language models before they reach production. What I appreciate about his work in this role is his systematic, careful approach — he doesn't just run a model and report subjective impressions. He thinks about what criteria matter for each use case, how to evaluate against them, and he's willing to recommend against deploying a model if the evidence doesn't support it. That kind of principled, evidence-based judgment is what separates rigorous research work from mere technical tinkering. His attention to detail and methodical approach to evaluation make him well-suited for graduate study in systems and research."""
+
+ALPINDALE_PRACTICAL = """I have known Taha for nine years and we co-founded Pygmalion.chat. Recently, Taha has worked with us testing and evaluating large language models before they go live on the platform. His approach is meticulous and systematic — he evaluates a model not on hype but on concrete criteria, and he's willing to say 'no, this isn't ready yet.' That combination of technical depth and careful judgment is exactly what you need in someone building production systems. His work on model evaluation has directly influenced which systems we deploy to our users."""
+
+SADEQI_RESEARCH = """I have known Taha for over eight years, and I have had the privilege of watching him lead the technical development of several accessibility-focused initiatives: the Third Eye Kits (V1 and V2), TEWW.org, Third Eye World (a social media platform for blind users, built on rigorous applied research into how blind people communicate), and Heard.teww.org. As the lead developer on all of these projects, Taha has consistently demonstrated the ability to translate research findings — in this case, research into blind users' needs and communication patterns — into architecturally sound systems. His approach is systematic and principled: he begins by understanding the problem deeply, then designs the system to solve it. That combination of research rigor, architectural thinking, and user-centered design is the foundation of excellent engineering, and exactly what doctoral-level computer science study should develop further."""
+
+SADEQI_PRACTICAL = """I have known Taha for over eight years, and I have watched him serve as the lead developer on multiple accessibility and social-impact projects: Third Eye Kits (V1 and V2), TEWW.org, Third Eye World (a social media platform for blind users), and Heard.teww.org. As lead developer, Taha takes ownership of the entire technical pipeline: understanding user needs through applied research, architecting systems to meet those needs, and shipping code that actually works for the people it serves. He doesn't just implement specifications; he shapes them based on what users actually need. That combination of leadership, technical depth, and genuine commitment to solving real problems is what distinguishes exceptional engineers. I have no hesitation in recommending him."""
+
+# Program categories for customization
+PROGRAMS = [
+    # Format: (filename_base, program_name, university, location, category)
+    ("01_Turkey_Open_YildizTechnicalUniversity", "MS, Computer Engineering", "Yıldız Technical University", "Istanbul, Turkey", "systems"),
+    ("02_Turkey_Open_IstanbulSabahattinZaimUniversity", "MA, Computer Science & Engineering", "İstanbul Sabahattin Zaim University", "Istanbul, Turkey", "systems"),
+    ("03_Turkey_Open_SinopUniversity", "MS, Computer Engineering", "Sinop University", "Sinop, Turkey", "practical"),
+    ("04_Turkey_Open_SabanciUniversity", "MSc, Computer Science & Engineering", "Sabancı University", "Istanbul, Turkey", "research"),
+    ("05_Turkey_Open_KocaeliUniversity", "MS, Computer Engineering", "Kocaeli University", "Kocaeli, Turkey", "practical"),
+    ("23_Turkey_Open_AtilimUniversity_CE", "MS, Computer Engineering", "Atılım University", "Ankara, Turkey", "practical"),
+    ("24_Turkey_Open_AtilimUniversity_SE", "MS, Software Engineering", "Atılım University", "Ankara, Turkey", "practical"),
+    ("06_Turkey_Reopening_OzyeginUniversity", "Graduate, Computer Science", "Özyeğin University", "Istanbul, Turkey", "systems"),
+    ("07_Turkey_Reopening_KocUniversity", "MS, Computer Science & Engineering", "Koç University", "Istanbul, Turkey", "research"),
+    ("08_Turkey_Reopening_BogaziciUniversity", "MS, Computer Engineering", "Boğaziçi University", "Istanbul, Turkey", "research"),
+    ("09_Turkey_Reopening_IstanbulTechnicalUniversity", "MSc, Computer Engineering", "Istanbul Technical University", "Istanbul, Turkey", "systems"),
+    ("10_Turkey_Reopening_METU", "MS, Computer Engineering", "Middle East Technical University", "Ankara, Turkey", "research"),
+    ("11_Turkey_Reopening_BilkentUniversity", "MS / PhD, Computer Engineering", "Bilkent University", "Ankara, Turkey", "research"),
+    ("12_Turkey_Reopening_HacettepeUniversity", "MS, Computer Engineering", "Hacettepe University", "Ankara, Turkey", "research"),
+    ("13_Turkey_Reopening_KadirHasUniversity", "MS, Computer Engineering", "Kadir Has University", "Istanbul, Turkey", "systems"),
+    ("14_Pakistan_Open_GIKI", "MS / PhD, Computer Engineering", "Ghulam Ishaq Khan Institute", "Topi, Pakistan", "practical"),
+    ("15_Pakistan_Open_COMSATSIslamabad", "MS, Computer Science", "COMSATS University Islamabad", "Islamabad, Pakistan", "practical"),
+    ("16_Pakistan_Reopening_NUST", "MS, Computer Engineering", "National University of Sciences & Technology", "Islamabad, Pakistan", "research"),
+    ("17_Pakistan_Reopening_LUMS", "MS, Computer Science", "Lahore University of Management Sciences", "Lahore, Pakistan", "research"),
+    ("18_Pakistan_Reopening_FASTNUCES", "MS, Computer Science", "FAST National University", "Lahore, Pakistan", "practical"),
+    ("19_India_Reopening_IIScBangalore", "M.Tech (Research), Computer Science & Automation", "Indian Institute of Science", "Bangalore, India", "research"),
+    ("20_India_Reopening_IITMadras", "M.Tech, Computer Science & Engineering", "IIT Madras", "Chennai, India", "research"),
+    ("21_India_Reopening_IITKanpur", "M.Tech, Computer Science & Engineering", "IIT Kanpur", "Kanpur, India", "systems"),
+    ("22_India_Reopening_VIT", "M.Tech, Computer Science & Engineering", "VIT", "Vellore, India", "practical"),
+]
+
+RECOMMENDERS = [
+    {
+        "name": "Nasim Abdullah",
+        "title": "CEO, Alkharazmi; Programming Professor, Jami University",
+        "intro": "I am writing to recommend Taha Mahmoodi for your Master of Science program in Computer Engineering. I have known Taha for over three years through our collaboration on multiple enterprise software projects.",
+        "templates": {
+            "research": NASIM_RESEARCH,
+            "systems": NASIM_RESEARCH,
+            "practical": NASIM_PRACTICAL,
+        },
+        "closing": "Taha is intellectually rigorous, pragmatic, and committed to understanding problems deeply before solving them. He will be an asset to your program and is well-prepared for graduate-level study.",
+    },
+    {
+        "name": "Said Navid Azimi",
+        "title": "Lead Backend Engineer, Rahanet ISP; Co-Founder, Cyborgtech Creative Agency",
+        "intro": "I am writing to recommend Taha Mahmoodi for your Master of Science program in Computer Engineering. I have known Taha for eighteen years — we learned to program together, and we co-founded Cyborgtech Creative Agency.",
+        "templates": {
+            "research": SAID_RESEARCH,
+            "systems": SAID_RESEARCH,
+            "practical": SAID_PRACTICAL,
+        },
+        "closing": "Taha combines intellectual depth with practical judgment. He is ready for the demands of graduate study, and I believe he will bring that same combination of rigor and pragmatism to your program.",
+    },
+    {
+        "name": "AlpinDale",
+        "title": "Co-Founder, Pygmalion.chat; Published Researcher",
+        "intro": "I am writing to recommend Taha Mahmoodi for your Master of Science program in Computer Engineering. I have known Taha for nine years, and we co-founded Pygmalion.chat together.",
+        "templates": {
+            "research": ALPINDALE_RESEARCH,
+            "systems": ALPINDALE_RESEARCH,
+            "practical": ALPINDALE_PRACTICAL,
+        },
+        "closing": "Taha's work with us has demonstrated his capacity for rigorous evaluation, systematic thinking, and careful judgment. These are the qualities that drive success in graduate study and research. I recommend him without reservation.",
+    },
+    {
+        "name": "Said Mohaddes Sadeqi",
+        "title": "Founder and President, Third Eye Worldwide; Former Semiconductor Engineer, Intel; Researcher",
+        "intro": "I am writing to recommend Taha Mahmoodi for your Master of Science program in Computer Engineering. I have known Taha for over eight years, and we have collaborated on several initiatives in accessibility and social impact technology.",
+        "templates": {
+            "research": SADEQI_RESEARCH,
+            "systems": SADEQI_RESEARCH,
+            "practical": SADEQI_PRACTICAL,
+        },
+        "closing": "Taha is a rare combination: technically rigorous, deeply user-centered, and genuinely committed to solving problems that matter. He will bring that same integrity and care to your program. I recommend him enthusiastically.",
+    },
+]
+
+# Generate letters
+for program_file, program_name, university, location, category in PROGRAMS:
+    for rec in RECOMMENDERS:
+        fname = f"{program_file}_rec{RECOMMENDERS.index(rec) + 1}_{rec['name'].replace(' ', '_')}"
+
+        template_body = rec["templates"][category]
+
+        letter_body = f"""{rec['intro']} I would like to speak specifically to what I have observed of Taha's capabilities in the context of your program.
+
+{template_body}
+
+{rec['closing']}
+
+Sincerely,
+{rec['name']}
+{rec['title']}
+"""
+
+        # Write text version
+        txt_path = os.path.join(REC_DIR, fname + ".txt")
+        with open(txt_path, "w", encoding="utf-8") as f:
+            f.write(letter_body)
+
+        # Create markdown for PDF
+        md_body = f"""# Recommendation Letter
+
+**Candidate:** Taha Mahmoodi (Afghan national)
+**Program:** {program_name}
+**University:** {university}
+**Location:** {location}
+
+**Recommender:** {rec['name']}
+{rec['title']}
+
+---
+
+{rec['intro']} I would like to speak specifically to what I have observed of Taha's capabilities in the context of your program.
+
+{template_body}
+
+{rec['closing']}
+
+Sincerely,
+
+{rec['name']}
+"""
+
+        md_path = os.path.join(REC_DIR, fname + ".md")
+        with open(md_path, "w", encoding="utf-8") as f:
+            f.write(md_body)
+
+        # Render PDF
+        pdf_path = os.path.join(PDF_DIR, fname + ".pdf")
+        title = f"{university} — Recommendation Letter for Taha Mahmoodi"
+        result = subprocess.run(
+            [PDF_BIN, "generate", "--no-confidential", "--author", rec['name'],
+             "--title", title, md_path, pdf_path],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            print(f"FAILED: {fname}", file=__import__('sys').stderr)
+            print(result.stderr, file=__import__('sys').stderr)
+        else:
+            print(f"OK: {pdf_path}")
+
+print(f"Wrote {len(PROGRAMS) * len(RECOMMENDERS)} recommendation letters to {REC_DIR}")

@@ -1,0 +1,257 @@
+# Third Eye World Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Ship Third Eye World to production readiness — a single Next.js app with a public marketing site (`/`) and an auth-gated mission platform, Third Eye Commons (`/app/*`), self-hostable via Docker.
+
+**Architecture:** One Next.js 15 App-Router app, RSC-first with small client islands. Route groups `(marketing)` and `app/` give the two surfaces distinct layouts and an auth boundary while sharing one design system and one Docker image. Data in PostgreSQL via Prisma; auth via Auth.js (Credentials + JWT sessions, role in token). Animation via Motion + GSAP. Accessibility is a hard, CI-enforced requirement.
+
+**Tech Stack:** Next.js 15, React 19, TypeScript (strict), Tailwind CSS 4, Shadcn/ui, Motion (`motion/react`), GSAP + ScrollTrigger, Auth.js v5 (`next-auth@beta`), Prisma, PostgreSQL, argon2, Vitest + Testing Library, Playwright + `@axe-core/playwright`, ESLint + Prettier, Docker + docker-compose.
+
+## Global Constraints
+
+- Grounded content only — all copy/imagery sourced from `docs/instructions/` + the Third Eye Kit v2 dossier; **no invented product claims**.
+- Accessibility floor: **WCAG 2.2 AA**, screen-reader-native, keyboard-first; `@axe-core/playwright` must report **zero serious/critical** violations on tested routes (CI gate).
+- Performance: RSC by default; `'use client'` only on interactive leaves; animate **transform/opacity only**, never layout props; main JS bundle **< 200KB gzipped** target; honor `prefers-reduced-motion`.
+- Anti-slop: UI built via the **`design-taste-frontend`** skill; **`design-review`** pass before each PR; one genuinely distinctive interactive element (haptic demo).
+- Animation split: GSAP in its own webpack chunk, plugins lazy-loaded.
+- Images via `next/image` only, never `<img>`.
+- Auth reality: Credentials provider ⇒ **JWT session strategy** (not DB sessions); user `id` + `role` carried in the JWT and exposed on `session.user`.
+- Git workflow: branches `main`/`prod`/`dev`; feature branches off `dev`; **every PR opened by Said (`sadeqisaidmohaddes-star`)** targeting `dev`; CI green required; **agent never merges — the user reviews and merges.** Feature commits authored by Said.
+- Conventional Commits. Commit trailers per session settings.
+
+---
+
+## Slice 0 — Repo bootstrap & remote (one-time, on `main`)
+
+**Deliverable:** Private repo under Taha with docs + branches + Said as collaborator + branch protection attempt.
+
+- [ ] **Create private repo** under Taha and push the existing bootstrap commit:
+  `gh repo create Taha-Mahmoodi/third-eye-world-engineering-build --private --source . --remote origin --push` (active gh account = Taha-Mahmoodi).
+- [ ] **Create `dev` and `prod`** from `main`; push all three: `git push -u origin main dev prod`.
+- [ ] **Add Said as collaborator (write):** `gh api -X PUT repos/Taha-Mahmoodi/third-eye-world-engineering-build/collaborators/sadeqisaidmohaddes-star -f permission=push`.
+- [ ] **Attempt branch protection** on `dev`/`main` (require PR + status checks). If the private-tier blocks rulesets, log it — the human-review-before-merge gate still holds because the agent never merges.
+- [ ] **Verify** Said can be switched to for PR creation: `gh auth switch --user sadeqisaidmohaddes-star` then `gh auth switch --user Taha-Mahmoodi` (leave Taha active).
+
+---
+
+## Slice 1 — Scaffold (branch `feature/scaffold` → PR by Said → `dev`)
+
+**Deliverable:** A running Next.js 15 app, strict TS, Tailwind 4, Shadcn initialized, ESLint/Prettier, Vitest + Playwright wired, base theme tokens, `/api/health`, CI workflow. `npm run build`, `type-check`, `lint`, one unit test, and one Playwright smoke test all green.
+
+**Files (created by tooling + edited):** `package.json`, `next.config.ts`, `tsconfig.json`, `src/app/globals.css`, `src/app/layout.tsx`, `src/app/(marketing)/page.tsx`, `src/app/api/health/route.ts`, `components.json`, `.eslintrc`/`eslint.config.mjs`, `.prettierrc`, `vitest.config.ts`, `playwright.config.ts`, `tests/unit/smoke.test.ts`, `tests/e2e/health.spec.ts`, `.github/workflows/ci.yml`, `.env.example`, `.gitignore`, `README.md`.
+
+- [ ] **Scaffold** in a temp dir then move into repo (repo already has `docs/`): `npx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias "@/*" --use-npm` (answer no to Turbopack-only prompts if incompatible; keep App Router). Reconcile so `docs/` is preserved.
+- [ ] **Strict TS:** ensure `"strict": true`, `"noUncheckedIndexedAccess": true` in `tsconfig.json`.
+- [ ] **Install libs:** `npm i motion gsap next-auth@beta @auth/prisma-adapter @prisma/client argon2 zod` and `npm i -D prisma vitest @vitejs/plugin-react @testing-library/react @testing-library/jest-dom jsdom @playwright/test @axe-core/playwright prettier`.
+- [ ] **Shadcn init:** `npx shadcn@latest init` (Tailwind 4 mode; neutral base; CSS variables). Add first primitives lazily later per feature.
+- [ ] **`next.config.ts`:** `output: 'standalone'`; images `formats: ['image/avif','image/webp']`; webpack cacheGroup splitting `gsap` into `gsap-vendor` chunk (client only) exactly as in `docs/instructions/implementation.md`.
+- [ ] **Design tokens:** in `globals.css` define CSS variables (color, spacing scale, radius, font vars) and `@theme` mapping for Tailwind 4. Placeholder palette now; finalized by `design-taste-frontend` in Slice 3.
+- [ ] **Health route** `src/app/api/health/route.ts`:
+
+```ts
+import { NextResponse } from 'next/server'
+export const dynamic = 'force-dynamic'
+export async function GET() {
+  return NextResponse.json({ status: 'ok', ts: Date.now() })
+}
+```
+  (Extended to check DB in Slice 6.)
+
+- [ ] **npm scripts** in `package.json`: `dev`, `build`, `start`, `lint`, `type-check` (`tsc --noEmit`), `test` (`vitest run`), `test:watch`, `test:e2e` (`playwright test`), `analyze`.
+- [ ] **Vitest config** (`vitest.config.ts`) jsdom env + React plugin + setup file with `@testing-library/jest-dom`.
+- [ ] **Unit smoke test** `tests/unit/smoke.test.ts`: trivial `expect(1+1).toBe(2)` → run `npm test` → PASS.
+- [ ] **Playwright config** baseURL `http://localhost:3000`, `webServer` runs `npm run build && npm start` (prod) for CI; a11y project included.
+- [ ] **E2E health test** `tests/e2e/health.spec.ts`: GET `/api/health` returns 200 `{status:'ok'}` → `npm run test:e2e` PASS locally.
+- [ ] **CI** `.github/workflows/ci.yml`: on PR to `dev`/`prod`/`main` + push. Job: checkout, setup-node 20+ (or 22), `npm ci`, `npm run type-check`, `npm run lint`, `npm test`, `npm run build`. A second job (or same) spins Postgres service for e2e in later slices; for Slice 1 e2e-health runs without DB.
+- [ ] **`.env.example`:** `DATABASE_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `NODE_ENV`.
+- [ ] **README** stub: what this is, dev quickstart, links to spec + instructions.
+- [ ] **Verify all:** `npm run type-check && npm run lint && npm test && npm run build` all green; `npm run test:e2e` green.
+- [ ] **PR (by Said):** branch `feature/scaffold`, commits authored by Said, `gh auth switch` to Said, `gh pr create --base dev --title "[FEAT] Project scaffold, tooling, CI, health route" --body <template>`. Switch gh back to Taha. **Do not merge.**
+
+---
+
+## Slice 2 — Data + Auth (branch `feature/data-auth` → PR by Said → `dev`)
+
+**Deliverable:** Prisma schema + migration + seed; Auth.js Credentials signup/login with role; session exposes `id`+`role`; app shell at `/app` redirects unauthenticated users to `/app/login`. Tested with Postgres.
+
+**Files:** `prisma/schema.prisma`, `prisma/seed.ts`, `src/lib/db.ts`, `src/lib/auth.ts`, `src/lib/auth-password.ts`, `src/lib/validation.ts`, `src/app/api/auth/[...nextauth]/route.ts`, `src/app/app/layout.tsx`, `src/app/app/login/page.tsx`, `src/app/app/signup/page.tsx`, `src/app/app/(authed)/layout.tsx`, `src/actions/auth.ts`, `tests/unit/auth-password.test.ts`, `tests/e2e/auth.spec.ts`, `types/next-auth.d.ts`.
+
+**Interfaces produced:**
+- `auth()` — server session getter (from Auth.js) returning `{ user: { id: string, role: Role, email: string } } | null`.
+- `hashPassword(pw: string): Promise<string>`, `verifyPassword(pw, hash): Promise<boolean>`.
+- `signUp(input): Promise<{ok:true}|{ok:false,error:string}>` server action.
+- Prisma models per spec §7.
+
+- [ ] **Prisma schema** `prisma/schema.prisma`:
+
+```prisma
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql"; url = env("DATABASE_URL") }
+
+enum Role { BLIND_TRAVELER FAMILY CLINICIAN ENGINEER SUPPORTER }
+enum WaitStatus { PENDING CONTACTED ENROLLED }
+
+model User {
+  id           String  @id @default(cuid())
+  email        String  @unique
+  passwordHash String
+  role         Role
+  emailVerifiedAt DateTime?
+  createdAt    DateTime @default(now())
+  profile      Profile?
+  reactions    Reaction[]
+  waitlist     WaitlistEntry?
+  contributor  ContributorInterest?
+  updates      Update[]
+}
+model Profile {
+  userId      String @id
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName String
+  bio         String?
+  region      String?
+  a11yPrefs   Json   @default("{\"reducedMotion\":false,\"highContrast\":false,\"textScale\":1}")
+}
+model Update {
+  id          String   @id @default(cuid())
+  authorId    String?
+  author      User?    @relation(fields: [authorId], references: [id])
+  title       String
+  body        String
+  publishedAt DateTime @default(now())
+  reactions   Reaction[]
+}
+model Reaction {
+  id       String @id @default(cuid())
+  updateId String
+  update   Update @relation(fields: [updateId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind     String
+  @@unique([updateId, userId])
+}
+model WaitlistEntry {
+  id            String     @id @default(cuid())
+  userId        String     @unique
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role          Role
+  region        String?
+  deviceContext String?
+  status        WaitStatus @default(PENDING)
+  createdAt     DateTime   @default(now())
+}
+model ContributorInterest {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  githubUrl  String?
+  focusAreas String[]
+  note       String?
+  createdAt  DateTime @default(now())
+}
+```
+  (No Auth.js adapter session tables needed — JWT sessions. Keep it minimal.)
+
+- [ ] **Migrate:** `npx prisma migrate dev --name init` against a local/dev Postgres (docker `postgres:16` for sandbox). Generate client.
+- [ ] **`src/lib/db.ts`:** singleton PrismaClient (guard against dev hot-reload).
+- [ ] **Password util** `src/lib/auth-password.ts` using argon2. **TDD:** `tests/unit/auth-password.test.ts` — hash≠plain, verify(pw,hash)=true, verify(wrong,hash)=false → fail → implement → pass.
+- [ ] **Validation** `src/lib/validation.ts`: zod schemas `signupSchema` (email, password≥8, role enum, displayName), `loginSchema`.
+- [ ] **Auth config** `src/lib/auth.ts`: `NextAuth({...})` Credentials provider (authorize: find user by email, verifyPassword), `session.strategy='jwt'`, callbacks: `jwt` puts `user.id`+`role` on token; `session` copies to `session.user`; `pages.signIn='/app/login'`. Export `{ handlers, auth, signIn, signOut }`.
+- [ ] **Route handler** `src/app/api/auth/[...nextauth]/route.ts`: `export const { GET, POST } = handlers`.
+- [ ] **Type augmentation** `types/next-auth.d.ts`: add `id`, `role` to `Session["user"]` and JWT.
+- [ ] **Signup server action** `src/actions/auth.ts`: validate → ensure email free → hash → create User + Profile (displayName) in a transaction → return ok. Rate-limit note: simple in-memory/DB attempt guard (ponytail: minimal; upgrade to Redis if scaled).
+- [ ] **Pages:** `signup` (form → server action → then `signIn`), `login` (Credentials form). Both accessible (labels, error announcements via `aria-live`). Minimal styling now; polished in later slices.
+- [ ] **Authed layout** `src/app/app/(authed)/layout.tsx`: `const s = await auth(); if(!s) redirect('/app/login')`.
+- [ ] **E2E** `tests/e2e/auth.spec.ts`: signup → redirected/authed → logout → login → reach `/app` shell. Runs against Postgres service.
+- [ ] **CI update:** add Postgres service + `prisma migrate deploy` + seed for e2e job; run `test:e2e`.
+- [ ] **Verify:** unit + e2e green against sandbox Postgres; type-check/lint/build green.
+- [ ] **PR (by Said)** `feature/data-auth` → `dev`. Do not merge.
+
+---
+
+## Slice 3 — Marketing site (branch `feature/marketing` → PR by Said → `dev`)
+
+**Deliverable:** The full grounded `/` identity site with all spec §5 sections, GSAP/Motion, and the accessible interactive haptic demo. Runs `design-taste-frontend` for the design system and `design-review` before PR. Visual + axe tests green.
+
+**Files:** `src/app/(marketing)/layout.tsx`, `src/app/(marketing)/page.tsx`, `src/components/marketing/*` (Hero, OneIdea, WhatItIs, DesignRules, Safety, Person, CTA, Footer, Nav), `src/components/marketing/haptic-demo/*` (client island), `src/lib/animations/gsap-setup.ts`, `src/lib/animations/motion-presets.ts`, `src/lib/content/dossier.ts` (typed, grounded copy extracted from the dossier), `tests/e2e/marketing.spec.ts`, `tests/e2e/marketing.a11y.spec.ts`.
+
+**Interfaces produced:** `dossier` content object (typed) consumed by both surfaces (Slice 4 dossier reader reuses it).
+
+- [ ] **Run `design-taste-frontend`** to establish the real design direction (type scale, palette, spacing, motion language) grounded in the mission (assistive-tech, human, trustworthy, not sterile-corporate). Finalize `globals.css` tokens.
+- [ ] **Grounded content module** `src/lib/content/dossier.ts`: export typed constants for every section's real copy (mission lines, the one idea, senses/delivers/assists, the five design rules, the safety disclaimer verbatim-in-spirit, the person). Source: dossier README + `docs/instructions/`.
+- [ ] **GSAP setup** `src/lib/animations/gsap-setup.ts` per `mcp-setup.md` (register ScrollTrigger, defaults, cleanup on unload). **Motion presets** `motion-presets.ts` (fadeIn/slideUp/scaleIn/stagger).
+- [ ] **Sections** as RSC where static; client islands only for scroll/interaction. Build Hero, OneIdea, WhatItIs, DesignRules, Safety, Person, CTA, Footer, Nav using `design-taste-frontend` output. `next/image` for all imagery.
+- [ ] **Haptic demo** (`'use client'`): accessible simulation — visual pulse (transform/opacity) + Web Vibration API where supported + positional audio (WebAudio); full keyboard operation; `role`/`aria-live` announcements; text-equivalent description; obeys `prefers-reduced-motion` and user pref. **Unit-test** the pure buzz-pattern generator (input distance/direction → pattern array) in `tests/unit/haptic-pattern.test.ts`.
+- [ ] **CTA** links to `/app/signup`.
+- [ ] **E2E** `marketing.spec.ts`: home renders all sections, CTA navigates to signup, haptic demo operable by keyboard, reduced-motion respected. **Visual** snapshots for desktop + mobile.
+- [ ] **A11y** `marketing.a11y.spec.ts`: axe on `/` → zero serious/critical.
+- [ ] **Run `design-review`**; fix findings.
+- [ ] **Verify** all green; bundle check `npm run analyze` (GSAP in its own chunk; main < 200KB gz target).
+- [ ] **PR (by Said)** `feature/marketing` → `dev`. Do not merge.
+
+---
+
+## Slice 4 — Commons features (branch `feature/commons` → PR by Said → `dev`)
+
+**Deliverable:** All six spec §6 Commons features functional end-to-end: profile + a11y control center, updates feed + reactions, waitlist, contributor onboarding, dossier reader. Accessible, tested.
+
+**Files:** `src/app/app/(authed)/feed/page.tsx`, `.../waitlist/page.tsx`, `.../contribute/page.tsx`, `.../dossier/page.tsx`, `.../profile/page.tsx`, `src/actions/{profile,feed,waitlist,contribute}.ts`, `src/components/app/*`, `src/components/a11y/A11yProvider.tsx` + `A11yControls.tsx`, `src/app/app/(authed)/layout.tsx` (nav + provider), `tests/e2e/commons.spec.ts`, `tests/e2e/commons.a11y.spec.ts`, unit tests for each server action.
+
+**Interfaces consumed:** `auth()`, Prisma models, `dossier` content.
+
+- [ ] **A11y control center:** `A11yProvider` reads user `a11yPrefs` (server → hydrated), applies via `data-*` attributes on `<html>`; `A11yControls` toggles reducedMotion/highContrast/textScale, persists via `updateA11yPrefs` server action; CSS reacts to the data-attributes. **TDD** the pref-merge/validation logic (unit).
+- [ ] **Profile page + action:** view/edit displayName, bio, region; a11y controls embedded. Unit-test `updateProfile` (valid/invalid).
+- [ ] **Updates feed:** RSC lists Updates (from seed); client `ReactionButton` calls `toggleReaction` action (`@@unique` enforced). Unit-test `toggleReaction` (add/remove/idempotent).
+- [ ] **Waitlist:** form (role/region/deviceContext) → `joinWaitlist` (upsert, one per user); shows current status. Unit-test.
+- [ ] **Contributor onboarding:** engineers submit githubUrl + focusAreas + note → `saveContributorInterest` (upsert). Unit-test focusArea validation.
+- [ ] **Dossier reader:** accessible reading view of the dossier content (semantic headings, skip link, respects textScale). Reuses `dossier` module.
+- [ ] **Authed nav:** landmark nav across feed/waitlist/contribute/dossier/profile + sign out; role-aware emphasis (engineers see Contribute first).
+- [ ] **E2E** `commons.spec.ts`: signup → set a11y prefs (persist across reload) → react to an update → join waitlist → submit contributor interest → read dossier. **A11y** axe on feed + profile + signup → zero serious/critical.
+- [ ] **Run `design-taste-frontend` + `design-review`** on the app surface; fix findings.
+- [ ] **Verify** all green.
+- [ ] **PR (by Said)** `feature/commons` → `dev`. Do not merge.
+
+---
+
+## Slice 5 — Accessibility & test hardening (branch `feature/a11y-hardening` → PR by Said → `dev`)
+
+**Deliverable:** Comprehensive a11y pass + the CI a11y gate + full visual coverage. This slice makes accessibility non-regressable.
+
+**Files:** `tests/e2e/a11y.spec.ts` (all key routes), `.github/workflows/ci.yml` (a11y job gate), `docs/accessibility.md`, small fixes across components.
+
+- [ ] **Keyboard + SR audit** every route (marketing home, signup, login, feed, waitlist, contribute, dossier, profile): focus order, visible focus, skip links, one h1, landmarks, labels, `aria-live` for async. Fix issues.
+- [ ] **Consolidated axe test** `a11y.spec.ts` across all routes (authed via a logged-in fixture) → zero serious/critical.
+- [ ] **Reduced-motion + high-contrast + textScale** verified end-to-end (visual snapshots in each mode).
+- [ ] **CI gate:** a11y job must pass for PR to be green; document in `docs/accessibility.md` (standards, how to run, what's covered).
+- [ ] **Verify** full suite green; re-check bundle budget.
+- [ ] **PR (by Said)** `feature/a11y-hardening` → `dev`. Do not merge.
+
+---
+
+## Slice 6 — Docker & production (branch `feature/docker-prod` → PR by Said → `dev`)
+
+**Deliverable:** `docker compose up --build` yields a working production stack (app + Postgres); `/api/health` checks DB; smoke test passes; deploy docs complete.
+
+**Files:** `Dockerfile`, `.dockerignore`, `docker-compose.yml`, `docker-compose.prod.yml` (optional), `scripts/smoke.sh`, `src/app/api/health/route.ts` (DB check), `README.md` (deploy section), `.env.example` (final).
+
+- [ ] **Dockerfile** multi-stage: `deps` (npm ci) → `build` (`prisma generate` + `next build`, standalone) → `runner` (non-root `node`, copy `.next/standalone` + `.next/static` + `public` + prisma engine; `CMD node server.js`). Node 22-alpine base.
+- [ ] **`.dockerignore`** (node_modules, .next, .git, docs, tests).
+- [ ] **docker-compose.yml:** services `db` (`postgres:16`, volume, healthcheck), `migrate` (one-shot `prisma migrate deploy` + `prisma db seed`), `app` (depends_on db healthy + migrate complete; env from `.env`; healthcheck hits `/api/health`; port 3000).
+- [ ] **Health route DB check:** `SELECT 1` via Prisma; return 503 on failure.
+- [ ] **Smoke script** `scripts/smoke.sh`: after compose up, poll `/api/health` (200), GET `/` (200, contains mission line), run a scripted signup→login→feed via `curl`/Playwright against the container. **Run it in the sandbox** and capture output.
+- [ ] **README deploy section:** env vars, `docker compose up --build`, how to seed/migrate, healthcheck, how the two-account PR flow works.
+- [ ] **Verify (verification-before-completion):** `docker compose up --build` from a clean checkout in the sandbox → smoke passes; capture the evidence.
+- [ ] **PR (by Said)** `feature/docker-prod` → `dev`. Do not merge.
+
+---
+
+## Release (after the user has reviewed & merged the slices)
+
+- [ ] Once the user merges the feature PRs into `dev` and is satisfied, a **release PR `dev → prod`** (and later `prod → main`) is opened **by Said** with the release checklist from `docs/instructions/github-workflow.md`. Tag `v1.0.0`. **The user merges.**
+
+---
+
+## Self-review (spec coverage map)
+
+- Marketing site §5 → Slice 3. Commons §6 (all 6 features) → Slice 4. Data model §7 → Slice 2. Accessibility §8 → Slices 2–5 + gate in 5. Anti-slop §9 → Slices 3–4 (design skills). Stack §10 → Slice 1–2. Sandbox testing §11 → every slice + Slice 6 smoke. Docker §12 → Slice 6. GitHub workflow §13 → Slice 0 + every PR. Definition of done §14 → Slices 1–6 + Release. Build order §15 → Slices 1–6. **No gaps.**

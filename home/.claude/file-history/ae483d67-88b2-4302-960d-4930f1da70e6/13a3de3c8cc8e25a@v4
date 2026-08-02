@@ -1,0 +1,37 @@
+// Core domain types.
+// ponytail: lives in the web app until a second surface needs it; hoist to
+// packages/shared when services/api lands.
+
+export type Channel = { id: string; name: string };
+
+export type Memo = {
+  id: string;
+  createdAt: number; // epoch ms
+  durationMs: number;
+  mime: string;
+  liked: boolean;
+  channelId: string; // which station this memo belongs to (Slice 1b)
+  // Transcripts (Slice 1). machineTranscript is captured client-side at record
+  // time (platform ASR); Slice 3 replaces it with self-hosted Whisper. A
+  // correction never overwrites the machine text (spec §8.3).
+  machineTranscript: string;
+  correctedTranscript?: string;
+  // Author (spec §Identity: handle + spoken self-description). Undefined means
+  // "you" — a memo recorded on this device. Populated for seeded/community memos.
+  authorHandle?: string;
+  authorName?: string;
+};
+
+/** A memo plus its audio, as persisted in IndexedDB. */
+export type StoredMemo = Memo & { blob: Blob };
+
+/** The transcript shown to the user: the correction if present, else machine. */
+export function displayTranscript(memo: Pick<Memo, "machineTranscript" | "correctedTranscript">): string {
+  return (memo.correctedTranscript ?? memo.machineTranscript ?? "").trim();
+}
+
+/** Who posted a memo, spoken-friendly. Own recordings read as "You". */
+export function authorLabel(memo: Pick<Memo, "authorHandle" | "authorName">): string {
+  if (!memo.authorHandle) return "You";
+  return memo.authorName ? `${memo.authorName} · @${memo.authorHandle}` : `@${memo.authorHandle}`;
+}

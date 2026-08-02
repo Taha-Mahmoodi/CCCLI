@@ -1,0 +1,78 @@
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { axe } from "jest-axe";
+import { Heart } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Field, Input } from "@/components/ui/Field";
+import { Chip } from "@/components/ui/Chip";
+import { Avatar } from "@/components/ui/Avatar";
+import { Availability } from "@/components/ui/Availability";
+import { Card } from "@/components/ui/Card";
+import { Tag } from "@/components/ui/Tag";
+
+describe("Button", () => {
+  it("renders an accessible labelled button and has no a11y violations", async () => {
+    const { container } = render(<Button icon={Heart}>Talk now</Button>);
+    const btn = screen.getByRole("button", { name: "Talk now" });
+    expect(btn).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+describe("Field + Input", () => {
+  it("ties label, hint, and error to the input via aria", async () => {
+    const { container } = render(
+      <Field label="Email address" hint="We never share it." error="Required" required>
+        {(props) => <Input {...props} name="email" />}
+      </Field>,
+    );
+    const input = screen.getByLabelText(/email address/i);
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAccessibleDescription(/we never share it/i);
+    expect(screen.getByRole("alert")).toHaveTextContent("Required");
+    expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+describe("Chip", () => {
+  it("exposes pressed state via aria-pressed (not color alone)", async () => {
+    const { container } = render(
+      <Chip selected onClick={() => {}}>
+        grief
+      </Chip>,
+    );
+    expect(screen.getByRole("button", { name: /grief/i })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+describe("Availability", () => {
+  it("conveys status with a text label, not color alone", async () => {
+    const { container } = render(<Availability status="available" />);
+    expect(screen.getByText("Available now")).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+describe("Avatar", () => {
+  it("is decorative (hidden from screen readers) and shows the initial", () => {
+    render(<Avatar name="Maya" color="#136F63" />);
+    const initial = screen.getByText("M");
+    expect(initial).toHaveAttribute("aria-hidden", "true");
+  });
+});
+
+describe("Card + Tag", () => {
+  it("render without a11y violations", async () => {
+    const { container } = render(
+      <Card>
+        <p>Hello</p>
+        <Tag>books</Tag>
+      </Card>,
+    );
+    expect(await axe(container)).toHaveNoViolations();
+  });
+});

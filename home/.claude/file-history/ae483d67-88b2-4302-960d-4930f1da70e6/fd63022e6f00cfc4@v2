@@ -1,0 +1,24 @@
+import { describe, it, expect } from "vitest";
+import { pickMimeType } from "@/lib/audio/mime";
+
+describe("pickMimeType", () => {
+  it("prefers webm/opus when everything is supported", () => {
+    expect(pickMimeType(() => true)).toBe("audio/webm;codecs=opus");
+  });
+
+  it("falls back to mp4 for Safari (cannot write webm)", () => {
+    expect(pickMimeType((t) => t === "audio/mp4" || t === "audio/wav")).toBe("audio/mp4");
+  });
+
+  it("returns empty string when nothing is supported (let browser choose)", () => {
+    expect(pickMimeType(() => false)).toBe("");
+  });
+
+  it("treats a throwing support-check as unsupported", () => {
+    expect(
+      pickMimeType(() => {
+        throw new Error("boom");
+      }),
+    ).toBe("");
+  });
+});

@@ -1,0 +1,14 @@
+# Copy to .env and edit before `docker compose up -d --build`.
+
+# The API's PUBLIC URL, as the browser reaches it. For a real deploy this is
+# your domain (e.g. https://tew.example.com/api behind your reverse proxy).
+# Baked into the web bundle at build time, so rebuild the web image if changed.
+NEXT_PUBLIC_API_URL=http://localhost:4000
+
+# Moderator console login tokens: "token:moderatorId,token2:mod2".
+# Leave blank and the API falls back to a dev token (dev-moderator-token) — fine
+# for testing, change before anything public.
+TEW_MODERATOR_TOKENS=
+
+# 1 = magic-link auth returns the token in the response (testing only).
+TEW_DEV_AUTH=0

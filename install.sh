@@ -2,58 +2,66 @@
 # CCCLI — restore Taha's Claude Code setup on this machine.
 #   ./install.sh          repo  -> machine
 #   ./install.sh --pull   machine -> repo   (then git commit && git push)
+#
+# home/ mirrors $HOME exactly. Everything is here: config, skills, memory,
+# transcripts, history, MCP servers with live keys, browser profile.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CLAUDE_DIR="$HOME/.claude"
-MEM_DIR="$CLAUDE_DIR/projects/$(echo "$HOME" | tr '/' '-')/memory"
+SRC_HOME="/Users/taha"   # the home these files were captured from
 STAMP="$(date +%Y%m%d%H%M%S)"
 
-# ---------------------------------------------------------------- pull mode
+# gstack is a 1.1 GB public clone — cloned, not vendored
+EXCL=(--exclude '.claude/skills/gstack/' --exclude 'node_modules/' --exclude '.DS_Store')
+
 if [ "${1:-}" = "--pull" ]; then
-  cp "$CLAUDE_DIR/CLAUDE.md" "$REPO/claude/CLAUDE.md"
-  sed "s|$HOME|__HOME__|g" "$CLAUDE_DIR/settings.json"       > "$REPO/claude/settings.json"
-  sed "s|$HOME|__HOME__|g" "$CLAUDE_DIR/settings.local.json" > "$REPO/claude/settings.local.json"
-  rsync -aL --delete --exclude 'gstack/' --exclude '.git/' --exclude 'node_modules/' \
-    "$CLAUDE_DIR/skills/" "$REPO/claude/skills/"
-  rsync -a --delete "$MEM_DIR/" "$REPO/memory/" 2>/dev/null || true
-  echo "pulled into $REPO — review 'git diff' for secrets before pushing."
+  rsync -a --delete "${EXCL[@]}" \
+    "$HOME/.claude/"       "$REPO/home/.claude/"
+  rsync -aL --delete "$HOME/.agents/"      "$REPO/home/.agents/"
+  rsync -a  --delete "$HOME/.claude-usage/" "$REPO/home/.claude-usage/"
+  rsync -a  --delete "$HOME/.gstack/"       "$REPO/home/.gstack/"
+  for f in .claude.json .claude.json.backup .claude.json.bak .zshrc .gitconfig .zprofile .profile; do
+    [ -f "$HOME/$f" ] && cp "$HOME/$f" "$REPO/home/$f"
+  done
+  echo "pulled into $REPO — git commit && git push"
   exit 0
 fi
 
-# ------------------------------------------------------------- install mode
-echo "==> config"
-mkdir -p "$CLAUDE_DIR" "$MEM_DIR"
-for f in CLAUDE.md settings.json settings.local.json; do
-  [ -e "$CLAUDE_DIR/$f" ] && cp "$CLAUDE_DIR/$f" "$CLAUDE_DIR/$f.bak-$STAMP"
+echo "==> backing up existing config"
+for f in .claude/CLAUDE.md .claude/settings.json .claude/settings.local.json .claude.json; do
+  [ -e "$HOME/$f" ] && cp "$HOME/$f" "$HOME/$f.bak-$STAMP"
 done
-cp "$REPO/claude/CLAUDE.md" "$CLAUDE_DIR/CLAUDE.md"
-sed "s|__HOME__|$HOME|g" "$REPO/claude/settings.json"       > "$CLAUDE_DIR/settings.json"
-sed "s|__HOME__|$HOME|g" "$REPO/claude/settings.local.json" > "$CLAUDE_DIR/settings.local.json"
 
-echo "==> skills"
-rsync -a "$REPO/claude/skills/" "$CLAUDE_DIR/skills/"   # merge, never delete local extras
+echo "==> restoring \$HOME state (config, skills, memory, transcripts, history, MCP, browser profile)"
+rsync -a "${EXCL[@]}" "$REPO/home/" "$HOME/"
 
-echo "==> memory"
-rsync -a "$REPO/memory/" "$MEM_DIR/"
+# absolute paths are baked into settings and transcript dir names; fix them if the username differs
+if [ "$HOME" != "$SRC_HOME" ]; then
+  echo "==> rewriting $SRC_HOME -> $HOME"
+  for f in "$HOME/.claude/settings.json" "$HOME/.claude/settings.local.json" "$HOME/.claude.json" "$HOME/.claude-usage/config.json"; do
+    [ -f "$f" ] && sed -i '' "s|$SRC_HOME|$HOME|g" "$f"
+  done
+  # memory + transcripts live under a dir named after the home path
+  old="$HOME/.claude/projects/$(echo "$SRC_HOME" | tr '/' '-')"
+  new="$HOME/.claude/projects/$(echo "$HOME"     | tr '/' '-')"
+  [ -d "$old" ] && [ ! -d "$new" ] && mv "$old" "$new"
+fi
 
-echo "==> usage hook"
-mkdir -p "$HOME/.claude-usage"
-cp "$REPO/claude-usage/collect.mjs" "$HOME/.claude-usage/collect.mjs"
-[ -f "$HOME/.claude-usage/config.json" ] || cat > "$HOME/.claude-usage/config.json" <<JSON
-{ "device": "$(hostname -s)", "dataRepoPath": "$HOME/.claude-usage/claude-usage-data", "pushIntervalMin": 5 }
-JSON
+echo "==> usage data repo"
+[ -d "$HOME/.claude-usage/claude-usage-data/.git" ] || \
+  git clone https://github.com/Taha-Mahmoodi/claude-usage-data.git "$HOME/.claude-usage/claude-usage-data" || \
+  echo "   skipped (private repo — needs gh auth)"
 
 echo "==> gstack"
-if [ -d "$CLAUDE_DIR/skills/gstack/.git" ]; then
-  git -C "$CLAUDE_DIR/skills/gstack" pull --ff-only || true
+if [ -d "$HOME/.claude/skills/gstack/.git" ]; then
+  git -C "$HOME/.claude/skills/gstack" pull --ff-only || true
 else
-  git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git "$CLAUDE_DIR/skills/gstack"
+  git clone --single-branch --depth 1 https://github.com/garrytan/gstack.git "$HOME/.claude/skills/gstack"
 fi
-( cd "$CLAUDE_DIR/skills/gstack" && ./setup ) || echo "   gstack setup failed — needs bun (https://bun.sh). Re-run: cd ~/.claude/skills/gstack && ./setup"
+( cd "$HOME/.claude/skills/gstack" && ./setup ) || echo "   gstack setup failed — needs bun (https://bun.sh). Re-run: cd ~/.claude/skills/gstack && ./setup"
 
 echo "==> plugins"
-python3 - "$REPO/claude/settings.json" <<'PY' | while read -r cmd; do eval "$cmd" || true; done
+python3 - "$HOME/.claude/settings.json" <<'PY' | while read -r cmd; do eval "$cmd" || true; done
 import json, sys, shlex
 s = json.load(open(sys.argv[1]))
 for name, m in s.get("extraKnownMarketplaces", {}).items():
@@ -63,8 +71,8 @@ for pid, on in s.get("enabledPlugins", {}).items():
         print("claude plugin install " + shlex.quote(pid))
 PY
 
-# the statusline path is version-pinned in settings.json — repoint it at whatever ponytail just installed
-python3 - "$CLAUDE_DIR" <<'PY'
+# the ponytail statusline path is version-pinned — repoint it at whatever just installed
+python3 - "$HOME/.claude" <<'PY'
 import glob, json, sys
 d = sys.argv[1]
 hits = sorted(glob.glob(d + "/plugins/cache/ponytail/ponytail/*/hooks/ponytail-statusline.sh"))
@@ -77,25 +85,5 @@ if hits:
         print("   statusline -> " + hits[-1])
 PY
 
-echo "==> mcp servers"
-if [ -f "$REPO/.env" ]; then set -a; . "$REPO/.env"; set +a; fi
-# expandvars fills ${MAGIC_API_KEY} etc from the environment; unset ones stay literal and get skipped
-servers="$(python3 -c '
-import json, os, sys
-for name, cfg in json.load(open(sys.argv[1])).items():
-    print(name + "\t" + os.path.expandvars(json.dumps(cfg)))
-' "$REPO/mcp/servers.json")"
-while IFS=$'\t' read -r name cfg; do
-  [ -z "$name" ] && continue
-  case "$cfg" in
-    *'${'*) echo "   skip $name — env var not set (see .env.example)"; continue ;;
-  esac
-  if claude mcp add-json -s user "$name" "$cfg" >/dev/null 2>&1; then
-    echo "   added $name"
-  else
-    echo "   $name already configured (or add failed)"
-  fi
-done <<< "$servers"
-
 echo
-echo "done. restart Claude Code."
+echo "done — run 'claude login' once, then restart Claude Code."

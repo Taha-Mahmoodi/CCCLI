@@ -1,0 +1,79 @@
+import Link from "next/link";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { NotificationsSeen } from "@/components/app/notifications-seen";
+import { relativeTime } from "@/lib/time";
+
+export const metadata = { title: "Notifications" };
+
+const VERB: Record<string, string> = {
+  FOLLOW: "started following you",
+  LIKE: "liked your post",
+  COMMENT: "replied to your post",
+};
+
+export default async function NotificationsPage() {
+  const user = await requireUser();
+
+  const notifs = await prisma.notification.findMany({
+    where: { userId: user.id },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    include: {
+      actor: { select: { id: true, profile: { select: { displayName: true } } } },
+    },
+  });
+  const hasUnread = notifs.some((n) => !n.read);
+
+  return (
+    <div className="mx-auto max-w-2xl px-5 py-10">
+      <NotificationsSeen hasUnread={hasUnread} />
+      <h1 className="text-2xl font-semibold tracking-tight">Notifications</h1>
+
+      {notifs.length === 0 ? (
+        <p className="mt-6 rounded-2xl border border-border bg-surface p-6 text-muted">
+          Nothing yet. When people follow you or engage with your posts, it shows
+          up here.
+        </p>
+      ) : (
+        <ul className="mt-6 flex flex-col gap-2">
+          {notifs.map((n) => {
+            const name = n.actor.profile?.displayName ?? "Someone";
+            const href =
+              n.type === "FOLLOW"
+                ? `/app/u/${n.actorId}`
+                : n.postId
+                  ? `/app/post/${n.postId}`
+                  : "/app";
+            return (
+              <li key={n.id}>
+                <Link
+                  href={href}
+                  className={`flex items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm transition-colors hover:border-accent/60 ${
+                    n.read
+                      ? "border-border bg-surface"
+                      : "border-accent/40 bg-accent/5"
+                  }`}
+                >
+                  <span>
+                    <span className="font-semibold text-fg">{name}</span>{" "}
+                    <span className="text-muted">{VERB[n.type]}</span>
+                    {n.read ? null : (
+                      <span className="sr-only"> (unread)</span>
+                    )}
+                  </span>
+                  <time
+                    dateTime={n.createdAt.toISOString()}
+                    className="shrink-0 text-muted"
+                  >
+                    {relativeTime(n.createdAt)}
+                  </time>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,146 @@
+# Handling Protocols
+
+> How to handle every situation that isn't "write the next line." When in doubt, follow the protocol; the protocol beats improvisation.
+
+---
+
+## 1. File & folder handling
+
+**Naming (all lowercase, no spaces, no surprises):**
+- Folders & non-component files: **kebab-case** — `media-session.ts`, `handling-protocols.md`, `upload-queue/`.
+- React components & their files: **PascalCase** — `RadioPlayer.tsx`, `MemoRecorder.tsx`. One component per file; file name = component name.
+- Hooks: `useX.ts` camelCase — `useMediaSession.ts`.
+- Tests: mirror the subject — `RadioPlayer.test.tsx`, `upload-queue.test.ts`; visual/e2e in `tests/visual/*.spec.ts`.
+- Types/schemas: `*.types.ts`, `*.schema.ts`.
+- Env: `.env.local` (never committed), `.env.example` (committed, keys only, no values).
+- Docs: kebab-case `.md` in `docs/`.
+
+**Placement rules:**
+- Code lives in exactly one place. A helper used by 2+ packages moves to `packages/shared`; a UI primitive used by 2+ apps moves to `packages/ui`. Do not copy — hoist.
+- Anything ephemeral (scratch, screenshots, logs, downloads) goes in `.scratch/` (git-ignored), **never** in source dirs. The macOS scratchpad wipes between sessions — anything durable belongs in the repo and pushed.
+- Generated files (`.next/`, `node_modules/`, `dist/`, coverage) are git-ignored, never committed.
+- A folder gets an `index.ts` barrel only when it has a stable public surface used elsewhere; do not barrel private internals (it bloats bundles — see perf law).
+
+**Labeling:** every non-obvious module starts with a one-line comment stating its job. Deliberate shortcuts carry a `ponytail:` comment naming the ceiling and the upgrade path.
+
+**Directories are created just-in-time** for the slice that needs them. Never scaffold empty folders "for later."
+
+---
+
+## 2. Context handling — when a section or context is lost
+
+Context loss is expected (long build, outages, compaction). Recovery is deterministic, in this order:
+
+1. **Read [`../STATE.md`](../STATE.md)** — the single source of live truth. It names the current slice, the current sub-task, the branch, the last green commit, and the next action.
+2. **`git status && git log --oneline -10 && git branch --show-current`** — reconcile the ledger against reality. The tree is truth; if `STATE.md` disagrees with the tree, trust the tree and correct `STATE.md`.
+3. **Re-read only what the current slice touches** — `brief.md` (acceptance criteria for this slice) + the ten non-negotiables + the specific files named in `STATE.md`'s "current sub-task." Do **not** re-read the whole repo or the 39KB paper; pull only the paper section the slice cites.
+4. **Resume at the "next action" line in `STATE.md`.** If mid-edit and unsure, run the sandbox test (§5) — failures tell you exactly where you were.
+
+**`STATE.md` is updated at every meaningful checkpoint** (task start, task done, before any risky/long op, before ending a turn). It is the memory that survives everything else. Treat "update STATE.md" as part of the work, not paperwork.
+
+---
+
+## 3. Failure & interruption → resume protocol (built for power outages)
+
+Assume the machine can die at any instant. The invariant: **no more than one small unit of work is ever at risk.**
+
+**Prevention (do these continuously):**
+- **Commit early, commit often.** A working sub-step gets a WIP commit immediately. Green checkpoints get a real commit.
+- **Push before anything slow or risky** (long install, migration, big refactor). Pushed work survives a dead disk; local work does not.
+- **Never leave the tree in a broken state across a long gap.** If you must stop mid-change, either finish the compile-clean unit or `git stash` with a labeled message and record it in `STATE.md`.
+- **`STATE.md` is written *before* the risky op, not after** — so on resume you know what was in flight.
+
+**Resume after an interruption (deterministic):**
+1. `cd ~/Documents/third-eye-world-mono` (durable clone; not the scratchpad).
+2. Run the §2 context-recovery sequence.
+3. `git stash list` — restore any labeled WIP the ledger mentions.
+4. Run the sandbox test (§5). Green → continue from `STATE.md`'s next action. Red → the failure *is* your resume point; fix forward.
+5. If a push was in flight and its state is unknown: `git fetch` and compare `git log origin/<branch>` to local — reconcile, never force-push over unseen remote work.
+
+**Long/backgrounded work + the loop:** backgrounded `Workflow()` does **not** survive `/loop` wakeup boundaries — do substantive work **inline**, not detached, when running under the goal loop. Use subagents (§4) for parallel *reads*, but land writes inline and commit them.
+
+---
+
+## 4. Multitasking protocols — agents, phases, tasks
+
+**Phases → tasks → slices.** A *slice* (from `brief.md`) is the unit of shippable work. A slice decomposes into *tasks*; independent tasks may run in parallel.
+
+**When to spawn subagents (fan out):**
+- **Parallel reads/research** — mapping a subsystem, searching for callers, gathering API facts, reviewing from N independent angles. Default yes; cheap and keeps the main context lean (see §7).
+- **Independent builds that don't share files** — e.g. `packages/shared` schemas while `apps/web` shell is scaffolded. Use `isolation: "worktree"` **only** when two agents mutate files that would otherwise conflict; worktrees cost setup + disk, so don't reach for them by reflex.
+
+**When NOT to fan out:** sequential work with real dependencies, or edits to the same files — serialize those. One writer per file at a time.
+
+**How to run them:**
+- Give each agent a **crisp, self-contained task** and a **structured return** (schema) so results compose without re-parsing. The agent's report is not shown to the user — relay only what matters.
+- Verify adversarially where it counts: for correctness/security/a11y claims, have an independent agent try to *refute* the finding before trusting it.
+- Prefer a **Workflow** (deterministic fan-out/pipeline) for a well-scoped batch (e.g. "audit these 8 routes for axe violations"), but only when the user has opted into orchestration. Under this goal, the user granted full control — a workflow per phase is in-scope. **Land its writes inline** (see §3 loop caveat).
+- Concurrency: keep parallel agents to what actually helps; more agents ≠ faster past the point of contention.
+
+**Progress:** each spawned task updates a checkbox in `STATE.md` (or the phase's task list) so a resume after outage knows what completed.
+
+---
+
+## 5. Sandbox test protocol
+
+Runs in isolation before any PR merges. **Nothing here touches `prod` or live data.**
+
+Order (fail fast — stop at first red, fix, restart):
+1. `pnpm typecheck` — TypeScript, zero errors.
+2. `pnpm lint` — ESLint + a11y lint (`eslint-plugin-jsx-a11y`), zero errors.
+3. `pnpm test` — unit/integration (Vitest). Non-trivial logic must have a test; audio state machine, upload queue, and any crypto path are mandatory-tested.
+4. `pnpm build` — production build succeeds; inspect the route bundle sizes against the perf law (≤170KB gz/route).
+5. **Performance gates** — Lighthouse CI (mobile preset) against the built app; assert the budgets in `implementation.md` §1. Any regression = red.
+
+Run against a **throwaway dev server / clean build dir**, seeded with fixture data, never the real backend. Secrets come from `.env.local`; the sandbox uses `.env.test` fixtures.
+
+A PR is not "green" until 1–5 all pass **and** the visual test (§6) passes.
+
+---
+
+## 6. Visual test protocol (drive a real browser and check everything)
+
+Motion, layout, and screen-reader behavior can only be trusted when *observed*. Two layers:
+
+**A. Automated (in CI, headless):**
+- Playwright drives the built app; `@axe-core/playwright` asserts **0 violations** on every route and key interactive state.
+- Keyboard-only pass: tab through every route, assert focus is visible and order is logical, assert route changes move focus to `<h1>` and announce via the `aria-live` region.
+- Motion pass: record a trace on each animated interaction; assert 60fps / no long tasks; assert `prefers-reduced-motion` collapses motion to instant state.
+- Snapshot key screens (light/dark) for visual-regression diffing.
+
+**B. Manual/agent-driven (the "open the browser and look" pass):**
+- Use the **`/browse` skill** for all browser interaction. **Never** use `mcp__claude-in-chrome__*` (per global instruction).
+- Walk the actual core loop as a user would: record a memo → hear it enter the radio timeline → skip/like/comment → confirm gapless playback and that no two voices ever talk at once (audio ducking).
+- Screenshot each state; confirm the UI matches the design intent *and* that every visible action has its three routes.
+- Drive at least one screen reader through the flow (VoiceOver on macOS via the visual pass) and confirm labels, custom actions (rotor), and announcements are correct and non-flooding.
+- Check at 200–400% zoom and small-laptop viewport; nothing clips, nothing requires horizontal scroll.
+
+A UI/UX defect found here is a **blocking** defect — it gets an issue and a fix before the slice is done (per `github-workflow.md`), never a "later."
+
+**Honesty rule for layer B:** the audio-ducking "feel" and the true screen-reader rotor experience are **human-needed** — an agent can drive `/browse` and get most of the way, but "no two voices ever talk at once" and "the rotor actions feel right" ultimately need a real person on a real screen reader. When that human pass hasn't happened, `STATE.md` records the slice as "automated a11y green; human screen-reader pass pending," **never** as "screen-reader verified." Do not fake this.
+
+---
+
+## 7. Token optimization protocol — most performance per token
+
+The goal is a million-token-quality result at a fraction of the tokens. Discipline, not shortcuts.
+
+**Read less, know more:**
+- **`STATE.md` is the working memory.** Re-derive nothing that's already recorded there. Read it instead of re-reading source.
+- Read **only the lines you need** (offset/limit), not whole files; grep for the symbol, open the hit.
+- **Never re-read a file you just wrote/edited** — the edit already confirmed its state.
+- Pull the **specific paper section** a task cites, not the whole 39KB spec.
+
+**Delegate the expensive reads:**
+- Send broad search / multi-file mapping to **subagents** and keep only their **structured, distilled** return in the main context. A subagent can burn tokens reading 20 files and hand back 10 lines.
+
+**Write tight:**
+- Prefer the smallest diff (Edit over Write over rewrite). Don't reprint large unchanged blocks.
+- Keep tool output small: `--quiet`, `| tail`, `--oneline`, `--jq`. Don't `cat` big files or dump full `git log`.
+- No narration of options you won't take; decide and act.
+
+**Compose, don't repeat:**
+- Structured agent outputs (schemas) so results merge without re-explaining.
+- One runnable check per non-trivial unit — a failing assert localizes a bug in ~0 tokens vs. paragraphs of speculation.
+
+**Ceiling comment:** where a lazy approach has a known limit, a one-line `ponytail:` comment records it — cheaper than re-discovering it later.

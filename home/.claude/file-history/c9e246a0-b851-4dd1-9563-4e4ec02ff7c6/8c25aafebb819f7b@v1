@@ -1,0 +1,47 @@
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { ProfileForm } from "@/components/app/profile-form";
+import { A11yControls } from "@/components/a11y/a11y-controls";
+import { ROLE_LABELS, type RoleValue } from "@/lib/validation";
+
+export const metadata = { title: "Profile" };
+
+export default async function ProfilePage() {
+  const session = await auth();
+  const userId = session!.user.id;
+  const [profile, user] = await Promise.all([
+    prisma.profile.findUnique({ where: { userId } }),
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, role: true },
+    }),
+  ]);
+
+  return (
+    <div className="mx-auto max-w-2xl px-5 py-12">
+      <h1 className="text-2xl font-semibold tracking-tight">Profile</h1>
+
+      <ProfileForm
+        initial={{
+          displayName: profile?.displayName ?? "",
+          bio: profile?.bio ?? "",
+          region: profile?.region ?? "",
+        }}
+        email={user?.email ?? ""}
+        role={ROLE_LABELS[(user?.role ?? "SUPPORTER") as RoleValue]}
+      />
+
+      <section aria-labelledby="a11y-heading" className="mt-14 border-t border-border pt-10">
+        <h2 id="a11y-heading" className="text-xl font-semibold tracking-tight">
+          Accessibility
+        </h2>
+        <p className="mt-2 text-muted">
+          These settings apply across the Commons and are saved to your account.
+        </p>
+        <div className="mt-6">
+          <A11yControls />
+        </div>
+      </section>
+    </div>
+  );
+}

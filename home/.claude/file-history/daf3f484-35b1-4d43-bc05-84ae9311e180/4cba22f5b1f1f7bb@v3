@@ -1,0 +1,206 @@
+// Badges + Stardust (per the README's reward design). This is the live
+// subset of the 250-badge catalog — enough to exercise every tier and
+// every earning moment; full enumeration stays future work.
+
+export type BadgeTier = "common" | "unique" | "rare";
+
+export interface Badge {
+  id: string;
+  name: string;
+  tier: BadgeTier;
+  description: string;
+}
+
+export const STARDUST_BY_TIER: Record<BadgeTier, number> = {
+  common: 10,
+  unique: 60,
+  rare: 250,
+};
+
+export const SUPERNOVA_BONUS = 500;
+
+export const CATALOG: Badge[] = [
+  { id: "first-flight", name: "First Flight", tier: "common", description: "Entered a galaxy for the first time" },
+  { id: "wayfarer", name: "Wayfarer", tier: "common", description: "Visited a vault's star system" },
+  { id: "ground-truth", name: "Ground Truth", tier: "common", description: "Watched planets orbit a living star" },
+  { id: "constellation-of-us", name: "Constellation of Us", tier: "common", description: "Opened the people view" },
+  { id: "silent-partner", name: "Silent Partner", tier: "common", description: "Sent an AI searching the sky" },
+  { id: "witness", name: "Witness", tier: "common", description: "Stood before a dust cloud" },
+  { id: "wanderer", name: "Wanderer", tier: "common", description: "Entered three galaxies in one session" },
+  { id: "event-horizon", name: "Event Horizon", tier: "unique", description: "Visited a black hole" },
+  { id: "cartographer", name: "Cartographer", tier: "unique", description: "Surveyed the sky at company scale" },
+  { id: "conqueror", name: "Conqueror", tier: "unique", description: "Marked a milestone — a galaxy conquered" },
+  { id: "first-light", name: "First Light", tier: "rare", description: "Present for the very first supernova" },
+];
+
+interface StorageLike {
+  getItem(k: string): string | null;
+  setItem(k: string, v: string): void;
+}
+
+const KEY = "yz-rewards-v1";
+
+export class RewardStore {
+  private earned = new Set<string>();
+  stardust = 0;
+  private storage: StorageLike;
+
+  constructor(storage: StorageLike = localStorage) {
+    this.storage = storage;
+    try {
+      const raw = storage.getItem(KEY);
+      if (raw) {
+        const data = JSON.parse(raw) as { earned: string[]; stardust: number };
+        this.earned = new Set(data.earned);
+        this.stardust = data.stardust;
+      }
+    } catch {
+      /* fresh start on corrupt state */
+    }
+  }
+
+  has(id: string): boolean {
+    return this.earned.has(id);
+  }
+
+  earnedCount(): number {
+    return this.earned.size;
+  }
+
+  /** Awards once; returns the badge if newly earned, null if already held. */
+  award(id: string): Badge | null {
+    if (this.earned.has(id)) return null;
+    const badge = CATALOG.find((b) => b.id === id);
+    if (!badge) return null;
+    this.earned.add(id);
+    this.stardust += STARDUST_BY_TIER[badge.tier];
+    this.persist();
+    return badge;
+  }
+
+  addStardust(amount: number): void {
+    this.stardust += amount;
+    this.persist();
+  }
+
+  /** Spend if affordable. Returns whether the spend happened. */
+  spend(amount: number): boolean {
+    if (amount > this.stardust) return false;
+    this.stardust -= amount;
+    this.persist();
+    return true;
+  }
+
+  private persist(): void {
+    this.storage.setItem(
+      KEY,
+      JSON.stringify({ earned: [...this.earned], stardust: this.stardust }),
+    );
+  }
+}
+
+// --- DOM: earning toast + badge shelf + stardust readout ---
+
+const TIER_COLOR: Record<BadgeTier, string> = {
+  common: "rgba(255, 227, 184, 0.85)",
+  unique: "rgba(174, 203, 255, 0.9)",
+  rare: "rgba(201, 166, 255, 0.95)",
+};
+
+export class RewardUI {
+  private store: RewardStore;
+  private toastQueue: Badge[] = [];
+  private toasting = false;
+  private shelf: HTMLDivElement;
+  private dust: HTMLDivElement;
+
+  constructor(store: RewardStore) {
+    this.store = store;
+
+    this.dust = document.createElement("div");
+    this.dust.id = "yz-stardust";
+    document.body.appendChild(this.dust);
+    this.renderStardust();
+
+    this.shelf = document.createElement("div");
+    this.shelf.id = "yz-shelf";
+    document.body.appendChild(this.shelf);
+  }
+
+  private renderStardust(): void {
+    this.dust.innerHTML = `<span>✦</span> ${this.store.stardust} stardust`;
+  }
+
+  /** Re-render the balance after external spends (e.g. customization). */
+  refresh(): void {
+    this.renderStardust();
+  }
+
+  /** Award + play the earning moment if newly earned. */
+  celebrate(id: string): void {
+    const badge = this.store.award(id);
+    this.renderStardust();
+    if (!badge) return;
+    this.toastQueue.push(badge);
+    if (!this.toasting) this.nextToast();
+  }
+
+  bonus(amount: number): void {
+    this.store.addStardust(amount);
+    this.renderStardust();
+  }
+
+  private nextToast(): void {
+    const badge = this.toastQueue.shift();
+    if (!badge) {
+      this.toasting = false;
+      return;
+    }
+    this.toasting = true;
+    const el = document.createElement("div");
+    el.className = "yz-toast";
+    el.style.borderColor = TIER_COLOR[badge.tier];
+    el.innerHTML = `
+      <div class="yz-toast-tier" style="color:${TIER_COLOR[badge.tier]}">${badge.tier} badge</div>
+      <div class="yz-toast-name">${badge.name}</div>
+      <div class="yz-toast-desc">${badge.description}</div>
+      <div class="yz-toast-dust">+${STARDUST_BY_TIER[badge.tier]} ✦</div>
+    `;
+    document.body.appendChild(el);
+    requestAnimationFrame(() => el.classList.add("yz-toast-in"));
+    setTimeout(() => {
+      el.classList.remove("yz-toast-in");
+      setTimeout(() => {
+        el.remove();
+        this.nextToast();
+      }, 400);
+    }, 4200);
+  }
+
+  toggleShelf(): void {
+    if (this.shelf.classList.contains("yz-shelf-open")) {
+      this.shelf.classList.remove("yz-shelf-open");
+      return;
+    }
+    const rows = CATALOG.map((b) => {
+      const held = this.store.has(b.id);
+      const name = held || b.tier !== "rare" ? b.name : "Undiscovered";
+      const desc = held || b.tier !== "rare" ? b.description : "Some things find you";
+      return `
+        <div class="yz-badge ${held ? "yz-held" : ""}">
+          <span class="yz-badge-dot" style="background:${TIER_COLOR[b.tier]}"></span>
+          <div>
+            <div class="yz-badge-name">${name}</div>
+            <div class="yz-badge-desc">${desc}</div>
+          </div>
+        </div>`;
+    }).join("");
+    this.shelf.innerHTML = `
+      <div class="yz-shelf-title">Achievements</div>
+      <div class="yz-shelf-sub">${this.store.earnedCount()} of ${CATALOG.length} · ${this.store.stardust} ✦ stardust</div>
+      ${rows}
+      <div class="yz-shelf-hint">b to close</div>
+    `;
+    this.shelf.classList.add("yz-shelf-open");
+  }
+}

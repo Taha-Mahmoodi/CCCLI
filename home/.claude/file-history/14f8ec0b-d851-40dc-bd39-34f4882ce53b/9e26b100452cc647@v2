@@ -1,0 +1,129 @@
+# External References & Media Coverage
+
+This document anchors the Third Eye Kit project's public record and field-test documentation.
+
+---
+
+## Competition & Program Records
+
+### TEKNOFEST 2023 — Barrier-Free Living
+- **Competition:** TEKNOFEST Aerospace and Technology Festival
+- **Category:** Barrier-Free Living (Accessible Technology)
+- **Team:** ABRT01  
+- **Team ID:** #431899  
+- **Level:** High School (Secondary Education)
+- **Country:** Afghanistan (Herat)
+- **School:** Afgan-Türk Maarif Okulları — Herat Erkek Lisesi
+
+**Official Program Link:** https://www.teknofest.org/tr/yarismalar/finalist-takimlar/2203
+
+---
+
+## Media & News Coverage
+
+### Turkish News & Local Coverage
+
+| Outlet | Title | Focus | Link |
+|--------|-------|-------|------|
+| **AA (Anadolu Agency)** | "Lise öğrencisinden üçüncü göz projesi" | High school student's "third eye" project (visual assistance for blind users) | https://www.aa.com.tr/tr/ayrimcilikhatti/engelli-yasam/lise-ogrencisinden-ucuncu-goz-projesi/1815004 |
+| **Faktor (Bosnia-Herzegovina News)** | Student who lost an eye in Afghan war designed device to help visually impaired | Story of engineer who lost vision in conflict and designed assistive technology | https://faktor.ba/nije-odabrano/nije-odabrano/ucenik-koji-je-ostao-bez-oka-tokom-rata-u-afganistanu-dizajnirao-uredaj-za-pomoc-slabovidnim/134008 |
+
+---
+
+## Multimedia & Video Documentation
+
+### Official Demonstrations & Field Tests
+
+- **Dailymotion Video:** https://www.dailymotion.com/video/x8dgvrk  
+  *(Field demonstration or prototype showcase)*
+
+---
+
+## Field-Test & Deployment Documentation
+
+### Primary Field-Test Site
+- **Location:** Blind support centre, Herat, Afghanistan
+- **Prototype Versions Tested:** v1, v2
+- **Testing Population:** Blind and low-vision users
+- **Documentation Status:** Field-test logs and feedback records maintained by team
+
+### User Testing Sessions
+- Multi-session obstacle-course trials
+- Feedback collection on alert distances and feedback modalities
+- Wearability and fit assessment
+
+---
+
+## Academic & Technical References
+
+### Assistive Technology & Low-Vision Context
+
+The Third Eye Kit is positioned within the broader ecosystem of assistive devices:
+
+- **Standard commercial solutions:** Refreshable Braille displays ($3,500–$15,000), GPS-enabled canes, smartphone-based apps
+- **Barrier:** High cost, dependence on broadband/Wi-Fi, and insufficient coverage in low-resource regions
+- **Third Eye Kit's niche:** Decentralized, low-cost, 2G-compatible, buildable in-region
+
+### Infrastructure Gradient Context
+
+The "Infrastructure Gradient" problem has been documented in humanitarian technology:
+
+- **Power intermittency:** Assumes nightly grid charging is unavailable
+- **Unmapped terrain:** No dependence on pre-surveyed maps or assisted-GPS servers
+- **Acoustic noise:** Open-air markets and busy streets require multi-modal feedback
+- **Economic barriers:** $50–100 manufacturing cost, not $3,500+
+
+---
+
+## Partner Organizations
+
+### Educational & Development
+
+- **Afgan-Türk Maarif Okulları** — Host school (Herat Erkek Lisesi / Herat Boys' High School)
+- **Mechatronics Department** — Advising and project guidance
+- **Herat Blind Support Centre** — Community partner, user testing, requirements feedback
+
+---
+
+## Historical Context
+
+### Background
+
+The Third Eye Kit emerged from the personal and professional context of its lead engineer:
+
+- **Origin:** Afghanistan (Herat region)
+- **Inspiration:** Addressing accessibility needs for blind and low-vision populations in resource-constrained environments
+- **Deployment constraints:** 2G/GSM infrastructure, intermittent power, limited broadband availability
+
+The project prioritizes **buildability and reparability in-region** over feature richness, treating the Infrastructure Gradient as a design constraint, not an edge case.
+
+---
+
+## How to Contribute References
+
+If you are aware of additional news coverage, field-test documentation, or academic references that should be listed here:
+
+1. Open an [Issue](https://github.com/sadeqisaidmohaddes-star/third-eye-kit/issues) with the link and context
+2. Include the outlet, date, and relevance to the project
+3. Maintainers will verify and add to this document
+
+---
+
+## Citation
+
+If you cite the Third Eye Kit in academic work, use:
+
+```bibtex
+@misc{ThirdEyeKit2023,
+  title={Third Eye Kit: A Decentralized Wearable Obstacle-Detection System for Low-Resource Environments},
+  author={Sadeqi, Said Mohaddes},
+  year={2023},
+  note={TEKNOFEST Barrier-Free Living Competition, Team ABRT01},
+  url={https://github.com/sadeqisaidmohaddes-star/third-eye-kit}
+}
+```
+
+---
+
+**Last Updated:** 2026  
+**Maintained by:** Said Mohaddes Sadeqi

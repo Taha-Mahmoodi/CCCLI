@@ -1,0 +1,32 @@
+import { z } from "zod";
+
+export const ROLES = [
+  "BLIND_TRAVELER",
+  "FAMILY",
+  "CLINICIAN",
+  "ENGINEER",
+  "SUPPORTER",
+] as const;
+export type RoleValue = (typeof ROLES)[number];
+
+export const ROLE_LABELS: Record<RoleValue, string> = {
+  BLIND_TRAVELER: "Blind traveler",
+  FAMILY: "Family member",
+  CLINICIAN: "Clinician (orientation & mobility)",
+  ENGINEER: "Engineer / contributor",
+  SUPPORTER: "Supporter",
+};
+
+export const signupSchema = z.object({
+  email: z.email("Enter a valid email address."),
+  password: z.string().min(8, "Use at least 8 characters."),
+  displayName: z.string().trim().min(1, "Tell us what to call you.").max(80),
+  role: z.enum(ROLES),
+});
+
+export const loginSchema = z.object({
+  email: z.email(),
+  password: z.string().min(1),
+});
+
+export type SignupInput = z.infer<typeof signupSchema>;

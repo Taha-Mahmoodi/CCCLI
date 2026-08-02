@@ -1,0 +1,150 @@
+// E2EE DM transport (spec §7). The server relays OPAQUE ciphertext only — it
+// never decrypts. The actual encryption is libsignal in the app (@tew/dm).
+// Policy enforced here: a stranger may send ONE memo into a request queue with
+// no notification; a thread opens only on acceptance; auth-gated per user.
+import type { Hono } from "hono";
+import type { Db } from "./db";
+import { sessionUser } from "./auth";
+
+type Vars = { Variables: { moderatorId: string; dmUser: string } };
+
+interface ThreadRow {
+  id: string;
+  user_lo: string;
+  user_hi: string;
+  initiator: string;
+  status: string;
+  created_at: number;
+}
+
+const uid = (): string => crypto.randomUUID();
+const pair = (a: string, b: string): [string, string] => (a < b ? [a, b] : [b, a]);
+
+export function registerDmRelay(app: Hono<Vars>, db: Db) {
+  const threadOf = (a: string, b: string): ThreadRow | undefined => {
+    const [lo, hi] = pair(a, b);
+    return db.prepare("SELECT * FROM dm_threads WHERE user_lo = ? AND user_hi = ?").get(lo, hi) as
+      | ThreadRow
+      | undefined;
+  };
+  const participant = (t: ThreadRow, u: string) => t.user_lo === u || t.user_hi === u;
+
+  // auth: session bearer → dmUser
+  app.use("/dm/*", async (c, next) => {
+    const auth = c.req.header("authorization") || "";
+    const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+    const user = token ? sessionUser(db, token) : null;
+    if (!user) return c.json({ error: "unauthorized" }, 401);
+    c.set("dmUser", user.id);
+    await next();
+  });
+
+  // publish / fetch prekey bundles (opaque blobs — server never parses them)
+  app.post("/dm/keys", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { bundle?: string };
+    if (!body.bundle) return c.json({ error: "bundle required" }, 400);
+    db.prepare(
+      "INSERT INTO dm_bundles (user_id, bundle, updated_at) VALUES (?,?,?) ON CONFLICT(user_id) DO UPDATE SET bundle=excluded.bundle, updated_at=excluded.updated_at",
+    ).run(c.get("dmUser"), body.bundle, Date.now());
+    return c.json({ ok: true });
+  });
+
+  app.get("/dm/keys/:userId", (c) => {
+    const row = db.prepare("SELECT bundle FROM dm_bundles WHERE user_id = ?").get(c.req.param("userId")) as
+      | { bundle: string }
+      | undefined;
+    if (!row) return c.json({ error: "no bundle" }, 404);
+    return c.json({ userId: c.req.param("userId"), bundle: row.bundle });
+  });
+
+  // send an (opaque) ciphertext to another user
+  app.post("/dm/send", async (c) => {
+    const me = c.get("dmUser");
+    const body = (await c.req.json().catch(() => ({}))) as {
+      to?: string;
+      ciphertext?: string;
+      type?: number;
+    };
+    const to = String(body.to || "");
+    if (!to || !body.ciphertext) return c.json({ error: "to + ciphertext required" }, 400);
+    if (to === me) return c.json({ error: "cannot message yourself" }, 400);
+
+    let thread = threadOf(me, to);
+    if (!thread) {
+      const [lo, hi] = pair(me, to);
+      db.prepare(
+        "INSERT INTO dm_threads (id, user_lo, user_hi, initiator, status, created_at) VALUES (?,?,?,?, 'request', ?)",
+      ).run(uid(), lo, hi, me, Date.now());
+      thread = threadOf(me, to)!;
+    }
+    if (thread.status === "request") {
+      // stranger request queue: only the initiator, only ONE memo until accepted
+      if (thread.initiator !== me) return c.json({ error: "wait for acceptance" }, 403);
+      const { n } = db
+        .prepare("SELECT COUNT(*) AS n FROM dm_messages WHERE thread_id = ?")
+        .get(thread.id) as { n: number };
+      if (n >= 1) return c.json({ error: "one request memo until accepted" }, 429);
+    }
+    const id = uid();
+    db.prepare(
+      "INSERT INTO dm_messages (id, thread_id, from_user, ciphertext, msg_type, created_at) VALUES (?,?,?,?,?,?)",
+    ).run(id, thread.id, me, body.ciphertext, Number(body.type ?? 0), Date.now());
+    return c.json({ id, threadId: thread.id, status: thread.status }, 201);
+  });
+
+  // accept a request → open the thread (only the recipient, never the sender)
+  app.post("/dm/threads/:id/accept", (c) => {
+    const me = c.get("dmUser");
+    const t = db.prepare("SELECT * FROM dm_threads WHERE id = ?").get(c.req.param("id")) as
+      | ThreadRow
+      | undefined;
+    if (!t || !participant(t, me)) return c.json({ error: "not found" }, 404);
+    if (t.initiator === me) return c.json({ error: "the recipient accepts, not the sender" }, 403);
+    db.prepare("UPDATE dm_threads SET status = 'open' WHERE id = ?").run(t.id);
+    return c.json({ id: t.id, status: "open" });
+  });
+
+  app.get("/dm/threads", (c) => {
+    const me = c.get("dmUser");
+    const rows = db
+      .prepare("SELECT * FROM dm_threads WHERE user_lo = ? OR user_hi = ? ORDER BY created_at DESC")
+      .all(me, me) as unknown as ThreadRow[];
+    return c.json({
+      threads: rows.map((t) => ({
+        id: t.id,
+        other: t.user_lo === me ? t.user_hi : t.user_lo,
+        status: t.status,
+        initiator: t.initiator,
+      })),
+    });
+  });
+
+  app.get("/dm/threads/:id/messages", (c) => {
+    const me = c.get("dmUser");
+    const t = db.prepare("SELECT * FROM dm_threads WHERE id = ?").get(c.req.param("id")) as
+      | ThreadRow
+      | undefined;
+    if (!t || !participant(t, me)) return c.json({ error: "not found" }, 404);
+    const msgs = db
+      .prepare(
+        "SELECT id, from_user, ciphertext, msg_type, created_at FROM dm_messages WHERE thread_id = ? ORDER BY created_at ASC",
+      )
+      .all(t.id) as unknown as {
+      id: string;
+      from_user: string;
+      ciphertext: string;
+      msg_type: number;
+      created_at: number;
+    }[];
+    return c.json({
+      status: t.status,
+      messages: msgs.map((m) => ({
+        id: m.id,
+        from: m.from_user,
+        ciphertext: m.ciphertext,
+        type: m.msg_type,
+        createdAt: m.created_at,
+      })),
+    });
+  });
+}

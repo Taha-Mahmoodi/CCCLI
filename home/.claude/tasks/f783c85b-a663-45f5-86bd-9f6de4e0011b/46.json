@@ -1,0 +1,9 @@
+{
+  "id": "46",
+  "subject": "SDD 2b2 Task 2: canEdit helper + permission-aware NoteView",
+  "description": "canEdit helper in vaults.ts; NoteView derives readOnly, gates save, shows marker, remount keys on it.",
+  "activeForm": "Implementing SDD 2b2 Task 2",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

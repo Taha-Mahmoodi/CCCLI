@@ -1,0 +1,9 @@
+{
+  "id": "10",
+  "subject": "Spec self-review",
+  "description": "Check for placeholders, contradictions, scope creep, ambiguity; fix inline.",
+  "activeForm": "Self-reviewing spec",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

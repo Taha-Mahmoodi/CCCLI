@@ -1,0 +1,9 @@
+{
+  "id": "51",
+  "subject": "SDD 2b3 Task 2: PropertyPanel component",
+  "description": "Self-contained: type read-only, resource/timestamp inputs, TagInput, extra keys preserved, debounced full-frontmatter PUT, respects readOnly.",
+  "activeForm": "Implementing SDD 2b3 Task 2",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

@@ -1,0 +1,224 @@
+import { describe, it, expect, beforeEach } from "vitest";
+import { createApp, type AppDeps } from "../src/app";
+import { openDb } from "../src/db";
+import { stubTranscriber } from "../src/transcribe";
+import { createRateLimiter } from "../src/ratelimit";
+import type { Storage } from "../src/storage";
+
+function memStorage(): Storage {
+  const map = new Map<string, Uint8Array>();
+  return {
+    async put(k, d) {
+      map.set(k, d);
+    },
+    async get(k) {
+      const v = map.get(k);
+      if (!v) throw new Error("missing");
+      return v;
+    },
+  };
+}
+
+const MODERATORS = { "tok-a": "mod-a", "tok-b": "mod-b" };
+const modAuth = (token: string) => ({ authorization: `Bearer ${token}` });
+
+function makeApp(rate?: { capacity: number; refillPerSec: number }) {
+  const deps: AppDeps = {
+    db: openDb(":memory:"),
+    storage: memStorage(),
+    transcribe: stubTranscriber,
+    rateLimit: createRateLimiter(rate ?? { capacity: 1000, refillPerSec: 1000 }),
+    moderators: { ...MODERATORS },
+  };
+  return createApp(deps);
+}
+
+function audioForm(fields: Record<string, string> = {}) {
+  const fd = new FormData();
+  fd.set("audio", new File([new Uint8Array([1, 2, 3, 4])], "memo.webm", { type: "audio/webm" }));
+  fd.set("channelId", "main");
+  fd.set("durationMs", "2000");
+  for (const [k, v] of Object.entries(fields)) fd.set(k, v);
+  return fd;
+}
+
+let app: ReturnType<typeof makeApp>;
+beforeEach(() => {
+  app = makeApp();
+});
+
+describe("API", () => {
+  it("health", async () => {
+    const res = await app.request("/health");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true });
+  });
+
+  it("POST /memos stores audio and a machine transcript, returns the memo", async () => {
+    const res = await app.request("/memos", { method: "POST", body: audioForm() });
+    expect(res.status).toBe(201);
+    const memo = (await res.json()) as any;
+    expect(memo.channelId).toBe("main");
+    expect(memo.audioUrl).toBe(`/audio/${memo.id}`);
+    expect(memo.transcript.isMachine).toBe(true);
+    expect(memo.transcript.text).toBe(""); // stub ASR yields empty, honestly labeled
+  });
+
+  it("rejects an unknown channel", async () => {
+    const res = await app.request("/memos", { method: "POST", body: audioForm({ channelId: "nope" }) });
+    expect(res.status).toBe(400);
+  });
+
+  it("GET /timeline returns memos, newest first, with cursor", async () => {
+    await app.request("/memos", { method: "POST", body: audioForm() });
+    await app.request("/memos", { method: "POST", body: audioForm() });
+    const res = await app.request("/timeline?limit=1");
+    const body = (await res.json()) as any;
+    expect(body.items).toHaveLength(1);
+    expect(body.nextCursor).toBeTypeOf("string"); // compound "<ts>_<id>" cursor
+    // page 2 returns the other memo (same-ms tie handled by the compound cursor)
+    const res2 = await app.request(`/timeline?limit=1&cursor=${body.nextCursor}`);
+    const body2 = (await res2.json()) as any;
+    expect(body2.items).toHaveLength(1);
+    expect(body2.items[0].id).not.toBe(body.items[0].id);
+  });
+
+  it("GET /audio/:id serves the stored bytes", async () => {
+    const memo = (await (await app.request("/memos", { method: "POST", body: audioForm() })).json()) as any;
+    const res = await app.request(`/audio/${memo.id}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("audio/webm");
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3, 4]));
+  });
+
+  it("POST /like never returns a count (#4)", async () => {
+    const memo = (await (await app.request("/memos", { method: "POST", body: audioForm() })).json()) as any;
+    const res = await app.request(`/memos/${memo.id}/like`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ userId: "u1" }),
+    });
+    const body = (await res.json()) as any;
+    expect(body).toEqual({ liked: true });
+    expect(body.count).toBeUndefined();
+  });
+
+  it("TTS memo uses source text as the transcript; search finds it", async () => {
+    await app.request("/memos", {
+      method: "POST",
+      body: audioForm({ isTts: "true", sourceText: "the quick brown fox" }),
+    });
+    const res = await app.request("/search?q=quick");
+    const body = (await res.json()) as any;
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0].transcript.text).toBe("the quick brown fox");
+    expect(body.items[0].transcript.isMachine).toBe(false);
+  });
+
+  it("correction updates the shown transcript without overwriting machine text", async () => {
+    const memo = (await (await app.request("/memos", { method: "POST", body: audioForm() })).json()) as any;
+    const res = await app.request(`/memos/${memo.id}/transcript/correction`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "corrected words" }),
+    });
+    const body = (await res.json()) as any;
+    expect(body.transcript.text).toBe("corrected words");
+    expect(body.transcript.isMachine).toBe(false);
+  });
+
+  it("POST /reports gives DMs a faster SLA than public content", async () => {
+    const pub = (await (await app.request("/reports", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ targetType: "memo", targetId: "m1" }),
+    })).json()) as any;
+    const dm = (await (await app.request("/reports", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ targetType: "dm", targetId: "d1" }),
+    })).json()) as any;
+    expect(dm.slaDueAt).toBeLessThan(pub.slaDueAt);
+  });
+
+  it("rate limits per IP (429 past capacity)", async () => {
+    const limited = makeApp({ capacity: 2, refillPerSec: 0 });
+    expect((await limited.request("/health")).status).toBe(200);
+    expect((await limited.request("/health")).status).toBe(200);
+    expect((await limited.request("/health")).status).toBe(429);
+  });
+});
+
+async function memoAndReport(app: ReturnType<typeof makeApp>) {
+  const memo = (await (
+    await app.request("/memos", { method: "POST", body: audioForm() })
+  ).json()) as any;
+  const report = (await (
+    await app.request("/reports", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ targetType: "memo", targetId: memo.id, reason: "spam" }),
+    })
+  ).json()) as any;
+  return { memo, report };
+}
+
+const jsonMod = (token: string) => ({ ...modAuth(token), "content-type": "application/json" });
+
+describe("Moderation", () => {
+  it("the queue requires moderator auth", async () => {
+    expect((await app.request("/moderation/queue")).status).toBe(401);
+  });
+
+  it("a moderator reviews the queue, decides, and it leaves the open queue + counts in transparency", async () => {
+    const { memo, report } = await memoAndReport(app);
+    const q = (await (await app.request("/moderation/queue", { headers: modAuth("tok-a") })).json()) as any;
+    expect(q.items.map((i: any) => i.id)).toContain(report.id);
+    expect(q.items[0].target.id).toBe(memo.id); // reviewer gets the memo to review
+
+    const dec = await app.request("/moderation/decisions", {
+      method: "POST",
+      headers: jsonMod("tok-a"),
+      body: JSON.stringify({ reportId: report.id, action: "remove", rationaleCode: "spam" }),
+    });
+    expect(dec.status).toBe(201);
+
+    const q2 = (await (await app.request("/moderation/queue", { headers: modAuth("tok-a") })).json()) as any;
+    expect(q2.items.map((i: any) => i.id)).not.toContain(report.id);
+
+    const t = (await (await app.request("/moderation/transparency", { headers: modAuth("tok-a") })).json()) as any;
+    expect(t.breakdown.find((b: any) => b.rationale === "spam")?.count).toBe(1);
+  });
+
+  it("an appeal must be reviewed by a DIFFERENT moderator", async () => {
+    const { report } = await memoAndReport(app);
+    await app.request("/moderation/decisions", {
+      method: "POST",
+      headers: jsonMod("tok-a"),
+      body: JSON.stringify({ reportId: report.id, action: "keep", rationaleCode: "ok" }),
+    });
+    expect((await app.request(`/reports/${report.id}/appeal`, { method: "POST" })).status).toBe(200);
+
+    // same moderator (a) is blocked from reviewing their own decision's appeal
+    const same = await app.request("/moderation/decisions", {
+      method: "POST",
+      headers: jsonMod("tok-a"),
+      body: JSON.stringify({ reportId: report.id, action: "keep", rationaleCode: "ok" }),
+    });
+    expect(same.status).toBe(403);
+
+    // a different moderator (b) can decide the appeal
+    const other = await app.request("/moderation/decisions", {
+      method: "POST",
+      headers: jsonMod("tok-b"),
+      body: JSON.stringify({ reportId: report.id, action: "remove", rationaleCode: "reversed" }),
+    });
+    expect(other.status).toBe(201);
+    expect(((await other.json()) as any).isAppeal).toBe(true);
+  });
+
+  it("only resolved reports can be appealed", async () => {
+    const { report } = await memoAndReport(app);
+    expect((await app.request(`/reports/${report.id}/appeal`, { method: "POST" })).status).toBe(400);
+  });
+});

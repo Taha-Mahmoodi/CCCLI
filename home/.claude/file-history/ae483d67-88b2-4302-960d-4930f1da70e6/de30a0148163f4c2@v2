@@ -1,0 +1,40 @@
+import { describe, it, expect } from "vitest";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { readFile, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { makeWhisperTranscriber } from "../src/transcribe";
+
+const run = promisify(execFile);
+const BIN = process.env.TEW_WHISPER_BIN;
+const MODEL = process.env.TEW_WHISPER_MODEL;
+const hasWhisper = !!(BIN && MODEL);
+
+// Real ASR proof — runs only when whisper.cpp is configured (local), skipped in
+// CI (which uses the stub). Generates real speech with macOS `say`, encodes it
+// like a browser recording (webm/opus), and checks the transcript.
+describe.skipIf(!hasWhisper)("whisper.cpp real ASR", () => {
+  it("transcribes a real webm/opus recording on CPU", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "tew-whisper-test-"));
+    try {
+      const wav = join(dir, "s.wav");
+      const webm = join(dir, "s.webm");
+      await run("say", ["-o", wav, "--data-format=LEI16@16000", "the quick brown fox"]);
+      await run("ffmpeg", ["-y", "-i", wav, "-c:a", "libopus", webm]);
+      const audio = new Uint8Array(await readFile(webm));
+
+      const transcribe = makeWhisperTranscriber({
+        binPath: BIN!,
+        modelPath: MODEL!,
+        ffmpegPath: process.env.TEW_FFMPEG,
+      });
+      const res = await transcribe({ audio, mime: "audio/webm" });
+      expect(res.engine).toBe("whisper.cpp");
+      expect(res.isMachine).toBe(true);
+      expect(res.text.toLowerCase()).toContain("quick brown fox");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
+});

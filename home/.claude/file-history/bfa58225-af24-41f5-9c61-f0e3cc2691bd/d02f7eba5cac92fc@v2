@@ -1,0 +1,100 @@
+# backend/app/seed_demo_data.py
+"""Seeds a fixed demo tenant (manager, reps, zones, tasks, goals, a visit and
+some pings) so any fresh deployment -- local or a real VPS -- has something
+to log into and look at immediately, no manual curl/register needed.
+
+Idempotent: checks for the demo admin account once, up front, and skips
+entirely if it's already there. Safe to run on every container start.
+"""
+
+import asyncio
+import uuid
+from datetime import date, datetime, timedelta, timezone
+
+from sqlalchemy import select
+
+from app.auth.models import User
+from app.auth.service import register
+from app.db import async_session_maker
+from app.goals.service import create_goal
+from app.pings.service import record_ping
+from app.tasks.service import create_task
+from app.visits.service import check_in
+from app.zones.service import assign_rep_to_zone, create_zone
+
+DEMO_TENANT_ID = uuid.UUID("11111111-1111-1111-1111-111111111111")
+DEMO_ADMIN_EMAIL = "admin@example.com"
+DEMO_PASSWORD = "DemoPass123!"
+
+# Real-looking NYC coordinates so the dashboard's map isn't empty/degenerate.
+DOWNTOWN_ZONE = {
+    "type": "Polygon",
+    "coordinates": [
+        [[-74.02, 40.70], [-74.00, 40.70], [-74.00, 40.71], [-74.02, 40.71], [-74.02, 40.70]]
+    ],
+}
+MIDTOWN_ZONE = {
+    "type": "Polygon",
+    "coordinates": [
+        [[-73.99, 40.75], [-73.97, 40.75], [-73.97, 40.76], [-73.99, 40.76], [-73.99, 40.75]]
+    ],
+}
+
+
+async def seed() -> None:
+    async with async_session_maker() as db:
+        existing = await db.execute(
+            select(User).where(User.tenant_id == DEMO_TENANT_ID, User.email == DEMO_ADMIN_EMAIL)
+        )
+        if existing.scalar_one_or_none() is not None:
+            print(f"[seed] demo tenant {DEMO_TENANT_ID} already seeded, skipping")
+            return
+
+        await register(db, DEMO_TENANT_ID, DEMO_ADMIN_EMAIL, DEMO_PASSWORD, "manager")
+        reps = [
+            await register(db, DEMO_TENANT_ID, f"rep{i}@example.com", DEMO_PASSWORD, "rep")
+            for i in range(1, 4)
+        ]
+
+        downtown = await create_zone(db, DEMO_TENANT_ID, "Downtown", DOWNTOWN_ZONE)
+        midtown = await create_zone(db, DEMO_TENANT_ID, "Midtown", MIDTOWN_ZONE)
+        await assign_rep_to_zone(db, DEMO_TENANT_ID, downtown.id, reps[0].id)
+        await assign_rep_to_zone(db, DEMO_TENANT_ID, midtown.id, reps[1].id)
+        await assign_rep_to_zone(db, DEMO_TENANT_ID, downtown.id, reps[2].id)
+
+        today = date.today()
+        await create_task(
+            db, DEMO_TENANT_ID, reps[0].id, "Visit Acme Corp",
+            due_date=today + timedelta(days=2), priority="HIGH",
+        )
+        await create_task(
+            db, DEMO_TENANT_ID, reps[1].id, "Follow up with Beta LLC",
+            due_date=today + timedelta(days=5), priority="MEDIUM",
+        )
+        await create_task(db, DEMO_TENANT_ID, reps[2].id, "Deliver samples", priority="LOW")
+
+        await create_goal(db, DEMO_TENANT_ID, reps[0].id, "VISIT_COUNT", 10, today.replace(day=1), today)
+        await create_goal(db, DEMO_TENANT_ID, reps[1].id, "TASK_COUNT", 5, today.replace(day=1), today)
+
+        now = datetime.now(timezone.utc)
+        seed_points = [(40.705, -74.01), (40.755, -73.98), (40.708, -74.015)]
+        for rep, (lat, lng) in zip(reps, seed_points, strict=True):
+            await record_ping(
+                db, DEMO_TENANT_ID, rep.id, now, lat, lng,
+                accuracy=10.0, idempotency_key=f"seed-ping-{rep.id}",
+            )
+
+        await check_in(
+            db, DEMO_TENANT_ID, reps[0].id,
+            latitude=seed_points[0][0], longitude=seed_points[0][1],
+            idempotency_key="seed-visit-1", zone_id=downtown.id, notes="Initial demo visit",
+        )
+
+        print(
+            f"[seed] demo tenant ready -- tenant_id={DEMO_TENANT_ID} "
+            f"admin={DEMO_ADMIN_EMAIL} password={DEMO_PASSWORD}"
+        )
+
+
+if __name__ == "__main__":
+    asyncio.run(seed())

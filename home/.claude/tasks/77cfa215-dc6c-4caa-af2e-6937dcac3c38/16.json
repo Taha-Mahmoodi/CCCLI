@@ -1,0 +1,9 @@
+{
+  "id": "16",
+  "subject": "Write Search structural spec doc",
+  "description": "Save structure-only design doc for sub-project 4 (Full-text search) to docs/superpowers/specs, no code, commit.",
+  "activeForm": "Writing Search spec doc",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

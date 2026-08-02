@@ -1,0 +1,8 @@
+{
+  "id": "62",
+  "subject": "2c-3 link-to-create (PR #80, CI running)",
+  "description": "Clicking a wikilink to a missing note creates it type-first (reuse createNote), then navigates. Completes wikilinks (2c). Then Slices 3-7.",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

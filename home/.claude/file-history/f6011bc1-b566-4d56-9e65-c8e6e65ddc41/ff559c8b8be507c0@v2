@@ -1,0 +1,134 @@
+/*
+ * Sight Beyond Sight — design tokens (TEWW_REDESIGN_SPEC.md §2).
+ * Night-first: the default theme is a deep indigo night lit by saffron gold.
+ * Variable NAMES are a stable contract shared with /ad-min — only values
+ * change here.
+ */
+@font-face { font-family: 'Literata'; src: url('/fonts/Literata-Variable.ttf') format('truetype-variations'); font-weight: 200 900; font-display: swap; }
+@font-face { font-family: 'Literata'; src: url('/fonts/Literata-Italic-Variable.ttf') format('truetype-variations'); font-weight: 200 900; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Manrope'; src: url('/fonts/Manrope-Variable.ttf') format('truetype-variations'); font-weight: 200 800; font-display: swap; }
+
+/*
+ * Fallback @font-face declarations with size-adjust + ascent/descent
+ * overrides. The browser uses these while the real font files are
+ * downloading, so the layout doesn't shift when the swap happens
+ * (eliminates ~0.05–0.1 of CLS per page on slow networks).
+ */
+@font-face {
+  font-family: 'Literata Fallback';
+  src: local('Georgia');
+  size-adjust: 103%;
+  ascent-override: 95%;
+  descent-override: 26%;
+  line-gap-override: 0%;
+}
+@font-face {
+  font-family: 'Manrope Fallback';
+  src: local('Arial');
+  size-adjust: 101%;
+  ascent-override: 97%;
+  descent-override: 24%;
+  line-gap-override: 0%;
+}
+
+/* Tailwind utilities (shadcn/ui). Preflight is disabled in tailwind.config.js
+   so the existing reset below remains the source of truth. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── RESET & TOKENS ─────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --font-display: 'Literata', 'Literata Fallback', Georgia, serif;
+  --font-body: 'Manrope', 'Manrope Fallback', sans-serif;
+  --font-mono: 'DM Mono', 'Courier New', monospace;
+  --radius-sm: 6px; --radius-md: 10px; --radius-lg: 16px; --radius-xl: 24px; --radius-full: 9999px;
+  --space-1:.25rem;--space-2:.5rem;--space-3:.75rem;--space-4:1rem;--space-6:1.5rem;--space-8:2rem;--space-10:2.5rem;--space-12:3rem;--space-16:4rem;--space-20:5rem;--space-24:6rem;
+  --maxw: 1280px;
+
+  /* Fluid display scale — headlines carry the editorial voice. */
+  --text-hero: clamp(2.75rem, 1.9rem + 3.6vw, 5rem);
+  --text-title: clamp(2rem, 1.55rem + 1.9vw, 3.25rem);
+  --text-subtitle: clamp(1.35rem, 1.15rem + .8vw, 1.75rem);
+
+  /* Header height — used by the topnav and every sticky element that
+     sits below it (subnav on /media /about /documents, the story-detail
+     reading-progress bar, etc). Keeping it as a variable means future
+     nav height changes don't need to hunt down hard-coded 68 px values
+     across the stylesheet. */
+  --header-height: 68px;
+
+  /*
+   * CMS UI redesign — density + sidebar width vars (cms-redesign-plan.md §1).
+   * Defaults match comfortable density. Overridden inside the CMS shell via
+   * the `[data-density]` attribute on .adm-shell.
+   */
+  --row-y:    10px;
+  --pad-card: 22px;
+  --gap:      20px;
+  --rail-w:   248px;
+}
+
+/* CMS shell density toggle — overrides --row-y / --pad-card / --gap. */
+[data-density="compact"]     { --row-y: 6px;  --pad-card: 16px; --gap: 14px; }
+[data-density="comfortable"] { --row-y: 10px; --pad-card: 22px; --gap: 20px; }
+
+/* Day — warm bone paper, ink text, gold deepened for AA text duty. */
+[data-theme="light"] {
+  --bg:#f7f2e9;--bg-elevated:#fffdf8;--bg-subtle:#efe7d9;--bg-inverse:#16121e;
+  --fg:#1c1826;--fg-muted:#5c5468;--fg-subtle:#7e7590;--fg-inverse:#f7f2e9;
+  --border:#e2d8c6;--border-strong:#c9bca4;
+  --brand:#8a5e12;--brand-hover:#6e4a0d;--brand-subtle:rgba(184,123,30,.12);
+  --accent:#5b4bc4;--accent-hover:#483aa6;--accent-subtle:rgba(91,75,196,.10);
+  --brand-fg:#fffdf8;--accent-fg:#fffdf8;
+  --focus-ring:#5b4bc4;
+  --shadow-sm:0 1px 3px rgba(28,24,38,.08),0 1px 2px rgba(28,24,38,.04);
+  --shadow-md:0 4px 12px rgba(28,24,38,.10),0 2px 4px rgba(28,24,38,.06);
+  --shadow-lg:0 10px 30px rgba(28,24,38,.12),0 4px 8px rgba(28,24,38,.06);
+}
+
+/* Night — the default. Deep indigo dark lit by saffron gold. */
+[data-theme="dark"] {
+  --bg:#100e17;--bg-elevated:#171420;--bg-subtle:#1c1826;--bg-inverse:#f4efe6;
+  --fg:#f4efe6;--fg-muted:#b3a9c0;--fg-subtle:#8d8399;--fg-inverse:#16121e;
+  --border:#2a2438;--border-strong:#3a3350;
+  --brand:#e8a33d;--brand-hover:#f2b856;--brand-subtle:rgba(232,163,61,.14);
+  --accent:#9d8cff;--accent-hover:#b3a5ff;--accent-subtle:rgba(157,140,255,.14);
+  --brand-fg:#16121e;--accent-fg:#16121e;
+  --focus-ring:#f2b856;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.4);--shadow-md:0 4px 12px rgba(0,0,0,.5);--shadow-lg:0 10px 30px rgba(0,0,0,.6);
+}
+
+/* High contrast — pure black/white, yellow interactive. AAA territory. */
+[data-theme="high-contrast"] {
+  --bg:#000;--bg-elevated:#0a0a0a;--bg-subtle:#111;--bg-inverse:#fff;
+  --fg:#fff;--fg-muted:#e6e6e6;--fg-subtle:#bbb;--fg-inverse:#000;
+  --border:#fff;--border-strong:#fff;
+  --brand:#ffd700;--brand-hover:#ffe766;--brand-subtle:#332b00;
+  --accent:#8ab4ff;--accent-hover:#b3ceff;--accent-subtle:#001a4d;
+  --brand-fg:#000;--accent-fg:#000;
+  --focus-ring:#ffff00;
+  --shadow-sm:0 0 0 2px #fff;--shadow-md:0 0 0 2px #fff;--shadow-lg:0 0 0 3px #fff;
+}
+
+[data-text-size="a"]{ font-size:16px; }
+[data-text-size="a-plus"]{ font-size:18px; }
+[data-text-size="a-plus-plus"]{ font-size:20px; }
+
+html {
+  scroll-behavior: smooth;
+  /* Anchor jumps (e.g. /about#team) land below the topnav AND the
+     subnav, not behind them. Approximate the combined height: topnav
+     (--header-height) + subnav (~48 px). */
+  scroll-padding-top: calc(var(--header-height) + 56px);
+}
+body { font-family: var(--font-body); background: var(--bg); color: var(--fg); line-height: 1.65; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; transition: background .25s ease, color .25s ease; min-height: 100vh; }
+a { color: var(--brand); text-decoration: none; }
+a:hover { color: var(--brand-hover); }
+button { font: inherit; }
+:focus-visible { outline: 3px solid var(--focus-ring); outline-offset: 2px; border-radius: 4px; }
+
+::selection { background: var(--brand); color: var(--brand-fg); }
+
+img { max-width: 100%; display: block; }

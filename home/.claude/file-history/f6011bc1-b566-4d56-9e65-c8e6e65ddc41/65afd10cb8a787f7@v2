@@ -1,0 +1,40 @@
+"use client";
+
+import * as React from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+/**
+ * Header nav link with a visible current-page state: teal text + a short
+ * underline bar, plus aria-current for assistive tech (SPEC §10 — state is
+ * never color alone; the bar is a shape cue and aria-current is programmatic).
+ */
+export function NavLink({
+  href,
+  children,
+}: {
+  href: string;
+  children: React.ReactNode;
+}) {
+  const pathname = usePathname();
+  const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={[
+        "relative inline-flex min-h-12 items-center rounded-btn px-3 text-base font-bold",
+        "transition-colors duration-200",
+        active ? "text-primary-dark" : "text-ink hover:bg-primary-tint/50",
+      ].join(" ")}
+    >
+      {children}
+      {active ? (
+        <span
+          aria-hidden="true"
+          className="absolute inset-x-3 bottom-1 h-0.5 rounded-pill bg-primary"
+        />
+      ) : null}
+    </Link>
+  );
+}

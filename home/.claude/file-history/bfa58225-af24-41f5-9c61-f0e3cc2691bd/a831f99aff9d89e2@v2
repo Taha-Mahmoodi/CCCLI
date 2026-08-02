@@ -1,0 +1,65 @@
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.auth.router import router as auth_router, users_router
+from app.config import get_settings
+from app.core.jobs import job_runner
+from app.core.tenancy import install_tenancy_filter
+from app.db import async_session_maker
+from app.goals.router import router as goals_router
+from app.pings.router import router as pings_router
+from app.pings.service import prune_old_pings
+from app.tasks.router import router as tasks_router
+from app.violations.router import push_subscriptions_router, violations_router
+from app.visits.router import router as visits_router
+from app.zones.router import router as zones_router
+
+RETENTION_JOB_INTERVAL_SECONDS = 24 * 60 * 60  # once a day
+
+
+async def _run_prune_old_pings_job() -> None:
+    async with async_session_maker() as db:
+        await prune_old_pings(db)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    job_runner.start_periodic("prune_old_pings", interval_seconds=RETENTION_JOB_INTERVAL_SECONDS)
+    yield
+    await job_runner.stop_all()
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(title="Atlas Field Force", version="0.1.0", lifespan=lifespan)
+    install_tenancy_filter()
+    job_runner.register("prune_old_pings", _run_prune_old_pings_job)
+
+    settings = get_settings()
+    allowed_origins = [origin.strip() for origin in settings.cors_allowed_origins.split(",") if origin.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    @app.get("/health")
+    async def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    app.include_router(auth_router)
+    app.include_router(users_router)
+    app.include_router(zones_router)
+    app.include_router(pings_router)
+    app.include_router(tasks_router)
+    app.include_router(visits_router)
+    app.include_router(goals_router)
+    app.include_router(violations_router)
+    app.include_router(push_subscriptions_router)
+
+    return app
+
+
+app = create_app()

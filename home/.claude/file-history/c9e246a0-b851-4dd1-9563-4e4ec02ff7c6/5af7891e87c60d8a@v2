@@ -1,0 +1,31 @@
+import { auth, signOut } from "@/lib/auth";
+
+// Minimal authed landing for the auth slice. The real Commons dashboard (feed,
+// waitlist, contribute, dossier, profile) replaces this in the Commons slice.
+export default async function CommonsHome() {
+  const session = await auth();
+  const who = session?.user?.email ?? "friend";
+
+  return (
+    <main id="main" className="mx-auto w-full max-w-2xl flex-1 px-6 py-16">
+      <h1 className="text-2xl font-semibold">Welcome to Third Eye Commons</h1>
+      <p className="mt-2 text-zinc-600 dark:text-zinc-400">
+        You are signed in as {who}.
+      </p>
+      <form
+        action={async () => {
+          "use server";
+          await signOut({ redirectTo: "/app/login" });
+        }}
+        className="mt-6"
+      >
+        <button
+          type="submit"
+          className="rounded-md border px-4 py-2 text-sm font-medium"
+        >
+          Sign out
+        </button>
+      </form>
+    </main>
+  );
+}

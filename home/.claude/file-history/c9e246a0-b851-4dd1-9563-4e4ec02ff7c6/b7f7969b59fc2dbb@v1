@@ -1,0 +1,45 @@
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { WaitlistForm } from "@/components/app/waitlist-form";
+
+export const metadata = { title: "Pilot waitlist" };
+
+const STATUS_LABEL: Record<string, string> = {
+  PENDING: "On the list",
+  CONTACTED: "We have reached out",
+  ENROLLED: "Enrolled in the pilot",
+};
+
+export default async function WaitlistPage() {
+  const session = await auth();
+  const entry = await prisma.waitlistEntry.findUnique({
+    where: { userId: session!.user.id },
+  });
+
+  return (
+    <div className="mx-auto max-w-2xl px-5 py-12">
+      <h1 className="text-2xl font-semibold tracking-tight">Pilot waitlist</h1>
+      <p className="mt-2 text-muted">
+        The pilot is small and staged for safety. Joining puts you in line and
+        tells us how you travel today.
+      </p>
+
+      {entry ? (
+        <p className="mt-6 inline-flex items-center gap-2 rounded-full border border-accent/50 bg-accent/10 px-4 py-1.5 text-sm text-accent-strong">
+          Status: {STATUS_LABEL[entry.status] ?? entry.status}
+        </p>
+      ) : null}
+
+      <WaitlistForm
+        initial={
+          entry
+            ? {
+                region: entry.region ?? "",
+                deviceContext: entry.deviceContext ?? "",
+              }
+            : null
+        }
+      />
+    </div>
+  );
+}

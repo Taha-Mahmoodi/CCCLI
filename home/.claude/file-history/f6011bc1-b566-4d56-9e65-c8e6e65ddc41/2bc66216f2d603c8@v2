@@ -1,0 +1,36 @@
+import * as React from "react";
+import { type LucideIcon } from "lucide-react";
+
+/**
+ * A labeled number (not a chart) — the accessibility-first way to surface a
+ * metric. v2: flat and editorial — no card box. A kicker-style label above an
+ * oversized serif tabular numeral, with a thin amber spark underline. Compose
+ * in hairline-separated rows/grids (DESIGN_SPEC_V2 §4/§5).
+ */
+export function StatCard({
+  label,
+  value,
+  hint,
+  icon: Icon,
+}: {
+  label: string;
+  value: string | number;
+  hint?: string;
+  icon?: LucideIcon;
+}) {
+  return (
+    <div className="flex flex-col gap-2 py-4">
+      <span className="flex items-center gap-2 text-sm font-bold uppercase tracking-[0.12em] text-ink-soft">
+        {Icon ? (
+          <Icon size={16} strokeWidth={2} aria-hidden="true" className="text-primary" />
+        ) : null}
+        {label}
+      </span>
+      <span className="font-display text-h1 tabular-nums leading-none text-ink">
+        {value}
+      </span>
+      <span aria-hidden="true" className="h-0.5 w-8 rounded-pill bg-accent" />
+      {hint ? <span className="text-sm text-ink-soft">{hint}</span> : null}
+    </div>
+  );
+}

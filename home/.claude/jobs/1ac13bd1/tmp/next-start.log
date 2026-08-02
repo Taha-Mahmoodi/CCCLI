@@ -1,0 +1,12 @@
+
+> third-eye-world@0.1.0 start
+> next start
+
+[1m[38;2;173;127;168m▲ Next.js 16.2.10[39m[22m
+- Local:         http://localhost:3000
+- Network:       http://192.168.0.82:3000
+[32m[1m✓[22m[39m Ready in 88ms
+[31m[1m⨯[22m[39m TypeError: Cannot read properties of null (reading 'user')
+    at g (.next/server/chunks/ssr/[root-of-the-server]__12gj1yu._.js:1:3205) {
+  digest: [32m'3111797906'[39m
+}

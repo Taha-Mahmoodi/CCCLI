@@ -1,0 +1,75 @@
+# Atlas Field Force — Design Spec (v1)
+
+Status: **approved**, 2026-07-20. Grounded in [`docs/research/field-force-market-scan.md`](research/field-force-market-scan.md).
+
+## Purpose
+
+A real-time tracker for field marketers/sales reps: live location, geofenced zones/territories, task and goal assignment, visit logging — delivered as an Android tablet app for reps plus a web dashboard for managers.
+
+## Why a standalone repo
+
+The customer needs this fast. [atlas-erp](https://github.com/Taha-Mahmoodi/atlas-erp) is a SAP S/4HANA-parity-benchmarked ERP with a strict, mostly-complete 17-phase build order ending in v1.0.0 — this capability has no S/4HANA analogue and doesn't fit that plan or timeline. This repo is built independently now and is designed to merge into atlas-erp as a module once Atlas reaches v1.0.0 (see "Merge path" below) — hence: same conventions, same stack, but its own repo, database, and deploy.
+
+## Stack
+
+Mirrors Atlas so a later merge is a port, not a rewrite:
+
+- **Backend:** Python 3.12, FastAPI, SQLAlchemy 2.0 (typed async), PostgreSQL-first with SQLite-compatible tests, Alembic, Pydantic v2, `uv`.
+- **Manager web dashboard:** React 18 + TS + Vite + Tailwind, Leaflet for the map + zone drawing (`leaflet-draw`).
+- **Tablet app (Android only):** Capacitor + React + TS + Tailwind.
+- Internal module anatomy (models/schemas/router/service/queries/events) even as a single-module repo — service layer owns business rules, routers stay thin.
+- `tenant_id` on every table from day one, even single-tenant today — cheap now, expensive to retrofit at merge time.
+
+## Auth
+
+Own login for now: JWT access+refresh, argon2 hashing. Two roles: `rep`, `manager` — a small fixed permission set, not Atlas's full permission-catalog machinery (not needed for one deployment).
+
+## Core data model
+
+| Table | Purpose |
+|---|---|
+| `reps` | name, email, device id — field-shaped to become an Atlas HR `employee` link at merge |
+| `zones` | name, boundary as GeoJSON polygon |
+| `zone_assignments` | rep ↔ zone |
+| `tasks` | assignee, title, due date, status, priority, optional `external_reference` (free-text label, e.g. "CRM lead X" — not validated; becomes a real FK at merge) |
+| `goals` | rep or team, `metric_type` (`VISIT_COUNT` \| `TASK_COUNT` \| `SALES_VALUE`), target, period. `SALES_VALUE` goals are manually logged — no live Sales connection exists here |
+| `visits` | check-in/out timestamps, geofence-verified flag, notes, photos, optional `external_reference` |
+| `location_pings` | append-only; `(tenant_id, rep_id, recorded_at)` indexed |
+| `zone_violations` | rep, zone, detected_at, resolved_at |
+| `push_subscriptions` | manager's browser push subscription (VAPID) |
+
+## Geofencing
+
+Zones are GeoJSON polygons; point-in-polygon is a small pure-Python check in the service layer — **not PostGIS**. Checks are always against one rep's small assigned-zone set, not a tenant-wide spatial search, so DB-level spatial indexing isn't needed, and this keeps tests SQLite-compatible instead of adding a heavy DB extension as a day-one dependency.
+
+## Location pings at scale (500+ reps/tenant)
+
+Single `location_pings` table sized for volume from the start; a background retention job (in-process job runner, same pattern as Atlas's `core/jobs`) prunes raw pings after ~30 days and downsamples older data. No new infra beyond a scheduled in-process job.
+
+## Real-time model
+
+Periodic refresh, not push: tablet posts a location ping every 15–60s; manager dashboard polls on an interval. No WebSocket/SSE infrastructure.
+
+## Offline
+
+Tablet queues pings, check-ins, task updates, and photos locally (Capacitor storage plugin) with a client-generated idempotency key per queued item, synced on reconnect — same idempotency-key pattern Atlas requires on document-creating endpoints, so a replayed sync can't double-count a visit.
+
+## Background location on Android — decision needed before building the tablet client
+
+The robust, most-used Capacitor background-geolocation plugin (Transistorsoft) is **commercially licensed**, not free. Default to the open-source path — `@capacitor-community/background-geolocation` plus an Android foreground service — and accept its rougher edges (battery optimization fights, less polish) rather than take on a per-deployment license cost without the customer signing off on it. Flag this explicitly if background tracking proves unreliable enough that the paid plugin becomes the right call.
+
+## Alerts
+
+`ZoneViolationDetected` domain event → handler sends a web push (VAPID, `pywebpush`) to subscribed managers' browsers, and the violation shows on the dashboard regardless. Note: browser web push is not self-contained — it routes through Google's FCM, needs HTTPS and a registered service worker, and can't be fully exercised end-to-end without real deployment infrastructure (this is a "needs real infra to verify" item, not something local dev proves out).
+
+## Deferred to the merge-into-Atlas phase
+
+Real CRM/Sales linking (live FK instead of free-text reference), reading real Sales order values for `SALES_VALUE` goals, folding `reps` into Atlas's HR `employees`, Atlas's full RBAC/permission-catalog, multi-tenant UX.
+
+## Non-functional
+
+Tests mirror source structure. List endpoints ≤3 queries, paginated, indexed hot paths — same bar as Atlas's PERFORMANCE.md. `tests/perf/` budget for the ping-ingestion path given the 500+-rep target.
+
+## "Deployable" vs "deployed"
+
+v1 done means: Dockerfile/compose, CI green, migrations run clean, tests pass, backend+dashboard buildable, tablet APK buildable. It does **not** mean provisioning paid cloud infra, deploying to a live customer-facing environment, or sending real push notifications — those need explicit sign-off (cost, domain, credentials) before happening.

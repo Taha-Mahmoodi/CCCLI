@@ -1,0 +1,51 @@
+---
+name: website-pitch-pipeline-cost-estimator
+description: Universal AI cost estimator and model selector added to website-pitch-pipeline
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: 54878c37-ff59-4cbe-a1af-88cbdb00e1d7
+  modified: 2026-07-24T08:01:55.807Z
+---
+
+**Feature added to website-pitch-pipeline: Universal AI Cost Estimator**
+
+Added a new pre-pipeline step (Loop 0a) that:
+1. **Detects current AI model** via environment variables (supports Claude, GPT, Gemini, Mistral)
+2. **Calculates campaign costs** based on leads/businesses/sites estimates for all major providers
+3. **Suggests models by strategy**: Best Quality, Balanced (recommended), or Budget
+4. **Shows 3 rankings**: cheapest cost, highest quality, fastest speed
+
+**Files created:**
+- `utils/cost-estimator.js` — Node.js utility (no npm deps, uses stdlib only)
+- `loops/00a-cost-estimate.md` — new loop (runs before bootstrap)
+- `utils/README.md` — documentation for the estimator
+
+**Updated:**
+- `HOW_TO_RUN.md` — added Loop 0a in sequence, added cost estimator to quick reference
+
+**How it works:**
+- User estimates: number of leads, businesses, sites
+- Script detects model via env vars (ANTHROPIC_MODEL, OPENAI_API_KEY, etc.)
+- Shows: cost breakdown, time estimate, comparison across all providers
+- User chooses model strategy before running any loops
+
+**Pricing data (built-in):**
+- Anthropic: Opus 4.1, Sonnet 5, Haiku 4.5
+- OpenAI: GPT-4 Turbo, GPT-4o, GPT-4o-mini
+- Google: Gemini 2.0 Flash, Gemini 1.5 Pro
+- Mistral: Large, Medium, Small
+
+**Token estimates per operation:**
+- Research/lead: 5k in, 8k out
+- Plan/business: 15k in, 20k out
+- Build/site: 30k in, 45k out
+- Report: 10k in, 5k out (fixed)
+
+**To run:**
+```bash
+node utils/cost-estimator.js estimate <leads> <businesses> <sites>
+# Example: node utils/cost-estimator.js estimate 5 3 2
+```
+
+Output shows detected model, estimated costs for all providers, and ranked suggestions.

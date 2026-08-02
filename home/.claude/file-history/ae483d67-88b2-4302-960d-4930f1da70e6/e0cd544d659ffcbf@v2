@@ -1,0 +1,77 @@
+import { describe, it, expect } from "vitest";
+import { channelQueue, orderedQueue, shuffleIds, slugify, uniqueChannelId } from "@/lib/channels";
+import type { Channel, Memo } from "@/lib/types";
+
+const m = (channelId: string, id = channelId): Memo => ({
+  id,
+  createdAt: 0,
+  durationMs: 1000,
+  mime: "audio/webm",
+  liked: false,
+  channelId,
+  machineTranscript: "",
+});
+
+describe("channelQueue", () => {
+  const memos = [m("main", "a"), m("music", "b"), m("main", "c")];
+  it("'all' returns every memo, chronological", () => {
+    expect(channelQueue(memos, "all").map((x) => x.id)).toEqual(["a", "b", "c"]);
+  });
+  it("filters to a station", () => {
+    expect(channelQueue(memos, "main").map((x) => x.id)).toEqual(["a", "c"]);
+    expect(channelQueue(memos, "music").map((x) => x.id)).toEqual(["b"]);
+  });
+  it("an empty station yields an empty queue", () => {
+    expect(channelQueue(memos, "news")).toEqual([]);
+  });
+});
+
+describe("shuffleIds", () => {
+  it("returns a permutation (same set, same length)", () => {
+    const ids = ["a", "b", "c", "d", "e"];
+    const shuffled = shuffleIds(ids);
+    expect(shuffled).toHaveLength(ids.length);
+    expect(new Set(shuffled)).toEqual(new Set(ids));
+    expect(ids).toEqual(["a", "b", "c", "d", "e"]); // input not mutated
+  });
+});
+
+describe("orderedQueue", () => {
+  const memos = [m("main", "a"), m("main", "b"), m("main", "c")];
+  it("null order → chronological channel queue", () => {
+    expect(orderedQueue(memos, "main", null).map((x) => x.id)).toEqual(["a", "b", "c"]);
+  });
+  it("applies a shuffle order", () => {
+    expect(orderedQueue(memos, "main", ["c", "a", "b"]).map((x) => x.id)).toEqual(["c", "a", "b"]);
+  });
+  it("appends memos missing from the order (recorded after shuffle)", () => {
+    // order only knows a,b; c was added later → appended
+    expect(orderedQueue(memos, "main", ["b", "a"]).map((x) => x.id)).toEqual(["b", "a", "c"]);
+  });
+  it("drops ids no longer present", () => {
+    expect(orderedQueue(memos, "main", ["z", "a"]).map((x) => x.id)).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("slugify", () => {
+  it("makes url-safe ids", () => {
+    expect(slugify("My Cool Station!")).toBe("my-cool-station");
+    expect(slugify("  spaced  ")).toBe("spaced");
+  });
+  it("falls back for empty/symbol-only names", () => {
+    expect(slugify("!!!")).toBe("channel");
+  });
+});
+
+describe("uniqueChannelId", () => {
+  const existing: Channel[] = [
+    { id: "main", name: "Main" },
+    { id: "news", name: "News" },
+  ];
+  it("returns the base slug when free", () => {
+    expect(uniqueChannelId("Music", existing)).toBe("music");
+  });
+  it("suffixes on collision", () => {
+    expect(uniqueChannelId("News", existing)).toBe("news-2");
+  });
+});

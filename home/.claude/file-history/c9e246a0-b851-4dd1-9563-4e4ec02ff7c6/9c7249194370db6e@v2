@@ -1,0 +1,47 @@
+# Full production stack: Postgres + one-shot migrate/seed + the app.
+# Run:  AUTH_SECRET=$(openssl rand -base64 32) docker compose up --build
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: third_eye
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-third_eye}
+      POSTGRES_DB: third_eye
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U third_eye"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      target: migrator
+    environment:
+      DATABASE_URL: postgresql://third_eye:${POSTGRES_PASSWORD:-third_eye}@db:5432/third_eye?schema=public
+    depends_on:
+      db:
+        condition: service_healthy
+
+  app:
+    build:
+      context: .
+      target: runner
+    environment:
+      DATABASE_URL: postgresql://third_eye:${POSTGRES_PASSWORD:-third_eye}@db:5432/third_eye?schema=public
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET, e.g. openssl rand -base64 32}
+      AUTH_URL: ${AUTH_URL:-http://localhost:3000}
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "3000:3000"
+
+volumes:
+  pgdata:

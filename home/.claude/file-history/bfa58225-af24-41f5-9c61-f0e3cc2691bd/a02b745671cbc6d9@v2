@@ -1,0 +1,12 @@
+const container = document.querySelector('.leaflet-container');
+const rect = container.getBoundingClientRect();
+const path = document.querySelector('path.leaflet-interactive');
+const pathRect = path.getBoundingClientRect();
+function dblClickAt(x, y) {
+  const opts = { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y };
+  container.dispatchEvent(new MouseEvent('dblclick', opts));
+}
+for (let i = 0; i < 8; i++) {
+  dblClickAt(pathRect.x, pathRect.y);
+}
+'zoomed 8x around ' + pathRect.x + ',' + pathRect.y;

@@ -1,0 +1,43 @@
+import { test, expect } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
+
+async function axeClean(page: import("@playwright/test").Page, path: string) {
+  await page.goto(path);
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  const blocking = results.violations.filter(
+    (v) => v.impact === "serious" || v.impact === "critical",
+  );
+  expect(
+    blocking,
+    `${path}: ${JSON.stringify(
+      blocking.map((v) => ({ id: v.id, help: v.help })),
+      null,
+      2,
+    )}`,
+  ).toEqual([]);
+}
+
+test("Commons pages have no serious or critical a11y violations", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+
+  // sign in first
+  await page.goto("/app/signup");
+  await page.getByLabel("Name").fill("Ada Traveler");
+  await page
+    .getByLabel("Email")
+    .fill(`a11y-${Date.now()}@example.com`);
+  await page.getByLabel("Password").fill("test-password-123");
+  await page.getByLabel("I am a").selectOption("CLINICIAN");
+  await page.getByRole("button", { name: /create account/i }).click();
+  await expect(page).toHaveURL(/\/app$/);
+
+  await axeClean(page, "/app/feed");
+  await axeClean(page, "/app/profile");
+  await axeClean(page, "/app/waitlist");
+  await axeClean(page, "/app/contribute");
+  await axeClean(page, "/app/dossier");
+});

@@ -1,0 +1,156 @@
+# TEWW Redesign Spec — "Sight Beyond Sight" (v3)
+
+Complete visual redesign of the public website (teww.org). Full creative
+authority: palette, type, layout, motifs all change. **Data is sacred:** every
+CMS field renders exactly as before (`getContent()`, field names,
+`visibleSorted`, SEO overrides, JsonLd, RichText/HtmlContent contracts), the
+three-theme system and A/A+/A++ text sizing keep working, VoiceAssistant and
+AudioTour keep working, `/ad-min` is untouched.
+
+## 1. Concept
+
+The organization is named for the eye that does not need light. The founder
+spent eight months blind in a shelter in Kabul; the work that followed turns
+sound, touch, and voice into sight. The redesign makes that the visual story:
+
+**Night-first.** The default theme is a deep indigo night; the brand color is
+saffron-gold light — the third eye opening, dawn breaking. Light theme
+("Day") and high-contrast remain, one tap away, first-class.
+
+Motifs (use sparingly, one per viewport):
+- **Echo ripples** — thin concentric arcs radiating from a point (sound made
+  visible). Decorative SVG, aria-hidden.
+- **Braille texture** — six-dot braille cells as a quiet dot-grid pattern
+  (authentic: real braille spelling "TEWW" / "insight", not random dots).
+- **The gold hairline** — 1px gold rules structure sections on the night bg.
+
+## 2. Tokens (same names, new values — `[data-theme]` scoped)
+
+### Night (default — `data-theme="dark"`)
+```
+--bg:#100E17  --bg-elevated:#171420  --bg-subtle:#1C1826  --bg-inverse:#F4EFE6
+--fg:#F4EFE6  --fg-muted:#B3A9C0  --fg-subtle:#8D8399  --fg-inverse:#16121E
+--border:#2A2438  --border-strong:#3A3350
+--brand:#E8A33D  --brand-hover:#F2B856  --brand-subtle:rgba(232,163,61,.14)
+--accent:#9D8CFF --accent-hover:#B3A5FF --accent-subtle:rgba(157,140,255,.14)
+--focus-ring:#F2B856
+```
+### Day (`data-theme="light"`)
+```
+--bg:#F7F2E9  --bg-elevated:#FFFFFF  --bg-subtle:#EFE7D9  --bg-inverse:#16121E
+--fg:#1C1826  --fg-muted:#5C5468  --fg-subtle:#7E7590
+--border:#E2D8C6  --border-strong:#C9BCA4
+--brand:#8A5E12  --brand-hover:#6E4A0D  --brand-subtle:rgba(184,123,30,.12)
+--accent:#5B4BC4 --accent-hover:#483AA6 --accent-subtle:rgba(91,75,196,.10)
+--focus-ring:#1f61ff→#5B4BC4
+```
+(Gold on light must be the dark `#8A5E12` for AA text; pure saffron is
+decorative-only on light.)
+### High-contrast (`data-theme="high-contrast"`)
+Pure black `#000` bg, pure white fg, yellow `#FFD700` brand/focus, no
+translucency, 2px borders. Keep every rule ≥7:1.
+
+Type tokens: `--font-display: Literata` (variable, incl. italic; self-hosted
+TTF like the current fonts, with fallback faces), `--font-body: Manrope`
+(variable), `--font-mono: DM Mono` (keep). Fluid display scale:
+`--text-hero: clamp(2.75rem, 2rem + 3.5vw, 5rem)` etc. Keep
+`--header-height` (may change value, keep the var). Keep radius/spacing var
+names; radii soften: sm 6 / md 10 / lg 16 / xl 24.
+
+## 3. Design language
+
+- **Headlines:** Literata, weight 550–620, tight leading, `-0.015em`;
+  `<em>` inside CMS titles renders as Literata *italic* in gold (`.hero-title
+  em` etc. — the CMS content already carries `<em>` markup; make italic+gold
+  the house style for it).
+- **Kickers/eyebrows:** Manrope 700, 12–13px, +0.16em tracking, uppercase,
+  gold.
+- **Body:** Manrope, 17–18px base (respects A/A+/A++ root sizing), 1.65
+  leading, max 68ch.
+- **Numerals** (stats, 01/02 rows): Literata, oversized, tabular.
+- **Surfaces:** flat night; elevation = `--bg-elevated` + gold hairline top
+  or 1px border, almost no shadows on dark (shadows read on Day theme only).
+- **Cards:** radius-lg, bg-elevated, 1px border, hover: border-strong +
+  translateY(-2px). No glassmorphism except the nav bar.
+- **Buttons:** pill. Primary = gold fill, night text (AA: #16121E on #E8A33D),
+  hover brighter. Secondary = 1px gold outline, gold text. Quiet = underline.
+  ≥48px targets. Focus ring 3px `--focus-ring` (keep existing focus system).
+- **Links:** gold, underline on hover; in body text always underlined.
+- **Motion:** existing Reveal component; 400–500ms rises, stagger ≤80ms;
+  ripple arcs may breathe (6s) behind heroes; all gated by existing
+  prefers-reduced-motion handling.
+- **Imagery (when generated):** duotone night/gold grade; photos warm,
+  dignified, never pity-framed. Until real imagery lands, sections use
+  ripple/braille motifs — no stock, no placeholders.
+
+## 4. Shell
+
+- **Nav:** slim translucent night bar (backdrop-blur), gold logo
+  (LogoAnimated inherits --brand/--accent — keep component), active link =
+  gold text + 2px gold underline offset; A/A+/A++ and theme controls restyled
+  as compact pill group; Donate = primary gold pill. Keep
+  `--header-height` var + skip link.
+- **Footer:** deepest night (#0B0A10), the Rumi line set huge in Literata
+  italic as the footer's opening statement ("We are all blind until we see
+  each other's pain."), then the existing link columns (all CMS/footer data
+  kept), EIN/small print. Gold hairline top.
+- **Subnav tabs:** underline tabs (no boxes), sticky under nav (keep
+  `top: var(--header-height)`).
+
+## 5. Pages (restructure freely; every CMS field keeps rendering)
+
+- **Home:** hero = night sky with slow echo-ripple field radiating from a
+  gold point (the eye opens), kicker + CMS heroTitle (em→gold italic) + sub +
+  CTAs; impact strip → gold hairline row of Literata numerals; values →
+  numbered editorial rows; projects grid → editorial cards with status chips;
+  stories/timeline → keep data, restyle as archive rows; quote CTA band →
+  full-bleed gold-on-night statement.
+- **About:** FAQ 01–05 as oversized-numeral accordion rows; mission section
+  with big Rumi pull-quote; team as portrait-initial tiles (gold monogram on
+  night); founder's series as book-index rows (Literata italic titles).
+- **Projects:** hero + cards with status ribbons restyled as gold corner
+  tags; project detail pages restyled via their existing classes.
+- **Media:** tabs; photo grid tiles (empty-state copy stays); podcast
+  featured + guest form; video cards with duotone thumbs + category chips.
+- **Documents:** research cards, newsletter band, stories, Book tab as an
+  actual "book" — chapter list with big Literata numerals and italic titles.
+- **Volunteers:** stats row, role cards → two-column editorial list with
+  meta chips, steps → numbered vertical timeline, form restyled (all fields,
+  validation, char counter, required-field a11y signalling kept).
+- **Donate:** amount widget restyled (gold), impact breakdown as hairline
+  rows, transparency section as flat editorial; "no payment taken" notice
+  stays prominent.
+- **Privacy/[slug]/detail pages:** `.prose` and `lib/pages/*` classes
+  restyled; server-HTML contracts untouched.
+- **Coming-soon/confirmed/404/500:** night + ripple + Literata statement.
+- **TE assistant panel + audio tour overlay + mini player:** restyle to
+  night/gold (the tour overlay's red becomes gold/night; keep all IDs,
+  roles, and window.* contracts).
+
+## 6. Hard contracts (do not break — from the architecture audit)
+
+1. `getContent()` / field names / `visibleSorted` / `projects→programs`
+   fallback.
+2. Every page keeps `generateMetadata()` → `readSeoOverrides` + JsonLd.
+3. RichText inline-tag allowlist; HtmlContent server-HTML injection;
+   `lib/pages/*` class hooks restyled, not removed.
+4. VoiceAssistant: `main h1/h2` + `main p` must exist per route; PAGES alias
+   map; `#te-panel`; `window.setTheme`/audio-tour globals.
+5. Theme keys `teww-theme`/`teww-size`, pre-paint script, `data-theme` +
+   `data-text-size` attributes, ThemeProvider/NavProvider shell.
+6. `--header-height` var consumed by subnav/scroll-padding.
+7. `/ad-min` (AdminNav, admin.css, CMS density vars `--row-y --pad-card
+   --gap --rail-w`) untouched and unbroken — tokens it shares must keep
+   working in all three themes.
+8. WCAG 2.2 AA minimum everywhere; the high-contrast theme targets AAA.
+   State never by color alone; all existing aria/roles/labels preserved.
+
+## 7. CSS architecture (set in the foundation PR)
+
+`app/globals.css` becomes an ordered import manifest of `app/styles/*.css`:
+`tokens.css` (fonts+themes) · `base.css` (reset, type, buttons, forms,
+utilities) · `shell.css` (nav, footer, subnav, skip) · `home.css` ·
+`about.css` · `projects.css` · `media.css` · `documents.css` ·
+`volunteers.css` · `donate.css` · `pages.css` (prose, detail, coming-soon,
+errors) · `assistant.css` (TE panel, tour, mini-player) · `cms-bridge.css`
+(vars/classes ad-min depends on). Page PRs own exactly their file.

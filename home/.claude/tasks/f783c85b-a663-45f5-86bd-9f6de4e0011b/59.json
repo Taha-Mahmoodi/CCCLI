@@ -1,0 +1,8 @@
+{
+  "id": "59",
+  "subject": "Next: 2b-7 hide markdown markers at rest",
+  "description": "ViewPlugin + Decoration.replace to hide markdown syntax markers (#, **, `) except on the cursor's line — completes live-preview. Then 2c wikilinks, then Slices 3-7.",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

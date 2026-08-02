@@ -1,0 +1,28 @@
+---
+name: chapters-project
+description: "Chapters — open-source self-hostable second-brain platform, PIIIX-org/chapters, currently in structural design phase"
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: daf3f484-35b1-4d43-bc05-84ae9311e180
+---
+
+Chapters is an open-source, self-hostable "second brain" / team knowledge platform: markdown+YAML notes (Google OKF format), a live-preview editor, an AI-navigable knowledge graph (Graphify-inspired), real-time collaboration, and permission-scoped MCP access for AI assistants.
+
+**Why:** started as the user's personal "which PKM tool" question, escalated into a full internal-tool-that's-also-OSS build for their company (PIIIX), which mostly does open-source projects. Full origin story and design rationale is in the repo's own README.
+
+**Repo:** github.com/PIIIX-org/chapters (org-owned, not personal account — deliberate choice so it's not tied to the user's personal GitHub). Local clone at `~/Documents/chapters`. Renamed from "second-brain"/"Second Brain" to "Chapters" on 2026-07-15.
+
+**Workflow established for this project:**
+- Structure/research only — no code written yet, by explicit repeated instruction. Every design decision goes through: clarifying Q&A → present design → user confirms → write spec to `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` → commit.
+- Every substantive change goes: feature branch → commit → `gh pr create` → merge. Note: auto-merging a self-authored PR without human review has been blocked by the harness before (2026-07-15) — open the PR and let the user merge, don't attempt `gh pr merge` proactively.
+- See [[chapters-readme-workflow]] — README.md must be updated to reflect every meaningful change, same PR as the change itself.
+
+**State as of 2026-07-15 — design phase complete:**
+- All 7 core sub-project specs written and merged: Auth & Vault/Sharing, Editor, Graph engine & view, Search, Real-time collaboration, MCP integration, Data export & portability.
+- A full security audit pass hardened the first 6 specs (27 findings, critical→low) — see `docs/superpowers/specs/2026-07-12-security-audit-findings.md`.
+- 8 user-flow/system diagrams under `docs/superpowers/specs/diagrams/` (built with the `diagram-design` skill: onboarding, sharing, MCP connection, live collaboration, graph exploration, search, system architecture, AI navigation) — embedded as PNG thumbnails in README (GitHub doesn't render HTML inline; PNGs generated via the `browse` skill screenshotting each diagram's `.frame` container).
+- 3 additional cross-cutting specs closing every gap the audit surfaced: Notifications & activity feed, Admin oversight dashboard (metadata-only, never vault content — force-revoke lever for incident response), MFA (TOTP, opt-in + admin-mandatable).
+- 11 spec docs total. Only remaining tracked-but-unspecced item: cloud storage integrations + automated/scheduled backups, deliberately deferred out of sub-project 7's scope.
+- Next likely phase: moving toward an actual implementation plan/tech stack decision. Python + FastAPI + PostgreSQL was picked in an earlier abandoned attempt at writing-plans, before the user redirected back to research-only — that stack choice was never really settled as final, revisit when implementation starts.
+- PR merge status has been unreliable to detect right after the user says "merged" — `gh pr view` sometimes lags a few seconds behind GitHub's actual state; re-check rather than trusting the first read if it shows OPEN.

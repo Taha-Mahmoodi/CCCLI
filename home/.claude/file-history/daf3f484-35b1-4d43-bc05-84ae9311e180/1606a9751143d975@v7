@@ -1,0 +1,139 @@
+import * as THREE from "three";
+import { mulberry32 } from "./data";
+import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { BokehPass } from "three/examples/jsm/postprocessing/BokehPass.js";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+
+export interface Stage3D {
+  scene: THREE.Scene;
+  camera: THREE.PerspectiveCamera;
+  renderer: THREE.WebGLRenderer;
+  composer: EffectComposer;
+  controls: OrbitControls;
+  /** tier-3 depth of field — disabled everywhere else */
+  bokeh: BokehPass;
+}
+
+export function createStage(): Stage3D {
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
+  document.body.appendChild(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x070911);
+  // atmospheric perspective: distant objects sink toward the base space color
+  scene.fog = new THREE.FogExp2(0x070911, 0.00115);
+
+  const camera = new THREE.PerspectiveCamera(
+    55,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    6000,
+  );
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.045;
+  controls.rotateSpeed = 0.55;
+  controls.zoomSpeed = 0.8;
+  controls.zoomToCursor = true; // scroll dives toward the pointer, not the center
+  controls.panSpeed = 0.9;
+  controls.screenSpacePanning = true; // drag-pan slides the sky, not the ground plane
+  controls.minDistance = 18;
+  controls.maxDistance = 2600;
+
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  // cinematic close-up: shallow focus inside a star system, off elsewhere;
+  // sits before bloom so halos stay crisp over the blurred field
+  const bokeh = new BokehPass(scene, camera, {
+    focus: 10,
+    aperture: 0.00018,
+    maxblur: 0.0032, // restrained: additive clouds smear into milk beyond this
+  });
+  bokeh.enabled = false;
+  composer.addPass(bokeh);
+  const bloom = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    0.95, // strength
+    0.8, // radius
+    0.0, // threshold: additive particles carry their own restraint
+  );
+  composer.addPass(bloom);
+
+  window.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  return { scene, camera, renderer, composer, controls, bokeh };
+}
+
+/** Diffraction spikes for the tier-3 star — 8 tapered streaks, generated. */
+let spikeTex: THREE.Texture | null = null;
+export function spikeSprite(): THREE.Texture {
+  if (spikeTex) return spikeTex;
+  const c = document.createElement("canvas");
+  c.width = c.height = 128;
+  const g = c.getContext("2d")!;
+  g.translate(64, 64);
+  for (let i = 0; i < 4; i++) {
+    const long = i % 2 === 0; // alternating long/short spikes, classic optic
+    const half = long ? 62 : 38;
+    const grad = g.createLinearGradient(0, -half, 0, half);
+    grad.addColorStop(0, "rgba(255,255,255,0)");
+    grad.addColorStop(0.5, "rgba(255,255,255,0.85)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = grad;
+    g.fillRect(-0.8, -half, 1.6, half * 2);
+    g.rotate(Math.PI / 4);
+  }
+  spikeTex = new THREE.CanvasTexture(c);
+  spikeTex.colorSpace = THREE.SRGBColorSpace;
+  return spikeTex;
+}
+
+/** Latitudinal banding for planet surfaces, grayscale random-walk so the
+ *  material color tints it — generated in code, no binary assets. */
+export function bandedTexture(seed: number): THREE.Texture {
+  const rnd = mulberry32(seed);
+  const c = document.createElement("canvas");
+  c.width = 2;
+  c.height = 128;
+  const g = c.getContext("2d")!;
+  let v = 0.72;
+  for (let y = 0; y < 128; y++) {
+    v = Math.max(0.5, Math.min(0.95, v + (rnd() - 0.5) * 0.16));
+    const belt = rnd() < 0.04 ? 0.72 : 1; // occasional crisp dark belt
+    const l = Math.round(v * belt * 255);
+    g.fillStyle = `rgb(${l},${l},${l})`;
+    g.fillRect(0, y, 2, 1);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+/** Soft radial sprite, generated in code — no binary assets in the repo. */
+export function softSprite(): THREE.Texture {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d")!;
+  const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grad.addColorStop(0, "rgba(255,255,255,1)");
+  grad.addColorStop(0.25, "rgba(255,255,255,0.55)");
+  grad.addColorStop(0.6, "rgba(255,255,255,0.12)");
+  grad.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 64, 64);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}

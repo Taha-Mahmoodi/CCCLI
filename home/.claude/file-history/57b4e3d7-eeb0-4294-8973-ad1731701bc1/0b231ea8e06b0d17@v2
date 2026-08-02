@@ -1,0 +1,70 @@
+/* case.css — case-study and project pages. Consumes tokens, defines none. */
+
+.case-head{margin-bottom:var(--p-rhythm)}
+.case-head h1{
+  font-size:var(--p-text-2xl);font-weight:700;line-height:var(--p-leading-tight);
+  max-width:20ch;margin:0.3em 0 var(--p-space-5);text-wrap:balance;
+}
+.case-head .status{
+  display:flex;flex-wrap:wrap;gap:var(--p-space-3) var(--p-space-5);align-items:baseline;
+  border-top:1px solid var(--p-rule);padding-top:var(--p-space-3);
+}
+.case-head .standfirst{
+  margin-top:var(--p-space-5);max-inline-size:var(--p-measure);
+  font-size:var(--p-text-lg);line-height:1.45;color:var(--p-text-1);
+}
+
+.beats{max-inline-size:var(--p-measure)}
+.beats section{margin-bottom:var(--p-space-7)}
+.beats h2{
+  font-family:var(--p-font-mono);font-size:var(--p-text-xs);
+  letter-spacing:var(--p-track-mono);text-transform:uppercase;
+  color:var(--p-accent);font-weight:500;
+  border-top:1px solid var(--p-rule);padding-top:var(--p-space-2);
+  margin-bottom:var(--p-space-4);
+}
+.beats p+p{margin-top:var(--p-space-4)}
+.beats blockquote{
+  margin:var(--p-space-5) 0;padding-left:var(--p-space-5);
+  border-left:2px solid var(--p-accent);
+  font-size:var(--p-text-lg);line-height:1.45;
+}
+.beats blockquote cite{
+  display:block;margin-top:var(--p-space-3);color:var(--p-text-2);
+  font-style:normal;font-size:var(--p-text-sm);
+}
+
+/* ---- plates: the real 2022 hardware, duotoned amber because it is archive ---- */
+.plates{margin:var(--p-rhythm) 0;display:grid;gap:var(--p-space-5)}
+@media (min-width:48rem){ .plates{grid-template-columns:repeat(2,minmax(0,1fr))} }
+.plates figure{margin:0}
+.plates img{inline-size:100%;block-size:auto;background:var(--p-surface-1)}
+.plates figcaption{
+  margin-top:var(--p-space-3);color:var(--p-text-2);
+  font-family:var(--p-font-mono);font-size:var(--p-text-xs);
+  letter-spacing:var(--p-track-mono);text-transform:uppercase;line-height:1.5;
+}
+.plates .wide{grid-column:1/-1}
+
+/* ---- sources: this is the point of the anchor project, so it is visible ---- */
+.sources{
+  margin-top:var(--p-rhythm);border-top:1px solid var(--p-rule);
+  padding-top:var(--p-space-4);max-inline-size:var(--p-measure);
+  color:var(--p-text-2);font-size:var(--p-text-sm);
+}
+.sources h2{
+  font-family:var(--p-font-mono);font-size:var(--p-text-xs);
+  letter-spacing:var(--p-track-mono);text-transform:uppercase;
+  color:var(--p-accent);font-weight:500;margin-bottom:var(--p-space-3);
+}
+.sources ul{margin:0;padding:0;list-style:none}
+.sources li{padding:var(--p-space-2) 0;border-top:1px solid var(--p-rule)}
+.sources li:first-child{border-top:0}
+.sources a{color:var(--p-accent)}
+
+.case-nav{
+  margin-top:var(--p-rhythm);border-top:1px solid var(--p-rule);
+  padding-top:var(--p-space-4);
+}
+.case-nav a{color:var(--p-accent);font-family:var(--p-font-mono);font-size:var(--p-text-xs);
+  letter-spacing:var(--p-track-mono);text-transform:uppercase}

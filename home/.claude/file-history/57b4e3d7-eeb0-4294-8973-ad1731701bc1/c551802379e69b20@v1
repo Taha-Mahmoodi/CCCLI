@@ -1,0 +1,54 @@
+# Third Eye World
+
+`REBUILDING`
+
+Accessibility-first social network for blind and low-vision people. Closed beta done. MVP in active development. Founder: Said Mohaddes Sadeqi.
+
+## Problem
+
+Every social network I've used treats sight as the default and works out what to do with everyone else afterward. A sighted designer builds the interface first. A screen reader gets added after, translating a screen its own builder never had to read. Third Eye World reverses that order: a social network, accessibility first, for blind and low-vision people, where I design the non-visual interaction before the visual layer that follows it. You're testing that claim on this page right now, whether you're reading it with your eyes or having it read to you.
+
+## Constraint
+
+There's no existing gesture language for a non-visual social network, and no precedent from a sighted-first app that carries over cleanly. There's also no team to split that work with. A social network is many interactions, and every one of them had to work without sight. I was the only one building it.
+
+"It's my idea, my build, all my decisions," which meant designing the navigation and the interaction model alone, then testing it against people who are blind or low-vision, before anyone else could catch what I'd missed.
+
+## Decision
+
+The call that mattered: put an early beta in front of real testers instead of refining it alone for another year. That gets feedback sooner, from the people the product is for. It also means testers meet something rough before it's ready, and that's the trade I made.
+
+## What broke
+
+"the whole design of our first beta was dependent on vision more than we liked, the gestures were generic and navigation was hard and required multiple gestures to do something."
+
+The testers said so, and they were right. In that first beta, I borrowed the gestures from apps built for people looking at a screen. Doing something simple took several gestures instead of one. Once the feedback was in, I started rebuilding the design around what didn't work.
+
+## Outcome
+
+The closed beta test is done. The MVP is under active development. There's no version number here and no launch date, because neither exists: Third Eye World hasn't shipped. Saying otherwise would repeat the first beta's mistake — presenting something as finished before it works.
+
+---
+
+## Supporting strings
+
+**Card blurb** (homepage index, this project's row/card):
+Third Eye World — accessibility-first social network for blind and low-vision people. `REBUILDING`: closed beta done, testers found the gestures too visual, MVP rebuilt around what broke.
+
+**Headline** (project page H1):
+A social network for people who don't look at the screen.
+
+**Alt text:**
+This section carries no images. Third Eye World has no application code and no product screens to show — the repo is a specification, not a build, and the live site itself says "coming soon." A screenshot of an unbuilt product would be the exact failure this case study argues against: presenting something as finished before it works. If a real screen exists once the MVP ships, alt text gets written against that screen, not invented ahead of it.
+
+---
+
+## Claims cut or attributed
+
+- **CEAL / Columbia University partnership** — cut entirely per explicit instruction (`§21`). Not named, not hinted at, no "unnamed partner" gesture. The Decision and Constraint beats describe him as the sole builder, which is accurate on its own terms and does not require explaining who else is or isn't involved.
+- **"Beta built... v0.8.2"** (from the `third-eye-world-paper` repo README) — cut. Contradicted by his own live site ("coming soon") and by the repo itself, which contains no application code. No version number appears anywhere in this copy.
+- **Any tester count, date, or duration of the closed beta** — never had a source in `EVIDENCE.md`; not invented. The copy says "closed beta test is done" and stops there.
+- **"70% global unemployment among blind people"** — not used; irrelevant to this project and, per `EVIDENCE.md`, contradicted by his own research repo.
+- **Rank-5 claims (CEAL role, Intel, Cyborg Tech, St. Cloud State, the book, the papers)** — none touch Third Eye World and none appear here.
+- **Ownership claim ("it's my idea, my build, all my decisions")** — kept, but only as a direct, marked quote in his own words (rank 3), never restated as third-party-verified fact.
+- **"What broke" quote** — cleaned of spelling only (bata→beta, gustures→gestures, gneric→generic, requierd→required). Cadence and content otherwise unchanged. The clause after "to do something" (his run-on about testers and rebuilding) is paraphrased rather than quoted verbatim, since the original sentence splices two thoughts without a clear boundary; the paraphrase preserves what he said without inventing anything the transcript didn't contain.

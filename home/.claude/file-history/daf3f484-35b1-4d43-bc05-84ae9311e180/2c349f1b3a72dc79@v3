@@ -1,0 +1,158 @@
+import * as THREE from "three";
+import { mulberry32 } from "./data";
+import type { GalaxyNode } from "./galaxy";
+
+// In-fall streams: thin arcs of particles drifting from a black hole's
+// nearest neighbors into it — the "visibly pulling nearby galaxies toward
+// it" from the vision. Physics grammar: matter strips from the neighbor's
+// NEAR side, sweeps a partial orbit sideways (not a fountain arc), and
+// lands TANGENTIALLY on the hole's accretion plane, heating as it falls.
+// Particles animate along a cubic bezier in-shader (aT + uTime), with
+// free-fall acceleration toward the hole.
+
+const VERT = /* glsl */ `
+  attribute float aT;
+  attribute float aJitter;
+  varying float vT;
+  uniform float uTime;
+  uniform vec3 uP0;
+  uniform vec3 uP1;
+  uniform vec3 uP2;
+  uniform vec3 uP3;
+  void main() {
+    // free-fall ease: slow far away, fast at the hole
+    float t = fract(aT + uTime * 0.045 * (1.0 + aJitter * 0.5));
+    float e = t * t;
+    vT = e;
+    float u = 1.0 - e;
+    vec3 p = u * u * u * uP0
+      + 3.0 * u * u * e * uP1
+      + 3.0 * u * e * e * uP2
+      + e * e * e * uP3;
+    // lateral shimmer so the stream reads as matter, not a line;
+    // tightens as tidal stretching thins the stream near the hole
+    p += vec3(sin(aJitter * 40.0 + uTime), cos(aJitter * 30.0), sin(aJitter * 50.0 - uTime)) * 0.6 * (1.0 - e);
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
+    gl_PointSize = (1.3 + 1.6 * e) * (240.0 / -mv.z);
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+
+const FRAG = /* glsl */ `
+  varying float vT;
+  uniform vec3 uColor;
+  void main() {
+    float d = length(gl_PointCoord - 0.5);
+    float alpha = smoothstep(0.5, 0.0, d);
+    // viscous heating: brighten and whiten as matter falls, vanish at the rim
+    float glow = mix(0.25, 1.0, vT) * (1.0 - smoothstep(0.92, 1.0, vT));
+    vec3 col = mix(uColor, vec3(1.0, 0.95, 0.85), vT * vT * 0.6);
+    gl_FragColor = vec4(col * glow, alpha * glow);
+  }
+`;
+
+export interface Stream {
+  points: THREE.Points;
+  mat: THREE.ShaderMaterial;
+}
+
+export function buildInfallStreams(nodes: GalaxyNode[], seed = 23): Stream[] {
+  const holes = nodes.filter((n) => n.project.milestoneMarked);
+  const others = nodes.filter((n) => !n.project.milestoneMarked);
+  const rnd = mulberry32(seed);
+  const streams: Stream[] = [];
+
+  for (const hole of holes) {
+    const neighbors = [...others]
+      .sort(
+        (a, b) =>
+          a.group.position.distanceToSquared(hole.group.position) -
+          b.group.position.distanceToSquared(hole.group.position),
+      )
+      .slice(0, 2);
+
+    // accretion plane basis from the hole's tilt (local XZ in world space)
+    const q = hole.group.quaternion;
+    const planeX = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+    const planeZ = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+    const spinSign = Math.sign(hole.spinSpeed || 1);
+
+    for (const from of neighbors) {
+      const COUNT = 260;
+      const aT = new Float32Array(COUNT);
+      const aJitter = new Float32Array(COUNT);
+      for (let i = 0; i < COUNT; i++) {
+        aT[i] = rnd();
+        aJitter[i] = rnd();
+      }
+      // geometry positions are unused (computed in-shader) but required
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(COUNT * 3), 3));
+      geo.setAttribute("aT", new THREE.BufferAttribute(aT, 1));
+      geo.setAttribute("aJitter", new THREE.BufferAttribute(aJitter, 1));
+      // the shader moves points far from the origin; disable culling
+      geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
+
+      // tidal stripping starts on the NEAR side of the neighbor
+      const toHole = hole.group.position.clone().sub(from.group.position).normalize();
+      const p0 = from.group.position
+        .clone()
+        .addScaledVector(toHole, from.radius * 0.75)
+        .add(new THREE.Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).multiplyScalar(from.radius * 0.3));
+
+      // landing point on the accretion rim: enter ahead of the stripped
+      // side so the stream sweeps a partial orbit before touching down
+      const rimR = Math.max(hole.radius * 0.55, 4);
+      const rel = p0.clone().sub(hole.group.position);
+      const theta0 = Math.atan2(rel.dot(planeZ), rel.dot(planeX));
+      const theta = theta0 + spinSign * 2.4;
+      const rimDir = planeX
+        .clone()
+        .multiplyScalar(Math.cos(theta))
+        .addScaledVector(planeZ, Math.sin(theta));
+      const p3 = hole.group.position.clone().addScaledVector(rimDir, rimR);
+
+      // arrive along the disc tangent, in the direction the disc spins
+      const tangent = planeX
+        .clone()
+        .multiplyScalar(-Math.sin(theta))
+        .addScaledVector(planeZ, Math.cos(theta))
+        .multiplyScalar(spinSign);
+      const dist = p0.distanceTo(p3);
+      const p2 = p3.clone().addScaledVector(tangent, -dist * 0.3);
+
+      // the long haul bows sideways (orbital sweep), not upward
+      const side = toHole.clone().cross(new THREE.Vector3(0, 1, 0)).normalize();
+      const p1 = p0
+        .clone()
+        .lerp(p3, 0.4)
+        .addScaledVector(side, spinSign * dist * 0.22)
+        .add(new THREE.Vector3(0, (rnd() - 0.5) * 10, 0));
+
+      const mat = new THREE.ShaderMaterial({
+        vertexShader: VERT,
+        fragmentShader: FRAG,
+        uniforms: {
+          uTime: { value: 0 },
+          uP0: { value: p0 },
+          uP1: { value: p1 },
+          uP2: { value: p2 },
+          uP3: { value: p3 },
+          uColor: { value: new THREE.Color(0xffb583) },
+        },
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      });
+
+      const points = new THREE.Points(geo, mat);
+      points.frustumCulled = false;
+      streams.push({ points, mat });
+    }
+  }
+  return streams;
+}
+
+export function tickStreams(streams: Stream[], time: number): void {
+  for (const s of streams) s.mat.uniforms.uTime.value = time;
+}

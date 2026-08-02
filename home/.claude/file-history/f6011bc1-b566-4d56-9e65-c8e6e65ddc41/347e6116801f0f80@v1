@@ -1,0 +1,149 @@
+/*
+ * About — team, board recruit, founder's series, mission grid, pillars.
+ * Sight Beyond Sight (§5 About): editorial night surfaces, gold hairlines,
+ * oversized Literata numerals. Everything derives from theme tokens —
+ * no hard-coded palette colors.
+ */
+
+/* Gold hairline used for structural rules on /about. Namespaced so it
+   can't collide with other pages' vars. High-contrast forbids
+   translucency, so the rule goes solid brand there. */
+:root { --about-rule: color-mix(in srgb, var(--brand) 45%, transparent); }
+:root[data-theme="high-contrast"] { --about-rule: var(--brand); }
+
+/* ── TEAM — monogram tiles ─────────────────────── */
+.team-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; }
+
+.team-card { text-align: left; }
+.team-photo {
+  width: 100%; aspect-ratio: 1;
+  border-radius: var(--radius-lg);
+  margin-bottom: 16px;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border);
+  position: relative; overflow: hidden;
+  display: flex; align-items: flex-end; padding: 20px;
+  transition: border-color .2s ease, transform .2s ease;
+}
+.team-card:hover .team-photo { border-color: var(--border-strong); transform: translateY(-2px); }
+/* Legibility scrim exists only when a real photo is present. */
+.team-photo::before { content: none; }
+.team-photo.has-img::before {
+  content: ''; position: absolute; inset: 0; z-index: 1;
+  background: linear-gradient(180deg, transparent 55%, rgba(0,0,0,.55) 100%);
+}
+.team-photo .initials {
+  position: relative; z-index: 1;
+  font-family: var(--font-display); font-weight: 560; font-style: italic;
+  font-size: clamp(2.6rem, 4vw, 3.5rem);
+  color: var(--brand); letter-spacing: -.02em; line-height: 1;
+}
+.team-photo .team-photo-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; }
+.team-photo.has-img .initials { display: none; }
+/* CMS `bg` variants (bg-1..bg-8): quiet night tints of gold/violet —
+   the old blue/orange gradients are gone per spec §3. */
+.team-photo.bg-1 { background-image: radial-gradient(circle at 28% 22%, var(--brand-subtle), transparent 62%); }
+.team-photo.bg-2 { background-image: radial-gradient(circle at 72% 20%, var(--accent-subtle), transparent 62%); }
+.team-photo.bg-3 { background-image: radial-gradient(circle at 70% 76%, var(--brand-subtle), transparent 62%); }
+.team-photo.bg-4 { background-image: radial-gradient(circle at 26% 72%, var(--accent-subtle), transparent 62%); }
+.team-photo.bg-5 { background-image: radial-gradient(circle at 50% 16%, var(--brand-subtle), transparent 62%); }
+.team-photo.bg-6 { background-image: radial-gradient(circle at 50% 84%, var(--accent-subtle), transparent 62%); }
+.team-photo.bg-7 { background-image: radial-gradient(circle at 16% 50%, var(--brand-subtle), transparent 62%); }
+.team-photo.bg-8 { background-image: radial-gradient(circle at 84% 46%, var(--accent-subtle), transparent 62%); }
+.team-card h4 { font-family: var(--font-display); font-size: 1.1rem; font-weight: 600; color: var(--fg); margin-bottom: 4px; letter-spacing: -.015em; }
+.team-card .role {
+  font-family: var(--font-body); font-size: .72rem; font-weight: 700;
+  letter-spacing: .14em; text-transform: uppercase;
+  color: var(--brand); margin-bottom: 10px;
+}
+.team-card .bio { font-size: .88rem; color: var(--fg-muted); line-height: 1.6; }
+
+/* ── BOARD RECRUIT — night card, gold accent ──── */
+.board-recruit-card {
+  margin-top: 40px;
+  padding: 30px 34px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--brand); /* gold hairline top — house elevation accent (spec §3) */
+  border-radius: var(--radius-lg);
+  display: flex; flex-direction: column; gap: 12px; align-items: flex-start;
+  max-width: 720px;
+}
+.board-recruit-card h3 {
+  font-family: var(--font-display);
+  font-size: 1.3rem; font-weight: 600;
+  letter-spacing: -.015em; color: var(--fg);
+}
+.board-recruit-card p { font-size: .98rem; line-height: 1.65; color: var(--fg-muted); }
+
+/* ── FOUNDER'S SERIES — book-index rows ────────── */
+.founders-series-list {
+  list-style: none; padding: 0; margin: 0;
+  border-top: 1px solid var(--about-rule);
+}
+.founders-series-list li {
+  display: grid; grid-template-columns: 76px 1fr auto;
+  gap: 20px; align-items: baseline;
+  padding: 20px 4px;
+  border-bottom: 1px solid var(--about-rule);
+}
+.founders-series-list .fs-num {
+  font-family: var(--font-display); font-weight: 330;
+  font-size: clamp(1.6rem, 2.4vw, 2.1rem); line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--brand);
+}
+.founders-series-list .fs-title {
+  font-family: var(--font-display); font-style: italic; font-weight: 560;
+  font-size: clamp(1.05rem, 1.5vw, 1.3rem); letter-spacing: -.01em;
+  color: var(--fg); line-height: 1.35;
+}
+.founders-series-list .fs-time {
+  font-family: var(--font-body); font-size: .78rem; letter-spacing: .04em;
+  color: var(--fg-muted); white-space: nowrap; /* fg-muted: fg-subtle misses 4.5:1 at this size on Day */
+}
+
+/* ── MISSION GRID + STAT TILES ─────────────────── */
+.about-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center; }
+
+/* Base .about-stat (shared StatTile, also used on /volunteers) keeps its
+   card form; the overrides below are scoped to the About mission panel. */
+.about-stat { background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 24px; text-align: left; box-shadow: var(--shadow-sm); }
+.about-stat .n { font-family: var(--font-display); font-size: 2rem; font-weight: 700; color: var(--brand); letter-spacing: -.02em; line-height: 1; }
+.about-stat .l { font-size: .86rem; color: var(--fg-muted); margin-top: 8px; }
+
+.about-visual { display: grid; grid-template-columns: 1fr 1fr; gap: 32px 24px; align-content: center; }
+.about-visual .about-stat {
+  background: transparent; border: none; border-radius: 0; box-shadow: none;
+  border-top: 1px solid var(--about-rule);
+  padding: 18px 4px 0;
+}
+.about-visual .about-stat .n {
+  font-size: clamp(2.1rem, 1.6rem + 1.6vw, 2.9rem);
+  font-weight: 600; font-variant-numeric: tabular-nums;
+}
+.about-visual .about-stat .l { font-size: .85rem; margin-top: 10px; line-height: 1.5; }
+
+/* ── PILLARS — numbered editorial rows ─────────── */
+.about-pillars { max-width: 980px; border-top: 1px solid var(--about-rule); }
+.about-pillar {
+  display: grid; grid-template-columns: 110px 1fr; gap: 28px;
+  align-items: start;
+  padding: 32px 4px;
+  border-bottom: 1px solid var(--border);
+}
+.about-pillar .ap-num {
+  font-family: var(--font-display); font-weight: 320;
+  font-size: clamp(2.4rem, 1.8rem + 2.4vw, 3.4rem); line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--brand);
+}
+.about-pillar h3 { font-family: var(--font-display); font-size: 1.3rem; font-weight: 600; color: var(--fg); margin-bottom: 8px; letter-spacing: -.015em; }
+.about-pillar p { font-size: .95rem; color: var(--fg-muted); line-height: 1.65; max-width: 58ch; }
+
+@media (max-width: 720px) {
+  .about-pillar { grid-template-columns: 56px 1fr; gap: 16px; padding: 24px 2px; }
+  .founders-series-list li { grid-template-columns: 52px 1fr; }
+  .founders-series-list .fs-time { grid-column: 2; }
+  .about-visual { grid-template-columns: 1fr 1fr; gap: 24px 18px; }
+}

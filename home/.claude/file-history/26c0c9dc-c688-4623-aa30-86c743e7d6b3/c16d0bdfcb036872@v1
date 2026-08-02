@@ -1,0 +1,106 @@
+# webcrab
+
+Turns a business into a deployed site that has a job. Agency sites, company sites,
+product marketing sites, and landing pages — positioned, designed, written,
+instrumented, live, and measured after real traffic.
+
+It is an agent operating system: markdown instructions a capable coding agent
+executes. There is nothing to install and no program to run.
+
+```text
+ BOOTSTRAP ─► MARKET ─► DESIGN ─► COPY ─► BUILD ─► CAPTURE ─► DEPLOY ─► VERIFY ─► MEASURE
+    caps      & MESSAGE  2a dir   pages   code to  forms,     their     live      real
+              intake→    2b craft written  the     CRM, SEO,  target,   funnel    traffic,
+              VOC→crawl                    design  consent    redirects proof     next move
+                 │         │  │                                  │
+              Gate A      B1  B2                              Gate C
+```
+
+## Why
+
+The default company website is a template with a logo dropped in. Centered hero over
+a gradient, three feature cards, a logo bar, a testimonial slider, and a contact form
+nobody has tested since launch. It converts badly, says nothing a competitor could
+not say, and nobody can prove whether it works, because nobody instrumented it.
+
+This pipeline forces the opposite:
+
+- The message comes from **the words customers actually use** — mined from reviews,
+  support tickets, and sales calls, not from the founder's roadmap vocabulary.
+- The look is derived from **a position defended against the three competitors it has
+  to beat**, not from taste or a reference site.
+- **Every claim traces to a source**, because a number on a company site is an
+  advertising claim, and the client carries it after you leave.
+- **The conversion path is proven live** — a real submission, watched arriving at the
+  far end. A form that posts to nowhere is the most expensive bug this pipeline can
+  ship.
+- **What ranks does not break.** A redirect map covers every existing URL before
+  anything is replaced.
+- **The run does not end at launch.** Loop 8 comes back after traffic and reads the
+  numbers against the goal set in Loop 1.
+
+## The doctrine
+
+| File | What it governs |
+|---|---|
+| [`PRINCIPLES.md`](./PRINCIPLES.md) | The binding rules. Six are hard and never skip |
+| [`POSITIONING.md`](./POSITIONING.md) | Strategy: ICP, jobs to be done, category, the message hierarchy, the proof ladder |
+| [`CONVERSION.md`](./CONVERSION.md) | The offer, the objection ladder, the path, the forms |
+| [`ARCHITECTURE.md`](./ARCHITECTURE.md) | How many pages, how they route, and who edits them without you |
+| [`SEO.md`](./SEO.md) | Getting found, and not destroying what already ranks |
+| [`COMPLIANCE.md`](./COMPLIANCE.md) | Consent, claims substantiation, customer logos, accessibility law |
+| [`MEASURE.md`](./MEASURE.md) | What to instrument, and what a win looks like |
+| [`STYLES.md`](./STYLES.md) | What it looks like. 30 styles, and how to collide them |
+| [`CRAFT.md`](./CRAFT.md) | How you render it. The technique arsenal |
+| [`MODELS.md`](./MODELS.md) | Which model tier runs which step, and why intake is not the cheap part |
+| [`SKIPPING.md`](./SKIPPING.md) | What every step costs to leave out |
+| [`PIPELINE.md`](./PIPELINE.md) | The map |
+
+## The six that never skip
+
+Everything else is optional. These are integrity, legal exposure, and not destroying
+something that was working:
+
+- **Every claim traces to evidence.** A number on a company site is an advertising
+  claim, not a design detail.
+- **Don't break what ranks.** Every existing URL gets a 301 before anything replaces
+  it.
+- **Consent before tracking.** Nothing fires before the visitor has agreed.
+- **Accessibility basics.** A form nobody can complete with a keyboard is a lead you
+  never knew you lost.
+- **The conversion path is proven end to end**, with a real submission someone
+  watched arrive.
+- **Deploy is reversible, and you push as them.** Snapshot first, their credentials
+  throughout.
+
+Plus Gate C: nothing becomes publicly visible under a company's domain before the
+person accountable for it has seen it.
+
+## Four shapes
+
+Landing page, small marketing site, marketing site with a blog, marketing site with a
+CMS. Decided at Gate A, because it decides the stack and — the part that gets
+skipped — who can change the pricing page on a Tuesday when you are not available.
+[`ARCHITECTURE.md`](./ARCHITECTURE.md) covers the shapes, the routing, and the
+handover.
+
+## Deploy targets
+
+Nine, including the client's own server as a first-class option: GitHub Pages,
+Netlify, Vercel, Cloudflare Pages, VPS with nginx, VPS with Docker, cPanel, S3 with
+CloudFront, and agency handoff. The target constrains the stack, never the reverse.
+
+## Running it
+
+See [`HOW_TO_RUN.md`](./HOW_TO_RUN.md). In short: point your agent at this repo, give
+it the client, and have it work the loops in order, stopping at each gate.
+
+## Lineage
+
+Sibling of [portfolio.me](https://github.com/PIIIX-org/portfolio.me), which does this
+for a person, and [systemcicy](https://github.com/PIIIX-org/systemcicy), which does it
+for a working digital product rather than a site about one. Same shape, different
+problem: a portfolio argues that someone is good, a company site has to cause an
+action and be able to prove it did.
+
+Built by [PIIIX](https://github.com/PIIIX-org).

@@ -1,0 +1,9 @@
+{
+  "id": "3",
+  "subject": "Plan MCP access to vaults on the new app",
+  "description": "Once the vault storage model is designed, figure out how Claude/MCP reads vault files directly (multi-vault, multi-user aware) instead of the old Syncthing plan.",
+  "activeForm": "Configuring filesystem MCP server",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

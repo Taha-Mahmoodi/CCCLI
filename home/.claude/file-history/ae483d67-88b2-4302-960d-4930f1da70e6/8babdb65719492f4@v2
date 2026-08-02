@@ -1,0 +1,253 @@
+import SwiftUI
+import ThirdEyeCore
+
+#if canImport(UIKit)
+  import UIKit
+#endif
+
+/// Post a screen-reader announcement. No-op where UIKit is absent (the macOS CI
+/// build), so the package still compiles on both platforms.
+func announceA11y(_ message: String) {
+  #if canImport(UIKit)
+    UIAccessibility.post(notification: .announcement, argument: message)
+  #endif
+}
+
+/// The v1 card deck (spec §4.1) — one memo per card, gesture-led.
+///
+/// The accessibility floor, which is not optional: every gesture action is also
+/// a visible labelled button AND a VoiceOver custom action, each announced. The
+/// rotor actions matter most — VoiceOver consumes left/right swipes for its own
+/// navigation, so a blind user reaches like/skip through the rotor, not a swipe.
+public struct CardDeckScreen: View {
+  @ObservedObject private var vm: RadioViewModel
+  @State private var dragX: CGFloat = 0
+  @State private var dragY: CGFloat = 0
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  public init(vm: RadioViewModel) {
+    self.vm = vm
+  }
+
+  public var body: some View {
+    VStack(spacing: 20) {
+      Text("Your deck")
+        .font(.title2.weight(.semibold))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityAddTraits(.isHeader)
+
+      if vm.queue.isEmpty {
+        emptyState
+      } else if vm.deckAtEnd {
+        endState
+      } else {
+        deck
+        actionButtons
+      }
+
+      recordButton
+    }
+    .padding(20)
+  }
+
+  // MARK: - States
+
+  private var emptyState: some View {
+    VStack(spacing: 8) {
+      Text("Your deck is empty").font(.headline)
+      Text("Press and hold the record button to add the first memo.")
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .multilineTextAlignment(.center)
+    }
+    .frame(maxWidth: .infinity)
+    .padding(30)
+  }
+
+  private var endState: some View {
+    VStack(spacing: 10) {
+      Text("You're all caught up").font(.headline)
+      Text("That's the end of the stream — no endless scroll here.")
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .multilineTextAlignment(.center)
+      Button("Start over") {
+        vm.restartDeck()
+        announceA11y("Back to the top of your stream.")
+      }
+      .buttonStyle(.borderedProminent)
+      .frame(minHeight: 44)
+    }
+    .frame(maxWidth: .infinity)
+    .padding(30)
+  }
+
+  // MARK: - The deck
+
+  private var deck: some View {
+    ZStack {
+      if let next = vm.deckNext {
+        card(for: next, index: vm.deckCursor + 1, showTranscript: false)
+          .scaleEffect(0.95)
+          .opacity(0.5)
+          .accessibilityHidden(true)
+      }
+      if let current = vm.deckCurrent {
+        card(for: current, index: vm.deckCursor, showTranscript: true)
+          .offset(x: reduceMotion ? 0 : dragX)
+          .rotationEffect(.degrees(reduceMotion ? 0 : Double(dragX) * 0.04))
+          .gesture(
+            DragGesture()
+              .onChanged { value in
+                dragX = value.translation.width
+                dragY = value.translation.height
+              }
+              .onEnded { _ in
+                let action = classifySwipe(dx: Double(dragX), dy: Double(dragY))
+                withAnimation(.easeOut(duration: 0.2)) { dragX = 0 }
+                dragY = 0
+                switch action {
+                case .skip: skip()
+                case .like: likeIntent()
+                case nil: break
+                }
+              },
+          )
+          // The screen-reader route: rotor actions, not swipes.
+          .accessibilityElement(children: .combine)
+          .accessibilityLabel(
+            "Memo \(vm.deckCursor + 1) of \(vm.queue.count), \(spokenDuration(current.durationMs))",
+          )
+          .accessibilityAction(named: current.liked ? "Unlike" : "Like") {
+            vm.toggleLikeCurrent()
+            announceA11y(current.liked ? "Unliked." : "Liked.")
+          }
+          .accessibilityAction(named: "Like and go to the next memo") { likeAndNext() }
+          .accessibilityAction(named: "Skip this memo") { skip() }
+          .accessibilityAction(named: "Play") { vm.playFrom(vm.deckCursor) }
+      }
+    }
+  }
+
+  private func card(for memo: Memo, index: Int, showTranscript: Bool) -> some View {
+    VStack(alignment: .leading, spacing: 14) {
+      HStack {
+        VStack(alignment: .leading, spacing: 2) {
+          Text("Memo \(index + 1)").font(.subheadline).foregroundStyle(.secondary)
+          Text(formatDuration(memo.durationMs)).font(.title3.weight(.semibold))
+        }
+        Spacer()
+        if memo.liked {
+          Image(systemName: "heart.fill").foregroundStyle(.pink)
+        }
+      }
+
+      Spacer(minLength: 8)
+
+      Button {
+        vm.playFrom(index)
+      } label: {
+        Image(systemName: "play.fill").font(.title)
+          .frame(width: 72, height: 72)
+      }
+      .buttonStyle(.borderedProminent)
+      .clipShape(Circle())
+      .frame(maxWidth: .infinity)
+      .accessibilityLabel("Play memo \(index + 1)")
+
+      if showTranscript {
+        let transcript = memo.displayTranscript
+        if transcript.isEmpty {
+          Text("Voice memo — press play to listen.")
+            .font(.footnote).foregroundStyle(.secondary)
+        } else {
+          Text(transcript).font(.body)
+          if memo.correctedTranscript == nil {
+            Text("(machine transcript — may contain errors)")
+              .font(.caption2).foregroundStyle(.secondary)
+          }
+        }
+      }
+
+      Spacer(minLength: 8)
+    }
+    .padding(20)
+    .frame(maxWidth: .infinity, minHeight: 280, alignment: .leading)
+    .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 24))
+  }
+
+  // MARK: - The non-gesture floor
+
+  private var actionButtons: some View {
+    HStack(spacing: 16) {
+      Button { skip() } label: {
+        Image(systemName: "hand.thumbsdown").frame(width: 44, height: 44)
+      }
+      .accessibilityLabel("Skip this memo")
+
+      Button {
+        vm.toggleLikeCurrent()
+        announceA11y(vm.deckCurrent?.liked == true ? "Liked." : "Unliked.")
+      } label: {
+        Image(systemName: vm.deckCurrent?.liked == true ? "heart.fill" : "heart")
+          .font(.title2)
+          .frame(width: 56, height: 56)
+      }
+      .accessibilityLabel(vm.deckCurrent?.liked == true ? "Unlike this memo" : "Like this memo")
+
+      Button { likeAndNext() } label: {
+        Image(systemName: "forward.end").frame(width: 44, height: 44)
+      }
+      .accessibilityLabel("Like and go to the next memo")
+    }
+    .buttonStyle(.bordered)
+  }
+
+  /// Press-and-hold to record (v1 gesture) with the mandatory tap twin — a user
+  /// who cannot sustain a press is never excluded (principle 6's real concern).
+  private var recordButton: some View {
+    Button {
+      // Tap twin: toggles start/stop.
+      vm.isRecording ? vm.stopRecording() : vm.startRecording()
+      announceA11y(vm.isRecording ? "Recording started." : "Memo saved.")
+    } label: {
+      Image(systemName: vm.isRecording ? "stop.fill" : "mic.fill")
+        .font(.title)
+        .frame(width: 72, height: 72)
+    }
+    .buttonStyle(.borderedProminent)
+    .clipShape(Circle())
+    .accessibilityLabel(vm.isRecording ? "Stop recording" : "Record a voice memo. Tap, or press and hold.")
+    .onLongPressGesture(minimumDuration: 0.22) {
+      // long-press recognised
+    } onPressingChanged: { pressing in
+      if pressing {
+        if !vm.isRecording {
+          vm.startRecording()
+          announceA11y("Recording — release to stop.")
+        }
+      } else if vm.isRecording {
+        vm.stopRecording()
+        announceA11y("Memo saved.")
+      }
+    }
+  }
+
+  // MARK: - Actions (shared by gesture, button, and rotor)
+
+  private func likeIntent() {
+    let advanced = vm.likeIntent()
+    announceA11y(advanced ? "Liked. Next memo." : "Liked.")
+    if vm.deckAtEnd { announceA11y("You're all caught up. That's the end of the stream.") }
+  }
+
+  private func likeAndNext() {
+    vm.likeAndNext()
+    announceA11y(vm.deckAtEnd ? "You're all caught up." : "Liked. Next memo.")
+  }
+
+  private func skip() {
+    vm.skipCard()
+    announceA11y(vm.deckAtEnd ? "You're all caught up." : "Skipped.")
+  }
+}

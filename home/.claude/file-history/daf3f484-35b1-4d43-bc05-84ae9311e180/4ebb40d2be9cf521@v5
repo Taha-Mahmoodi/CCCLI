@@ -1,0 +1,35 @@
+---
+name: yildizim-galaxy-project
+description: "Yildizim — closed-source 3D galaxy/gamification visualization layer for hosted Chapters; private PIIIX-org/yildizim; 30 merged PRs — all surfaces live + physics/C2 refinement + badge emblems; hosted-UI spec merged into Chapters dev"
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: daf3f484-35b1-4d43-bc05-84ae9311e180
+  modified: 2026-07-18T13:43:57.632Z
+---
+
+Yildizim (galaxy project — deliberately shares its name with the unrelated [[yildizim-messenger]]; user confirmed reuse) is the closed-source, full-3D, gamified galaxy visualization layer for knowledge bases. Open-core relationship with [[chapters-project]]: self-hosted Chapters (OSS) gets a plain node-graph; PIIIX-hosted Chapters (paid) gets Yildizim as the differentiator.
+
+**Repo:** github.com/PIIIX-org/yildizim (private, org-owned). Local clone at `~/Documents/yildizim-galaxy` (folder named to avoid colliding with `~/Documents/Yildizim`, the messenger). All state lives in README.md + `docs/research-3d-gamification-precedents.md`.
+
+**Design state as of 2026-07-17 — mechanics brainstorming done:**
+- Hierarchy: project = galaxy, vault = star, note = planet, sub-note/comment = moon; size driven by info volume + usage.
+- Project evolution ladder: nebula → red dwarf → main sequence → blue giant → supernova (explicit user-triggered milestone, not automatic) → black hole (permanent, gravitational landmark). Stages 1–4 automatic, weighted to cadence + distinct contributors, not raw edit count.
+- Decay reverses stages with a visible countdown (never a surprise — dark-pattern research drew this line); black holes never fully revert, they dim to a remnant and recover fast.
+- Rewards: black hole earns permanent title + customizable visual signature + nav pinning + Hall of Constellations entry; Stardust currency for cosmetics; 250 badges (180 common / 50 unique / 20 rare, enumeration deferred); constellations, cosmic events, collective company goals, quarterly recap.
+- Dual view modes: by-project and by-user (privacy-preserving — teammates see galaxy size/shape only, never content).
+- Deep-research pass done (105 agents): gamification/decay findings solid (loss-aversion-on-earned-status RCT, Forest precedent, transparency requirement); galaxy-scale visual clarity has NO verified precedent anywhere — recorded as open problem with a working hypothesis in README (semantic LOD from cartography, Leiden constellations, evolution-brightness-as-hierarchy, atmospheric depth cues), final solution deferred to implementation time by user decision.
+
+**Deferred:** live multiplayer mechanics → v2 (user explicitly doesn't know how it should work yet). Art direction / "jaw-dropping premium look" → prototyping phase (research found no recipe for premium-vs-generic 3D space UI).
+
+**Build state (2026-07-17, /loop session, 6 merged PRs #1–#6):** working prototype at `~/Documents/yildizim-galaxy`. Vite + TS + Three.js, no framework; deterministic mock universe in `src/data.ts` (evolution/decay/vaults/notes logic pure + 16 vitest cases). Built and verified: 3 zoom tiers (multi-galaxy sky → vault stars w/ halos → planets/moons orbiting a lit star, orrery rings, recency-encoded orbits), stage palettes (warm-filmic, anti-cliché), decay-to-dust terminal state, black holes (accretion+photon rings, layout warp, shader in-fall streams), ambient data shuttles + AI-search vessel w/ scan pulses, supernova ceremony (__yz.supernova: detonation → reborn as black hole, "galaxy conquered"), proximity-fade CSS2D labels, hover panel w/ decay countdown, opening flight, per-tier camera limits, spin-freeze inside systems. `window.__yz` debug hooks (list/enter/enterVault/exit/aiSearch/craftCount/supernova) let tooling drive it; verification loop = vite preview + headed browse screenshots (headless has no WebGL). README carries all screenshots.
+
+**Workflow notes:** PR flow established this session (branch → PR → self-merge; private repo, loop-authorized). User intends visual work on Fable 5. Refused: opening PRs from Said's account (misattribution; needs Said's real involvement).
+
+**Second loop (2026-07-17, PRs #7-#10 + Chapters PR #27):** semantic-LOD hypothesis VALIDATED — 220 projects / 371,355 notes at steady 60fps (?scale=company; global 900k particle budget, size compensation, draw-range LOD, label DOM culling, scale-aware spacing; results recorded in README). By-user view (U key: private orbs, mass+recency, aggregate-stats-only panel). Badge/reward UI (11-badge live catalog across 3 tiers, toast ceremony, B shelf, persistent stardust; rare shows "Undiscovered"). Stardust customization (C drawer: 5 signatures recoloring conquered black holes, buy/apply/persist, RewardStore.spend). Hosted-UI page-by-page spec written from the prototype and merged into Chapters dev (docs/superpowers/specs/2026-07-17-hosted-ui-structure-design.md) — UI phase unblocked; __yz hooks designated as the mounted component's API.
+
+**Third loop (2026-07-18, refinement, PRs #11–#26):** user brief = physics/spacing/C2-aesthetic/cursor-zoom/orbit-fixes. Shipped: zoomToCursor + arc flights; rank-spaced never-crossing orbits (shared orbit-plane objects); C2 HUD chrome (corner brackets, mono telemetry, target reticle); luminous nuclei on galaxies/orbs w/ semantic-LOD falloff; supernova drives nucleus; screen-space label declutter (declutterKeep, both views) + type tiers; tidal-stripping stream physics (near-side strip, tangential accretion-plane landing, heat whitening); planet surfaces (banded textures, axial tilt, spin, rings on size≥7, moons re-spaced); selection language (reticle→glint/nucleus-lift→commit pulse); galaxy chains (dashed constellation arcs, uniquePairs); tier-2 vault constellations (clusterByProximity mock-Leiden, chained stars + region glows); craft grammar (rim-to-rim, orbital bows, distance-scaled speed, index-chained AI hops); README physics-grammar section + full screenshot refresh. 60fps at company scale re-validated throughout.
+
+**Fourth loop (2026-07-18, second brief, PRs #27–#30):** drag tuning (screenSpacePanning) + CONTACTS HUD (clickable in-pan target list, stage/black-hole tags, click-to-fly); badge emblems (11 hand-drawn SVG glyphs in tier-ringed medallions, toast leads with medallion, awardAll/__yz.grantAllBadges for review); people-view refinement (dashed ring guides, roster contacts w/ ACTIVE/IDLE-nD tags + activityColor, click-to-approach); top-center status strip (SECTOR OVERVIEW / VAULT SCAN / ORBITAL RESOLVE / ROSTER / IN TRANSIT) completing the five-corner operator frame.
+
+**Still open:** real-backend wiring (blocked on Chapters backend), the actual UI-phase build (unblocked), audio/a11y/mobile polish, multiplayer (v2), full 250-badge enumeration.

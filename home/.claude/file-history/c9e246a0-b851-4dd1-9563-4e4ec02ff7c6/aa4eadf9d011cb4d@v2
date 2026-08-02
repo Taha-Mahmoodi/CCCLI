@@ -1,0 +1,54 @@
+import { test, expect, type Page } from "@playwright/test";
+
+async function signUp(page: Page, name = "Nadia Wayfarer") {
+  const email = `social-${Date.now()}-${Math.floor(performance.now())}@example.com`;
+  await page.goto("/app/signup");
+  await page.getByLabel("Name").fill(name);
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password").fill("test-password-123");
+  await page.getByLabel("I am a").selectOption("BLIND_TRAVELER");
+  await page.getByRole("button", { name: /create account/i }).click();
+  await expect(page).toHaveURL(/\/app$/);
+}
+
+test("post, reply, and like flow", async ({ page }) => {
+  await signUp(page);
+  await expect(
+    page.getByRole("heading", { name: "Community", level: 1 }),
+  ).toBeVisible();
+
+  const body = `Took the riverside route today. ${Date.now()}`;
+  await page.getByLabel(/share something with the community/i).fill(body);
+  await page.getByRole("button", { name: /^post$/i }).click();
+
+  const article = page.locator("article", { hasText: body });
+  await expect(article).toBeVisible();
+
+  // Open the discussion and reply
+  await article.getByRole("link", { name: /open the discussion/i }).click();
+  await expect(page).toHaveURL(/\/app\/post\//);
+  await page.getByLabel(/add a reply/i).fill("Great tip, thank you.");
+  await page.getByRole("button", { name: /^reply$/i }).click();
+  await expect(page.getByText("Great tip, thank you.")).toBeVisible();
+
+  // Like the post
+  await page.getByRole("button", { name: /like this post/i }).click();
+  await expect(
+    page.getByRole("button", { name: /remove your like/i }),
+  ).toBeVisible();
+});
+
+test("author name links to their profile with their posts", async ({ page }) => {
+  await signUp(page, "Ravi Compass");
+  const body = `Heading to the coast next week. ${Date.now()}`;
+  await page.getByLabel(/share something with the community/i).fill(body);
+  await page.getByRole("button", { name: /^post$/i }).click();
+
+  const article = page.locator("article", { hasText: body });
+  await article.getByRole("link", { name: "Ravi Compass" }).click();
+  await expect(page).toHaveURL(/\/app\/u\//);
+  await expect(
+    page.getByRole("heading", { name: "Ravi Compass", level: 1 }),
+  ).toBeVisible();
+  await expect(page.getByText(body)).toBeVisible();
+});

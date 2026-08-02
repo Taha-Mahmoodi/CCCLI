@@ -1,0 +1,89 @@
+// Channels / stations (Slice 1b). The play-queue is a pure function of the
+// memos and the active channel — no stored order (shuffle is a later slice).
+import type { Channel, Memo } from "./types";
+
+export const DEFAULT_CHANNEL: Channel = { id: "main", name: "Main" };
+export const ALL = "all";
+
+const KEY = "tew:channels";
+
+export function loadChannels(): Channel[] {
+  if (typeof localStorage === "undefined") return [DEFAULT_CHANNEL];
+  try {
+    const raw = localStorage.getItem(KEY);
+    if (!raw) return [DEFAULT_CHANNEL];
+    const parsed = JSON.parse(raw) as Channel[];
+    return Array.isArray(parsed) && parsed.length ? parsed : [DEFAULT_CHANNEL];
+  } catch {
+    return [DEFAULT_CHANNEL];
+  }
+}
+
+export function saveChannels(channels: Channel[]): void {
+  if (typeof localStorage === "undefined") return;
+  try {
+    localStorage.setItem(KEY, JSON.stringify(channels));
+  } catch {
+    /* private mode / quota — channels just won't persist */
+  }
+}
+
+/** The queue for a given active channel. "all" plays everything, chronological. */
+export function channelQueue(memos: Memo[], activeChannel: string): Memo[] {
+  return activeChannel === ALL ? memos : memos.filter((m) => m.channelId === activeChannel);
+}
+
+/** Fisher-Yates shuffle of a copy of the ids (app-code randomness is fine). */
+export function shuffleIds(ids: string[]): string[] {
+  const a = [...ids];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+/**
+ * The final play-queue. Chronological when shuffleOrder is null; otherwise the
+ * channel's memos reordered by shuffleOrder, with any memos not in the order
+ * (e.g. recorded after shuffle turned on) appended in chronological order.
+ */
+export function orderedQueue(
+  memos: Memo[],
+  activeChannel: string,
+  shuffleOrder: string[] | null,
+): Memo[] {
+  const base = channelQueue(memos, activeChannel);
+  if (!shuffleOrder) return base;
+  const byId = new Map(base.map((m) => [m.id, m]));
+  const ordered: Memo[] = [];
+  const seen = new Set<string>();
+  for (const id of shuffleOrder) {
+    const m = byId.get(id);
+    if (m) {
+      ordered.push(m);
+      seen.add(id);
+    }
+  }
+  for (const m of base) if (!seen.has(m.id)) ordered.push(m);
+  return ordered;
+}
+
+export function slugify(name: string): string {
+  const s = name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return s || "channel";
+}
+
+/** Unique channel id from a name, avoiding collisions with existing ids. */
+export function uniqueChannelId(name: string, existing: Channel[]): string {
+  const taken = new Set(existing.map((c) => c.id));
+  const base = slugify(name);
+  if (!taken.has(base)) return base;
+  let n = 2;
+  while (taken.has(`${base}-${n}`)) n++;
+  return `${base}-${n}`;
+}

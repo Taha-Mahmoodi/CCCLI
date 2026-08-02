@@ -1,0 +1,46 @@
+# Herat Dental Union — Headless WordPress Theme
+
+The WordPress backend for the **Herat Dental Union** site: a headless theme that
+turns WordPress into a structured content API, consumed by a separate Next.js
+front-end.
+
+> A [Cyborg Tech Creative Agency](https://github.com/CyborgTech-co) project.
+> Front-end: [`hdu`](https://github.com/CyborgTech-co/hdu).
+
+---
+
+## What it does
+
+- **Headless by design** — WordPress manages content; rendering happens in the
+  Next.js front-end
+- **Custom REST endpoints** — bespoke API routes tailored to the site's content
+- **Advanced Custom Fields** — structured, editor-friendly content modeling
+- **Editor-first** — non-technical staff manage content through familiar WordPress
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| CMS | WordPress (headless) |
+| Content model | Advanced Custom Fields (ACF) |
+| API | Custom REST endpoints + WordPress REST API |
+| Language | PHP |
+
+## Structure
+
+```text
+HDU-WordPress/
+  functions.php     # Theme setup, REST endpoints, ACF wiring
+  includes/         # Supporting PHP modules
+  page-*.php        # Page templates
+  style.css         # Theme header and base styles
+  index.php         # Entry
+```
+
+## Getting started
+
+1. Copy the theme into `wp-content/themes/` and activate it.
+2. Install and activate **Advanced Custom Fields**.
+3. Configure the field groups and content the endpoints expect.
+4. Point the [`hdu`](https://github.com/CyborgTech-co/hdu) front-end at this
+   site's API base URL.

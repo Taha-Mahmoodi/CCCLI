@@ -1,0 +1,9 @@
+{
+  "id": "14",
+  "subject": "Brainstorm Graph engine & view sub-project structure",
+  "description": "Ask clarifying questions on Graph engine (#3): link index/backlinks ownership, EXTRACTED vs INFERRED edge definition, Leiden clustering vs manual type/tag coloring, merged cross-vault graph behavior. No code, research/structure only.",
+  "activeForm": "Brainstorming Graph engine structure",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

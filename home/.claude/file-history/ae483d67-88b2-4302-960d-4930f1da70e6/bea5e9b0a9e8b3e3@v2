@@ -1,0 +1,50 @@
+// Media Session API wiring — the "hardware / lock-screen / headphone" route to
+// playback actions (non-negotiable #5: every action reachable three ways).
+
+type Handlers = {
+  play: () => void;
+  pause: () => void;
+  next: () => void;
+  previous: () => void;
+};
+
+function session(): MediaSession | null {
+  if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return null;
+  return navigator.mediaSession;
+}
+
+export function setupMediaSession(handlers: Handlers): void {
+  const ms = session();
+  if (!ms) return;
+  const set = (action: MediaSessionAction, cb: () => void) => {
+    try {
+      ms.setActionHandler(action, cb);
+    } catch {
+      // Action unsupported on this browser — ignore.
+    }
+  };
+  set("play", handlers.play);
+  set("pause", handlers.pause);
+  set("nexttrack", handlers.next);
+  set("previoustrack", handlers.previous);
+}
+
+export function setNowPlaying(title: string): void {
+  const ms = session();
+  if (!ms) return;
+  try {
+    ms.metadata = new MediaMetadata({ title, artist: "Third Eye World" });
+  } catch {
+    // MediaMetadata unavailable — ignore.
+  }
+}
+
+export function setPlaybackState(state: MediaSessionPlaybackState): void {
+  const ms = session();
+  if (!ms) return;
+  try {
+    ms.playbackState = state;
+  } catch {
+    // ignore
+  }
+}

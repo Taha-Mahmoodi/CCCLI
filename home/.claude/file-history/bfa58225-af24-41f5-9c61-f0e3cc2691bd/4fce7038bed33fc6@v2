@@ -1,0 +1,540 @@
+# Dashboard Backend Prerequisites — Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Close four real gaps discovered while designing PLAN.md Phase 7 (manager web dashboard) — the backend has no way to (1) list reps for an assignment picker, (2) list a zone's current assignments, (3) get each rep's latest known position for a live map, or (4) let the frontend fetch the VAPID public key it needs to construct a push subscription. None of Phases 1-6 needed these; the dashboard is the first consumer. This is not a PLAN.md line item of its own — it's a small, self-contained prerequisite for 7.1-7.4, called out explicitly in PROGRESS.md when done.
+
+**Why this is its own branch, done first, backend-only:** every endpoint here is independently verifiable the same way the last six phases were (pytest + CI), before any frontend code exists to build against a half-guessed contract. Building the dashboard against endpoints that don't exist yet, or against a guess of what they'll return, is the failure mode this branch avoids.
+
+**Tech Stack:** Same as every prior backend phase — Python 3.12, FastAPI, SQLAlchemy 2.0 async, pytest. No migration needed — every endpoint here is a read-only query over tables that already exist.
+
+## Global Constraints
+
+- All four endpoints are manager-only (`require_manager`) — the dashboard is a manager-only surface, and this matches every other multi-rep-visible endpoint in this codebase (`list_tasks`/`list_goals`/`list_violations` for a manager caller).
+- No new tables, no migration. Every endpoint reads existing rows.
+- Cross-tenant access: relies on the ambient tenancy filter, consistent with every other read-only list endpoint in this codebase (`list_zones`, `list_goals`, etc.) — no explicit `tenant_id` re-check needed at this layer.
+- `GET /api/v1/pings/latest`'s "one row per rep" query uses a SQL window function (`ROW_NUMBER() OVER (PARTITION BY rep_id ORDER BY recorded_at DESC)`) — this is the one genuinely new piece of SQL in this plan. It must be verified to actually run against the test suite's SQLite backend (`aiosqlite`), not just Postgres — SQLite has supported window functions since 3.25 (2018) so this should work on any modern Python, but "should work" is a claim to verify empirically with a real passing test, not assume.
+
+---
+
+## File Structure
+
+```
+backend/
+  app/
+    auth/
+      router.py                   # MODIFY: add users_router (GET /api/v1/users)
+      service.py                   # MODIFY: append list_users
+    zones/
+      router.py                   # MODIFY: add GET /{zone_id}/assignments
+      service.py                    # MODIFY: append list_zone_assignments
+    violations/
+      schemas.py                  # MODIFY: append VapidPublicKeyOut
+      service.py                   # MODIFY: append get_vapid_public_key
+      router.py                    # MODIFY: add GET /push-subscriptions/vapid-public-key
+    pings/
+      schemas.py                  # MODIFY: append LatestPingOut (includes rep_id, unlike PingOut)
+      service.py                   # MODIFY: append list_latest_pings
+      router.py                    # MODIFY: add GET /latest (manager-only)
+    main.py                     # MODIFY: mount users_router
+  tests/
+    auth/
+      test_router.py               # MODIFY: append
+    zones/
+      test_router.py               # MODIFY: append
+    violations/
+      test_router.py               # MODIFY: append
+    pings/
+      test_service.py               # MODIFY: append
+      test_router.py                # MODIFY: append
+```
+
+**Interfaces summary:**
+- `app.auth.service.list_users(db, role=None) -> list[User]`; `app.auth.router.users_router` (prefix `/api/v1/users`) — `GET ""` with optional `?role=` query param.
+- `app.zones.service.list_zone_assignments(db, zone_id) -> list[ZoneAssignment]`; `GET /api/v1/zones/{zone_id}/assignments`.
+- `app.violations.service.get_vapid_public_key() -> str`; `app.violations.schemas.VapidPublicKeyOut` (`vapid_public_key: str`); `GET /api/v1/push-subscriptions/vapid-public-key`.
+- `app.pings.service.list_latest_pings(db) -> list[LocationPing]`; `app.pings.schemas.LatestPingOut` (`id`, `rep_id`, `recorded_at`, `latitude`, `longitude`, `accuracy`); `GET /api/v1/pings/latest`.
+
+---
+
+### Task 1: List endpoints — users, zone assignments, VAPID public key
+
+**Files:**
+- Modify: `backend/app/auth/service.py`, `backend/app/auth/router.py`, `backend/tests/auth/test_router.py`
+- Modify: `backend/app/zones/service.py`, `backend/app/zones/router.py`, `backend/tests/zones/test_router.py`
+- Modify: `backend/app/violations/schemas.py`, `backend/app/violations/service.py`, `backend/app/violations/router.py`, `backend/tests/violations/test_router.py`
+- Modify: `backend/app/main.py`
+
+**Interfaces:** per the plan header's Interfaces summary, the users/zone-assignments/VAPID-key pieces only (pings/latest is Task 2).
+
+- [ ] **Step 1: Read the existing files first**
+
+Read `backend/app/auth/router.py`, `backend/app/auth/service.py`, `backend/app/zones/router.py`, `backend/app/zones/service.py`, `backend/app/violations/router.py`, `backend/app/violations/service.py`, and `backend/app/violations/schemas.py` in full before editing any of them, to match each file's existing style exactly (import ordering, how `require_manager` is already used elsewhere, how services accept `db` as their first arg).
+
+- [ ] **Step 2: Write the failing tests**
+
+Append to `backend/tests/auth/test_router.py` (match its existing registration/auth helper conventions — read the file first, reuse its helpers, don't redefine them):
+
+```python
+async def test_manager_lists_users_filtered_by_role(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "mgr@example.com", "password": "hunter2pass", "role": "manager"},
+        headers={"X-Tenant-Id": tenant_id},
+    )
+    mgr_token = mgr_response.json()["access_token"]
+    await client.post(
+        "/api/v1/auth/register",
+        json={"email": "rep@example.com", "password": "hunter2pass", "role": "rep"},
+        headers={"X-Tenant-Id": tenant_id},
+    )
+
+    response = await client.get(
+        "/api/v1/users", params={"role": "rep"}, headers={"Authorization": f"Bearer {mgr_token}"}
+    )
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    assert response.json()[0]["role"] == "rep"
+
+
+async def test_manager_lists_users_without_role_filter_returns_all(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "mgr@example.com", "password": "hunter2pass", "role": "manager"},
+        headers={"X-Tenant-Id": tenant_id},
+    )
+    mgr_token = mgr_response.json()["access_token"]
+    await client.post(
+        "/api/v1/auth/register",
+        json={"email": "rep@example.com", "password": "hunter2pass", "role": "rep"},
+        headers={"X-Tenant-Id": tenant_id},
+    )
+
+    response = await client.get("/api/v1/users", headers={"Authorization": f"Bearer {mgr_token}"})
+
+    assert response.status_code == 200
+    assert len(response.json()) == 2
+
+
+async def test_rep_cannot_list_users(client):
+    tenant_id = str(uuid.uuid4())
+    rep_response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "rep@example.com", "password": "hunter2pass", "role": "rep"},
+        headers={"X-Tenant-Id": tenant_id},
+    )
+    rep_token = rep_response.json()["access_token"]
+
+    response = await client.get("/api/v1/users", headers={"Authorization": f"Bearer {rep_token}"})
+
+    assert response.status_code == 403
+```
+
+Append to `backend/tests/zones/test_router.py` (read the file first, match its conventions):
+
+```python
+async def test_manager_lists_zone_assignments(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "mgr@example.com", "password": "hunter2pass", "role": "manager"},
+        headers={"X-Tenant-Id": tenant_id},
+    )
+    mgr_token = mgr_response.json()["access_token"]
+    rep_response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "rep@example.com", "password": "hunter2pass", "role": "rep"},
+        headers={"X-Tenant-Id": tenant_id},
+    )
+    rep_id = rep_response.json()  # adjust to however this file already extracts a rep's id -- read
+    # the existing tests in this file first; if none extract an id this way, register then call
+    # GET /api/v1/auth/me with the rep's token instead, matching the file's established pattern.
+
+    zone_response = await client.post(
+        "/api/v1/zones",
+        json={
+            "name": "Territory",
+            "boundary": {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]},
+        },
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+    zone_id = zone_response.json()["id"]
+
+    list_response = await client.get(
+        f"/api/v1/zones/{zone_id}/assignments", headers={"Authorization": f"Bearer {mgr_token}"}
+    )
+    assert list_response.status_code == 200
+    assert list_response.json() == []
+```
+
+**Before finalizing this test, read `backend/tests/zones/test_router.py`'s existing tests to see exactly how they extract a registered rep's `id` (via `/auth/me` or otherwise) and use that exact pattern** — the placeholder comment above marks where to fix this against the real file.
+
+Append to `backend/tests/violations/test_router.py`:
+
+```python
+async def test_manager_gets_vapid_public_key(client, monkeypatch):
+    monkeypatch.setattr(
+        "app.violations.service.get_settings",
+        lambda: __import__("app.config", fromlist=["Settings"]).Settings(vapid_public_key="fake-pub-key"),
+    )
+    tenant_id = str(uuid.uuid4())
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "mgr@example.com", "password": "hunter2pass", "role": "manager"},
+        headers={"X-Tenant-Id": tenant_id},
+    )
+    token = response.json()["access_token"]
+
+    key_response = await client.get(
+        "/api/v1/push-subscriptions/vapid-public-key", headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert key_response.status_code == 200
+    assert key_response.json() == {"vapid_public_key": "fake-pub-key"}
+
+
+async def test_rep_cannot_get_vapid_public_key(client):
+    tenant_id = str(uuid.uuid4())
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "rep@example.com", "password": "hunter2pass", "role": "rep"},
+        headers={"X-Tenant-Id": tenant_id},
+    )
+    token = response.json()["access_token"]
+
+    key_response = await client.get(
+        "/api/v1/push-subscriptions/vapid-public-key", headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert key_response.status_code == 403
+```
+
+- [ ] **Step 3: Run tests to verify they fail**
+
+Run: `cd backend && uv run pytest tests/auth/test_router.py tests/zones/test_router.py tests/violations/test_router.py -v`
+Expected: FAIL — `404` on all three new paths.
+
+- [ ] **Step 4: Append `list_users` to `app/auth/service.py`**
+
+```python
+async def list_users(db: AsyncSession, role: str | None = None) -> list[User]:
+    query = select(User)
+    if role is not None:
+        query = query.where(User.role == role)
+    result = await db.execute(query)
+    return list(result.scalars().all())
+```
+
+(Add `select` to the file's existing SQLAlchemy imports if not already imported.)
+
+- [ ] **Step 5: Append `users_router` to `app/auth/router.py`**
+
+Add imports (merge with existing):
+
+```python
+from fastapi import Query
+
+from app.auth.deps import require_manager  # add require_manager to the existing get_current_user, get_tenant_id import
+from app.auth.service import list_users  # add to the existing service import block
+```
+
+Append to the end of the file:
+
+```python
+users_router = APIRouter(prefix="/api/v1/users", tags=["users"])
+
+
+@users_router.get("", response_model=list[UserOut])
+async def list_users_endpoint(
+    role: str | None = Query(None),
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+) -> list[UserOut]:
+    return await list_users(db, role=role)
+```
+
+- [ ] **Step 6: Mount `users_router` in `app/main.py`**
+
+Read the current file in full first. Add, following the exact existing pattern (alongside the `auth_router` import/mount):
+
+```python
+from app.auth.router import users_router as auth_users_router
+```
+
+```python
+app.include_router(auth_users_router)
+```
+
+(Aliased on import since `users_router` as a bare name could shadow/confuse against the many other `*_router` names already imported in this file — match whatever naming this file already uses for its other imports and adjust if a plainer name reads better once you see the real file.)
+
+- [ ] **Step 7: Append `list_zone_assignments` to `app/zones/service.py`**
+
+```python
+async def list_zone_assignments(db: AsyncSession, zone_id: uuid.UUID) -> list[ZoneAssignment]:
+    result = await db.execute(select(ZoneAssignment).where(ZoneAssignment.zone_id == zone_id))
+    return list(result.scalars().all())
+```
+
+- [ ] **Step 8: Append the endpoint to `app/zones/router.py`**
+
+```python
+@router.get("/{zone_id}/assignments", response_model=list[ZoneAssignmentOut])
+async def list_zone_assignments_endpoint(
+    zone_id: uuid.UUID,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+) -> list[ZoneAssignmentOut]:
+    return await list_zone_assignments(db, zone_id)
+```
+
+(Add `list_zone_assignments` to the existing `from app.zones.service import (...)` block.)
+
+- [ ] **Step 9: Append `VapidPublicKeyOut` to `app/violations/schemas.py`**
+
+```python
+class VapidPublicKeyOut(BaseModel):
+    vapid_public_key: str
+```
+
+- [ ] **Step 10: Append `get_vapid_public_key` to `app/violations/service.py`**
+
+```python
+def get_vapid_public_key() -> str:
+    return get_settings().vapid_public_key
+```
+
+(`get_settings` is already imported in this file from Task 4 of the violations-alerts plan — reuse it, don't re-import.)
+
+- [ ] **Step 11: Append the endpoint to `app/violations/router.py`**
+
+```python
+@push_subscriptions_router.get("/vapid-public-key", response_model=VapidPublicKeyOut)
+async def get_vapid_public_key_endpoint(
+    current_user: User = Depends(require_manager),
+) -> VapidPublicKeyOut:
+    return VapidPublicKeyOut(vapid_public_key=get_vapid_public_key())
+```
+
+(Add `VapidPublicKeyOut` to the existing schemas import, `get_vapid_public_key` to the existing service import.)
+
+- [ ] **Step 12: Run tests to verify they pass**
+
+Run: `cd backend && uv run pytest tests/auth/test_router.py tests/zones/test_router.py tests/violations/test_router.py -v`
+Expected: all new tests `PASSED`.
+
+- [ ] **Step 13: Run the full suite and ruff**
+
+Run: `cd backend && uv run pytest -q && uv run ruff check .`
+Expected: all tests pass, ruff clean.
+
+- [ ] **Step 14: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/auth/ backend/app/zones/ backend/app/violations/ backend/app/main.py backend/tests/auth/ backend/tests/zones/ backend/tests/violations/
+git commit -m "feat(backend): list-users, list-zone-assignments, and VAPID-public-key endpoints for the dashboard"
+```
+
+---
+
+### Task 2: `GET /api/v1/pings/latest`
+
+**Files:**
+- Modify: `backend/app/pings/schemas.py`, `backend/app/pings/service.py`, `backend/app/pings/router.py`
+- Modify: `backend/tests/pings/test_service.py`, `backend/tests/pings/test_router.py`
+
+**Interfaces:**
+- Produces: `list_latest_pings(db) -> list[LocationPing]`, `LatestPingOut`, `GET /api/v1/pings/latest`.
+
+This is the one genuinely new piece of SQL in this plan — a window-function "one row per rep, the most recent one" query. Verify it actually executes against SQLite (this repo's test backend), not just that the code compiles.
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `backend/tests/pings/test_service.py` (read the file first for its existing helpers/fixtures):
+
+```python
+async def test_list_latest_pings_returns_one_per_rep(db_session):
+    import uuid
+    from datetime import datetime, timezone
+
+    from app.auth.models import User
+    from app.pings.service import list_latest_pings, record_ping
+
+    tenant_id = uuid.uuid4()
+    rep_a = User(
+        id=uuid.uuid4(), tenant_id=tenant_id, email=f"{uuid.uuid4()}@example.com",
+        hashed_password="irrelevant", role="rep",
+    )
+    rep_b = User(
+        id=uuid.uuid4(), tenant_id=tenant_id, email=f"{uuid.uuid4()}@example.com",
+        hashed_password="irrelevant", role="rep",
+    )
+    db_session.add_all([rep_a, rep_b])
+    await db_session.flush()
+
+    await record_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep_a.id,
+        recorded_at=datetime(2026, 8, 3, 9, 0, tzinfo=timezone.utc),
+        latitude=1.0, longitude=1.0, accuracy=None, idempotency_key="a1",
+    )
+    latest_a, _ = await record_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep_a.id,
+        recorded_at=datetime(2026, 8, 3, 10, 0, tzinfo=timezone.utc),
+        latitude=2.0, longitude=2.0, accuracy=None, idempotency_key="a2",
+    )
+    latest_b, _ = await record_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep_b.id,
+        recorded_at=datetime(2026, 8, 3, 9, 30, tzinfo=timezone.utc),
+        latitude=3.0, longitude=3.0, accuracy=None, idempotency_key="b1",
+    )
+
+    latest = await list_latest_pings(db_session)
+
+    assert len(latest) == 2
+    by_rep = {ping.rep_id: ping for ping in latest}
+    assert by_rep[rep_a.id].id == latest_a.id
+    assert by_rep[rep_b.id].id == latest_b.id
+
+
+async def test_list_latest_pings_empty_when_no_pings(db_session):
+    from app.pings.service import list_latest_pings
+
+    latest = await list_latest_pings(db_session)
+
+    assert latest == []
+```
+
+Append to `backend/tests/pings/test_router.py` (read the file first for its conventions):
+
+```python
+async def test_manager_gets_latest_pings(client):
+    import uuid
+
+    tenant_id = str(uuid.uuid4())
+    mgr_response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "mgr@example.com", "password": "hunter2pass", "role": "manager"},
+        headers={"X-Tenant-Id": tenant_id},
+    )
+    mgr_token = mgr_response.json()["access_token"]
+    rep_response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "rep@example.com", "password": "hunter2pass", "role": "rep"},
+        headers={"X-Tenant-Id": tenant_id},
+    )
+    rep_token = rep_response.json()["access_token"]
+
+    await client.post(
+        "/api/v1/pings",
+        json={
+            "recorded_at": "2026-08-03T10:00:00Z", "latitude": 1.0, "longitude": 1.0,
+            "idempotency_key": "ping-latest-1",
+        },
+        headers={"Authorization": f"Bearer {rep_token}"},
+    )
+
+    response = await client.get("/api/v1/pings/latest", headers={"Authorization": f"Bearer {mgr_token}"})
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    assert "rep_id" in response.json()[0]
+
+
+async def test_rep_cannot_get_latest_pings(client):
+    import uuid
+
+    tenant_id = str(uuid.uuid4())
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "rep@example.com", "password": "hunter2pass", "role": "rep"},
+        headers={"X-Tenant-Id": tenant_id},
+    )
+    token = response.json()["access_token"]
+
+    latest_response = await client.get(
+        "/api/v1/pings/latest", headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert latest_response.status_code == 403
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/pings/ -v`
+Expected: FAIL — `ImportError: cannot import name 'list_latest_pings'`.
+
+- [ ] **Step 3: Append to `app/pings/schemas.py`**
+
+```python
+class LatestPingOut(BaseModel):
+    id: uuid.UUID
+    rep_id: uuid.UUID
+    recorded_at: datetime
+    latitude: float
+    longitude: float
+    accuracy: float | None
+
+    model_config = {"from_attributes": True}
+```
+
+- [ ] **Step 4: Append `list_latest_pings` to `app/pings/service.py`**
+
+Add these imports (merge with existing):
+
+```python
+from sqlalchemy import func
+from sqlalchemy.orm import aliased
+```
+
+```python
+async def list_latest_pings(db: AsyncSession) -> list[LocationPing]:
+    row_number = func.row_number().over(
+        partition_by=LocationPing.rep_id, order_by=LocationPing.recorded_at.desc()
+    ).label("rn")
+    subq = select(LocationPing, row_number).subquery()
+    ping_alias = aliased(LocationPing, subq)
+    result = await db.execute(select(ping_alias).where(subq.c.rn == 1))
+    return list(result.scalars().all())
+```
+
+- [ ] **Step 5: Append the endpoint to `app/pings/router.py`**
+
+Add `require_manager` to the existing `from app.auth.deps import require_rep` line, and `LatestPingOut`/`list_latest_pings` to the existing schema/service imports:
+
+```python
+@router.get("/latest", response_model=list[LatestPingOut])
+async def list_latest_pings_endpoint(
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+) -> list[LatestPingOut]:
+    return await list_latest_pings(db)
+```
+
+Route-ordering note: this file's only other route is `POST ""` — a static `GET /latest` path has no ordering conflict with it.
+
+- [ ] **Step 6: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/pings/ -v`
+Expected: all pass, INCLUDING against this repo's real SQLite test backend (`aiosqlite`) — if `list_latest_pings` raises anything like "no such function: row_number" here, that means SQLite's window-function support isn't available in this environment and the query needs a portable rewrite (e.g., a correlated `MAX(recorded_at)` subquery joined back to the table) — do not silently swap to a Postgres-only construct to make it pass only in CI.
+
+- [ ] **Step 7: Run the full suite and ruff**
+
+Run: `cd backend && uv run pytest -q && uv run ruff check .`
+Expected: all tests pass, ruff clean.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/pings/ backend/tests/pings/
+git commit -m "feat(backend): GET /api/v1/pings/latest (one row per rep) for the dashboard live map"
+```
+
+---
+
+## After this plan
+
+Update `PROGRESS.md` with a new entry (append, don't replace) noting these four endpoints were added specifically as a discovered prerequisite for the dashboard (Phase 7), not their own PLAN.md line item. Then a final whole-branch review before merge, then write the actual Phase 7a plan (scaffold + auth + API client + live map) against this now-complete backend surface.

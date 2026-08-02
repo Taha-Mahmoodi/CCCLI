@@ -1,0 +1,9 @@
+{
+  "id": "7",
+  "subject": "Decompose into sub-projects, choose build order and first sub-project",
+  "description": "Trade-offs for stack choice (editor, graph rendering, backend, real-time sync) with a recommendation.",
+  "activeForm": "Proposing architecture approaches",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

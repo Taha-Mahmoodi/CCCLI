@@ -1,0 +1,8 @@
+{
+  "id": "4",
+  "subject": "Focus-ring visual system",
+  "description": "A dedicated visual spec for --p-state-focus (width, offset, style) matching the treatment skip-link and scrollbar already got. Touches §12 HARD.",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

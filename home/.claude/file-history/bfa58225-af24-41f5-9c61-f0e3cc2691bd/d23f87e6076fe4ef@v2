@@ -1,0 +1,1544 @@
+# Violations & Alerts Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Zone-violation detection on ping ingestion, plus web-push alerts to subscribed managers — PLAN.md 6.1 and 6.2.
+
+**Architecture:** New `app/violations/` package holding two tables (`zone_violations`, `push_subscriptions`, per `docs/design.md`'s Core data model). Detection (`evaluate_ping`) is pure DB + geometry logic, wired into the existing ping-ingestion path (`pings/router.py`) as a second, additive step after `record_ping`. Notification is a separate concern: a `pywebpush`-backed sender, wired in as a second additive step, called only when a *new* violation is detected (not on resolution). This is the first real consumer of Phase 1's `app/core/events.py` event bus — `evaluate_ping` calls `event_bus.publish("ZoneViolationDetected", ...)` to document the domain event per `docs/design.md`, but push-sending itself is wired as a direct, awaited async call from the router, NOT as a bus-subscribed handler (see Global Constraints for why).
+
+**Tech Stack:** Same as prior phases — Python 3.12, FastAPI, SQLAlchemy 2.0 async, Alembic, Pydantic v2, pytest, plus a new dependency: `pywebpush` (VAPID web push, per `docs/design.md`'s Alerts section).
+
+## Global Constraints
+
+- `tenant_id` on every table via `TenantScopedMixin`.
+- **Why the event bus isn't used to dispatch the push handler.** `app/core/events.py`'s `EventBus.publish`/`subscribe` are synchronous (`Callable[[dict], None]`) — they were built in Phase 1 and have had zero real consumers until this phase. Sending a push requires `await`ing network I/O, which a sync handler invoked from `publish()` cannot do without resorting to fire-and-forget `asyncio.create_task` (with its own task-lifecycle/GC/swallowed-exception risks — the exact class of bug Phase 3's `JobRunner` review had to harden against). Since `evaluate_ping` already runs inside an async request-handling context, the simpler and more correct choice is: publish the event (satisfies the "domain event" framing and leaves room for a future sync subscriber — logging, metrics, whatever), but wire the actual push-send as a plain awaited function call from the pings router, not through the bus. Do not "fix" this into a fire-and-forget bus subscriber — it would trade a real, testable, deterministic call for a harder-to-test one solving a problem that doesn't exist here.
+- **Work-hours gating applies to *detecting* a new violation, not to *resolving* one.** A rep who is outside their zone during work hours and returns after hours should still have the violation resolved — the gate exists to stop off-hours absence (e.g. a rep going home) from ever being flagged as a violation in the first place, not to freeze an already-open violation until the next work day. `evaluate_ping`'s work-hours check therefore sits only in the "outside zone, no prior open violation" branch, never in the "back inside zone, resolve" branch.
+- **Work hours is a fixed UTC window (08:00–18:00), not per-tenant/per-timezone.** `# ponytail:`-marked simplification — no tenant timezone/business-hours config exists anywhere in this codebase yet; add one if a real deployment needs it.
+- **`point_in_geojson_polygon` requires `(longitude, latitude)` order.** This bug class has recurred twice already in this codebase (Phase 2's utility layer, Phase 4a's `check_in` call site) — `evaluate_ping` is a THIRD call site and needs its own asymmetric (non-square) boundary test that would fail if the order were swapped here, not a symmetric test that can't discriminate the bug.
+- **A violation ties to one `zone_id` even though a rep can have multiple assigned zones.** "Outside all assigned zones" is the actual condition; `zone_id` records the earliest-assigned zone (deterministic via `assigned_at` then `id` ordering) purely to satisfy the FK — it is not claiming that specific zone was "the" one violated.
+- **No violation is created for a rep with zero zone assignments** — there's no baseline to violate.
+- **At most one OPEN violation per rep at a time** (`resolved_at IS NULL`) — a second consecutive outside-zone ping while one is already open must not create a duplicate row; it's a no-op.
+- **`pywebpush.webpush()` is a blocking/synchronous call** (uses `requests` under the hood, not async) — verified directly against the installed package (`inspect.signature(webpush)` takes `subscription_info`, `data`, `vapid_private_key`, `vapid_claims`, no `async def`). Calling it directly from an `async def` would block the event loop for the duration of the HTTPS round-trip to the push service. It MUST be wrapped in `asyncio.to_thread(webpush, ...)`. This is the one part of this plan a reviewer should check most carefully — a missing `asyncio.to_thread` wouldn't fail any functional test (a single test call blocking briefly doesn't fail an assertion), it would only show up as a real event-loop stall under load.
+- **Push-sending is a no-op when VAPID isn't configured** (`settings.vapid_private_key == ""`, the default) — logs and returns instead of calling `webpush()`. Per `docs/design.md`'s own words, browser push "can't be fully exercised end-to-end without real deployment infrastructure," so a fresh dev/test environment must not crash for lacking real VAPID keys.
+- **A `WebPushException` from one subscriber must not abort notifying the rest** — `notify_managers_of_violation` loops over all of a tenant's manager subscriptions; one dead/expired subscription (e.g. a 410 Gone) must not prevent the others from being notified. Catch per-subscription, log, continue.
+- **`PushSubscriptionOut` does not echo back `p256dh`/`auth`** — those are the subscription's private keys; the manager's browser already has them locally, no need to round-trip them on every list call.
+- Pagination on `list_violations` from the first commit: `limit`/`offset`, default 50, max 200, `ORDER BY detected_at DESC, id DESC`.
+- Service layer owns business rules; routers thin (routers here sequence two service calls with a plain `if`, matching the existing `created` branch in `pings/router.py` — this is orchestration, not business logic, which stays entirely in `evaluate_ping`/`notify_managers_of_violation`).
+- Cross-tenant access reported as "not found" or filtered out, never a distinct error, matching every prior phase's convention. (This phase has no per-resource "get by id" endpoint that a non-owner could probe — violations are listed manager-only/tenant-wide, and push-subscriptions are always scoped to the calling manager — so there is no new cross-tenant surface to defend beyond the existing ambient-filter pattern.)
+- `detected_at`/`resolved_at`/`created_at` use `DateTime(timezone=True)`.
+- **`LocationPing.recorded_at` is client-supplied, not server-generated** — unlike goals' Phase 5 pitfall (hardcoded test dates racing against `datetime.now(utc)`), tests in this plan can safely hardcode `recorded_at` to any fixed date/hour without a wall-clock time-bomb risk, since nothing here derives a timestamp from the real clock.
+
+---
+
+## File Structure
+
+```
+backend/
+  app/
+    violations/
+      __init__.py                 # NEW
+      models.py                    # NEW: ZoneViolation, PushSubscription
+      schemas.py                     # NEW: ZoneViolationOut, PushSubscriptionCreate, PushSubscriptionOut
+      service.py                      # NEW: evaluate_ping, list_violations, register_push_subscription,
+                                       #      list_push_subscriptions, send_zone_violation_push,
+                                       #      notify_managers_of_violation
+      router.py                        # NEW: violations_router (GET), push_subscriptions_router (POST, GET)
+    pings/
+      router.py                   # MODIFY: call evaluate_ping, then notify_managers_of_violation
+    config.py                   # MODIFY: vapid_public_key, vapid_private_key, vapid_claim_email
+    main.py                     # MODIFY: mount violations_router, push_subscriptions_router
+  alembic/versions/
+    <new migration>              # NEW: create zone_violations, push_subscriptions tables
+  .env.example                # MODIFY: VAPID_* lines
+  pyproject.toml               # MODIFY: add pywebpush
+  tests/
+    violations/
+      __init__.py                  # NEW
+      test_models.py                # NEW
+      test_service.py                # NEW
+      test_router.py                  # NEW
+    pings/
+      test_router.py                # MODIFY (Task 3 and Task 5 each append one integration test)
+```
+
+**Interfaces summary (for cross-task consistency):**
+- `app.violations.models.ZoneViolation` — `id`, `tenant_id` (mixin), `rep_id` (FK users), `zone_id` (FK zones), `detected_at: Mapped[datetime]`, `resolved_at: Mapped[datetime | None]`. Index `(tenant_id, rep_id, resolved_at)`.
+- `app.violations.models.PushSubscription` — `id`, `tenant_id` (mixin), `manager_id` (FK users), `endpoint: Mapped[str]`, `p256dh: Mapped[str]`, `auth: Mapped[str]`, `created_at: Mapped[datetime]`. Unique `(tenant_id, manager_id, endpoint)`, index `(tenant_id, manager_id)`.
+- `app.violations.service.evaluate_ping(db, tenant_id, rep_id, latitude, longitude, recorded_at) -> tuple[ZoneViolation | None, bool]` — second element is `newly_detected`.
+- `app.violations.service.list_violations(db, limit=50, offset=0) -> list[ZoneViolation]`
+- `app.violations.service.register_push_subscription(db, tenant_id, manager_id, endpoint, p256dh, auth) -> PushSubscription`
+- `app.violations.service.list_push_subscriptions(db, manager_id) -> list[PushSubscription]`
+- `app.violations.service.send_zone_violation_push(subscription, payload: dict) -> None`
+- `app.violations.service.notify_managers_of_violation(db, tenant_id, violation) -> None`
+- `app.violations.schemas.ZoneViolationOut`, `PushSubscriptionCreate` (`endpoint`, `p256dh`, `auth`), `PushSubscriptionOut` (no keys).
+- `app.violations.router.violations_router` (prefix `/api/v1/violations`), `app.violations.router.push_subscriptions_router` (prefix `/api/v1/push-subscriptions`).
+
+---
+
+### Task 1: Models + migration
+
+**Files:**
+- Create: `backend/app/violations/__init__.py`
+- Create: `backend/app/violations/models.py`
+- Create: `backend/tests/violations/__init__.py` (empty)
+- Create: `backend/tests/violations/test_models.py`
+
+**Interfaces:**
+- Consumes: `app.db.Base`, `app.core.tenancy.TenantScopedMixin`.
+- Produces: `ZoneViolation`, `PushSubscription` (columns per Interfaces summary above).
+
+- [ ] **Step 1: Write `backend/app/violations/__init__.py`** (empty)
+
+```python
+# backend/app/violations/__init__.py
+```
+
+- [ ] **Step 2: Write `backend/tests/violations/__init__.py`** (empty)
+
+```python
+# backend/tests/violations/__init__.py
+```
+
+- [ ] **Step 3: Write the failing test**
+
+```python
+# backend/tests/violations/test_models.py
+import uuid
+from datetime import datetime, timezone
+
+import pytest
+from sqlalchemy import select
+
+from app.auth.models import User
+from app.violations.models import PushSubscription, ZoneViolation
+from app.zones.models import Zone
+
+pytestmark = pytest.mark.asyncio
+
+
+async def _make_user(db_session, tenant_id, role):
+    user = User(
+        id=uuid.uuid4(), tenant_id=tenant_id, email=f"{uuid.uuid4()}@example.com",
+        hashed_password="irrelevant", role=role,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    return user
+
+
+async def _make_zone(db_session, tenant_id):
+    zone = Zone(
+        id=uuid.uuid4(), tenant_id=tenant_id, name="Territory",
+        boundary={"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 1], [0, 0]]]},
+    )
+    db_session.add(zone)
+    await db_session.flush()
+    return zone
+
+
+async def test_create_and_fetch_zone_violation(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+    zone = await _make_zone(db_session, tenant_id)
+
+    violation = ZoneViolation(
+        id=uuid.uuid4(), tenant_id=tenant_id, rep_id=rep.id, zone_id=zone.id,
+        detected_at=datetime(2026, 8, 3, 10, 0, tzinfo=timezone.utc),
+    )
+    db_session.add(violation)
+    await db_session.commit()
+
+    result = await db_session.execute(select(ZoneViolation).where(ZoneViolation.rep_id == rep.id))
+    fetched = result.scalar_one()
+
+    assert fetched.zone_id == zone.id
+    assert fetched.resolved_at is None
+    assert fetched.detected_at.tzinfo is not None
+
+
+async def test_zone_violation_resolved_at_settable(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+    zone = await _make_zone(db_session, tenant_id)
+
+    violation = ZoneViolation(
+        id=uuid.uuid4(), tenant_id=tenant_id, rep_id=rep.id, zone_id=zone.id,
+        detected_at=datetime(2026, 8, 3, 10, 0, tzinfo=timezone.utc),
+    )
+    db_session.add(violation)
+    await db_session.commit()
+
+    violation.resolved_at = datetime(2026, 8, 3, 11, 0, tzinfo=timezone.utc)
+    await db_session.commit()
+
+    result = await db_session.execute(select(ZoneViolation).where(ZoneViolation.rep_id == rep.id))
+    fetched = result.scalar_one()
+
+    assert fetched.resolved_at == datetime(2026, 8, 3, 11, 0, tzinfo=timezone.utc)
+
+
+async def test_create_and_fetch_push_subscription(db_session):
+    tenant_id = uuid.uuid4()
+    manager = await _make_user(db_session, tenant_id, "manager")
+
+    subscription = PushSubscription(
+        id=uuid.uuid4(), tenant_id=tenant_id, manager_id=manager.id,
+        endpoint="https://push.example.com/abc", p256dh="key1", auth="key2",
+    )
+    db_session.add(subscription)
+    await db_session.commit()
+
+    result = await db_session.execute(select(PushSubscription).where(PushSubscription.manager_id == manager.id))
+    fetched = result.scalar_one()
+
+    assert fetched.endpoint == "https://push.example.com/abc"
+    assert isinstance(fetched.created_at, datetime)
+    assert fetched.created_at.tzinfo is not None
+```
+
+- [ ] **Step 4: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/violations/test_models.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'app.violations.models'`
+
+- [ ] **Step 5: Write `app/violations/models.py`**
+
+```python
+# backend/app/violations/models.py
+import uuid
+from datetime import datetime, timezone
+
+from sqlalchemy import DateTime, ForeignKey, Index, String, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.core.tenancy import TenantScopedMixin
+from app.db import Base
+
+
+class ZoneViolation(Base, TenantScopedMixin):
+    __tablename__ = "zone_violations"
+    __table_args__ = (
+        Index("ix_zone_violations_tenant_rep_resolved_at", "tenant_id", "rep_id", "resolved_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    rep_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    zone_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("zones.id"), nullable=False, index=True)
+    detected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PushSubscription(Base, TenantScopedMixin):
+    __tablename__ = "push_subscriptions"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "manager_id", "endpoint", name="uq_push_subscriptions_tenant_manager_endpoint"
+        ),
+        Index("ix_push_subscriptions_tenant_manager", "tenant_id", "manager_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    manager_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    endpoint: Mapped[str] = mapped_column(String, nullable=False)
+    p256dh: Mapped[str] = mapped_column(String, nullable=False)
+    auth: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+```
+
+- [ ] **Step 6: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/violations/test_models.py -v`
+Expected: all 3 tests `PASSED`.
+
+- [ ] **Step 7: Register both models with Alembic**
+
+Edit `backend/alembic/env.py` — add a new import line directly below the existing `from app.goals.models import Goal  # noqa: E402, F401` line:
+
+```python
+from app.violations.models import PushSubscription, ZoneViolation  # noqa: E402, F401
+```
+
+- [ ] **Step 8: Generate the migration**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/backend
+uv run alembic revision --autogenerate -m "create zone_violations and push_subscriptions tables"
+```
+
+Expected: a new file under `alembic/versions/` with `op.create_table("zone_violations", ...)` and `op.create_table("push_subscriptions", ...)`. Verify by reading the generated file: `detected_at`/`resolved_at`/`created_at` all carry `sa.DateTime(timezone=True)` (fix by hand if autogenerate misses it — this mistake has recurred in every prior phase), both FKs to `users.id` plus `zone_violations.zone_id` FK to `zones.id`, the `ix_zone_violations_tenant_rep_resolved_at` composite index, the `uq_push_subscriptions_tenant_manager_endpoint` unique constraint, and the `ix_push_subscriptions_tenant_manager` composite index.
+
+- [ ] **Step 9: Verify the migration applies cleanly**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/backend
+DATABASE_URL="sqlite+aiosqlite:///./alembic_check.db" uv run alembic upgrade head
+rm -f alembic_check.db
+```
+
+Expected: no errors.
+
+- [ ] **Step 10: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/
+git commit -m "feat(backend): ZoneViolation and PushSubscription models, Alembic migration
+
+Refs PLAN 6.1, 6.2"
+```
+
+---
+
+### Task 2: `evaluate_ping` detection/resolution service
+
+**Files:**
+- Create: `backend/app/violations/service.py`
+- Create: `backend/tests/violations/test_service.py`
+
+**Interfaces:**
+- Consumes: `app.violations.models.ZoneViolation` (Task 1), `app.core.geo.point_in_geojson_polygon`, `app.core.events.event_bus`, `app.zones.models.Zone`/`ZoneAssignment`, `app.zones.service.create_zone`/`assign_rep_to_zone` (test-only).
+- Produces: `evaluate_ping(db, tenant_id, rep_id, latitude, longitude, recorded_at) -> tuple[ZoneViolation | None, bool]`.
+
+This is the core logic of PLAN 6.1. Read the Global Constraints on work-hours-gates-detection-not-resolution and the coordinate-order risk before writing this — both are tested explicitly below.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# backend/tests/violations/test_service.py
+import uuid
+from datetime import datetime, timezone
+
+import pytest
+
+from app.auth.models import User
+from app.violations.service import evaluate_ping
+from app.zones.service import assign_rep_to_zone, create_zone
+
+pytestmark = pytest.mark.asyncio
+
+# Asymmetric on purpose (width 10, height 1): a lat/lng swap at evaluate_ping's
+# call site would misjudge points that are only "inside" under the correct order.
+WIDE_BOUNDARY = {"type": "Polygon", "coordinates": [[[0, 0], [10, 0], [10, 1], [0, 1], [0, 0]]]}
+WORK_HOURS_TS = datetime(2026, 8, 3, 10, 0, tzinfo=timezone.utc)  # Monday 10:00 UTC
+AFTER_HOURS_TS = datetime(2026, 8, 3, 22, 0, tzinfo=timezone.utc)  # Monday 22:00 UTC
+FAR_OUTSIDE = (50.0, 50.0)  # (latitude, longitude), nowhere near WIDE_BOUNDARY
+
+
+async def _make_user(db_session, tenant_id, role):
+    user = User(
+        id=uuid.uuid4(), tenant_id=tenant_id, email=f"{uuid.uuid4()}@example.com",
+        hashed_password="irrelevant", role=role,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    return user
+
+
+async def _make_assigned_rep(db_session, tenant_id, boundary=WIDE_BOUNDARY):
+    rep = await _make_user(db_session, tenant_id, "rep")
+    zone = await create_zone(db_session, tenant_id=tenant_id, name="Territory", boundary=boundary)
+    await assign_rep_to_zone(db_session, tenant_id=tenant_id, zone_id=zone.id, rep_id=rep.id)
+    return rep, zone
+
+
+async def test_no_assigned_zones_returns_no_violation(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+
+    violation, newly_detected = await evaluate_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep.id,
+        latitude=FAR_OUTSIDE[0], longitude=FAR_OUTSIDE[1], recorded_at=WORK_HOURS_TS,
+    )
+
+    assert violation is None
+    assert newly_detected is False
+
+
+async def test_inside_zone_during_work_hours_no_violation(db_session):
+    tenant_id = uuid.uuid4()
+    rep, _zone = await _make_assigned_rep(db_session, tenant_id)
+
+    violation, newly_detected = await evaluate_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep.id,
+        latitude=0.5, longitude=5.0, recorded_at=WORK_HOURS_TS,
+    )
+
+    assert violation is None
+    assert newly_detected is False
+
+
+async def test_outside_zone_during_work_hours_creates_violation(db_session):
+    tenant_id = uuid.uuid4()
+    rep, zone = await _make_assigned_rep(db_session, tenant_id)
+
+    violation, newly_detected = await evaluate_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep.id,
+        latitude=FAR_OUTSIDE[0], longitude=FAR_OUTSIDE[1], recorded_at=WORK_HOURS_TS,
+    )
+
+    assert newly_detected is True
+    assert violation is not None
+    assert violation.rep_id == rep.id
+    assert violation.zone_id == zone.id
+    assert violation.resolved_at is None
+
+
+async def test_outside_zone_after_hours_no_violation(db_session):
+    tenant_id = uuid.uuid4()
+    rep, _zone = await _make_assigned_rep(db_session, tenant_id)
+
+    violation, newly_detected = await evaluate_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep.id,
+        latitude=FAR_OUTSIDE[0], longitude=FAR_OUTSIDE[1], recorded_at=AFTER_HOURS_TS,
+    )
+
+    assert violation is None
+    assert newly_detected is False
+
+
+async def test_repeated_outside_zone_pings_do_not_duplicate_violation(db_session):
+    from sqlalchemy import select
+
+    from app.violations.models import ZoneViolation
+
+    tenant_id = uuid.uuid4()
+    rep, _zone = await _make_assigned_rep(db_session, tenant_id)
+
+    _first, first_newly_detected = await evaluate_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep.id,
+        latitude=FAR_OUTSIDE[0], longitude=FAR_OUTSIDE[1], recorded_at=WORK_HOURS_TS,
+    )
+    second, second_newly_detected = await evaluate_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep.id,
+        latitude=FAR_OUTSIDE[0], longitude=FAR_OUTSIDE[1],
+        recorded_at=WORK_HOURS_TS.replace(minute=30),
+    )
+
+    assert first_newly_detected is True
+    assert second_newly_detected is False
+    assert second is None
+
+    result = await db_session.execute(select(ZoneViolation).where(ZoneViolation.rep_id == rep.id))
+    assert len(result.scalars().all()) == 1
+
+
+async def test_return_to_zone_resolves_open_violation(db_session):
+    tenant_id = uuid.uuid4()
+    rep, _zone = await _make_assigned_rep(db_session, tenant_id)
+    await evaluate_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep.id,
+        latitude=FAR_OUTSIDE[0], longitude=FAR_OUTSIDE[1], recorded_at=WORK_HOURS_TS,
+    )
+
+    resolved, newly_detected = await evaluate_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep.id,
+        latitude=0.5, longitude=5.0, recorded_at=WORK_HOURS_TS.replace(minute=30),
+    )
+
+    assert newly_detected is False
+    assert resolved is not None
+    assert resolved.resolved_at == WORK_HOURS_TS.replace(minute=30)
+
+
+async def test_resolution_not_gated_by_work_hours(db_session):
+    tenant_id = uuid.uuid4()
+    rep, _zone = await _make_assigned_rep(db_session, tenant_id)
+    await evaluate_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep.id,
+        latitude=FAR_OUTSIDE[0], longitude=FAR_OUTSIDE[1], recorded_at=WORK_HOURS_TS,
+    )
+
+    resolved, newly_detected = await evaluate_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep.id,
+        latitude=0.5, longitude=5.0, recorded_at=AFTER_HOURS_TS,
+    )
+
+    assert newly_detected is False
+    assert resolved is not None
+    assert resolved.resolved_at == AFTER_HOURS_TS
+
+
+async def test_geofence_check_uses_lng_lat_order_not_lat_lng(db_session):
+    # (latitude=0.5, longitude=5.0) is only inside WIDE_BOUNDARY if the call
+    # site passes point_in_geojson_polygon((longitude, latitude), ...) --
+    # a swap to (latitude, longitude) = (0.5, 5.0) interpreted as (lng, lat)
+    # would place lng'=0.5 (fine) but lat'=5.0, outside the [0,1] lat range.
+    tenant_id = uuid.uuid4()
+    rep, _zone = await _make_assigned_rep(db_session, tenant_id)
+
+    violation, newly_detected = await evaluate_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep.id,
+        latitude=0.5, longitude=5.0, recorded_at=WORK_HOURS_TS,
+    )
+
+    assert newly_detected is False
+    assert violation is None
+
+
+async def test_inside_second_of_multiple_assigned_zones_no_violation(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+    zone_a = await create_zone(db_session, tenant_id=tenant_id, name="A", boundary=WIDE_BOUNDARY)
+    await assign_rep_to_zone(db_session, tenant_id=tenant_id, zone_id=zone_a.id, rep_id=rep.id)
+    far_boundary = {"type": "Polygon", "coordinates": [[[20, 20], [30, 20], [30, 21], [20, 21], [20, 20]]]}
+    zone_b = await create_zone(db_session, tenant_id=tenant_id, name="B", boundary=far_boundary)
+    await assign_rep_to_zone(db_session, tenant_id=tenant_id, zone_id=zone_b.id, rep_id=rep.id)
+
+    violation, newly_detected = await evaluate_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep.id,
+        latitude=20.5, longitude=25.0, recorded_at=WORK_HOURS_TS,
+    )
+
+    assert violation is None
+    assert newly_detected is False
+
+
+async def test_new_violation_publishes_zone_violation_detected_event(db_session, monkeypatch):
+    published = []
+    monkeypatch.setattr(
+        "app.violations.service.event_bus.publish",
+        lambda event_type, payload: published.append((event_type, payload)),
+    )
+    tenant_id = uuid.uuid4()
+    rep, zone = await _make_assigned_rep(db_session, tenant_id)
+
+    violation, newly_detected = await evaluate_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep.id,
+        latitude=FAR_OUTSIDE[0], longitude=FAR_OUTSIDE[1], recorded_at=WORK_HOURS_TS,
+    )
+
+    assert newly_detected is True
+    assert len(published) == 1
+    event_type, payload = published[0]
+    assert event_type == "ZoneViolationDetected"
+    assert payload["violation_id"] == str(violation.id)
+    assert payload["rep_id"] == str(rep.id)
+    assert payload["zone_id"] == str(zone.id)
+
+
+async def test_resolution_does_not_publish_event(db_session, monkeypatch):
+    published = []
+    monkeypatch.setattr(
+        "app.violations.service.event_bus.publish",
+        lambda event_type, payload: published.append((event_type, payload)),
+    )
+    tenant_id = uuid.uuid4()
+    rep, _zone = await _make_assigned_rep(db_session, tenant_id)
+    await evaluate_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep.id,
+        latitude=FAR_OUTSIDE[0], longitude=FAR_OUTSIDE[1], recorded_at=WORK_HOURS_TS,
+    )
+    published.clear()
+
+    await evaluate_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep.id,
+        latitude=0.5, longitude=5.0, recorded_at=WORK_HOURS_TS.replace(minute=30),
+    )
+
+    assert published == []
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/violations/test_service.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'app.violations.service'`
+
+- [ ] **Step 3: Write `app/violations/service.py`**
+
+```python
+# backend/app/violations/service.py
+import uuid
+from datetime import datetime
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.events import event_bus
+from app.core.geo import point_in_geojson_polygon
+from app.violations.models import ZoneViolation
+from app.zones.models import Zone, ZoneAssignment
+
+WORK_HOURS_START_UTC_HOUR = 8
+WORK_HOURS_END_UTC_HOUR = 18
+
+
+def _is_within_work_hours(dt: datetime) -> bool:
+    # ponytail: fixed UTC business-hours window; add per-tenant timezone/
+    # business-hours config if a real deployment needs it.
+    return WORK_HOURS_START_UTC_HOUR <= dt.hour < WORK_HOURS_END_UTC_HOUR
+
+
+async def evaluate_ping(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    rep_id: uuid.UUID,
+    latitude: float,
+    longitude: float,
+    recorded_at: datetime,
+) -> tuple[ZoneViolation | None, bool]:
+    rows = (
+        await db.execute(
+            select(Zone, ZoneAssignment)
+            .join(ZoneAssignment, ZoneAssignment.zone_id == Zone.id)
+            .where(ZoneAssignment.rep_id == rep_id)
+            .order_by(ZoneAssignment.assigned_at.asc(), ZoneAssignment.id.asc())
+        )
+    ).all()
+    if not rows:
+        return None, False
+
+    # point_in_geojson_polygon requires (longitude, latitude) order.
+    inside_a_zone = any(
+        point_in_geojson_polygon((longitude, latitude), zone.boundary) for zone, _assignment in rows
+    )
+
+    open_result = await db.execute(
+        select(ZoneViolation).where(ZoneViolation.rep_id == rep_id, ZoneViolation.resolved_at.is_(None))
+    )
+    open_violation = open_result.scalar_one_or_none()
+
+    if inside_a_zone:
+        if open_violation is None:
+            return None, False
+        open_violation.resolved_at = recorded_at
+        await db.commit()
+        await db.refresh(open_violation)
+        return open_violation, False
+
+    # Outside every assigned zone.
+    if open_violation is not None:
+        return None, False
+
+    if not _is_within_work_hours(recorded_at):
+        return None, False
+
+    # Arbitrary-but-deterministic: earliest-assigned zone. A violation means
+    # "outside the rep's combined assigned territory", not "outside zone X"
+    # specifically when they have several -- this just needs a valid FK.
+    first_zone, _assignment = rows[0]
+    violation = ZoneViolation(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        rep_id=rep_id,
+        zone_id=first_zone.id,
+        detected_at=recorded_at,
+    )
+    db.add(violation)
+    await db.commit()
+    await db.refresh(violation)
+
+    event_bus.publish(
+        "ZoneViolationDetected",
+        {
+            "tenant_id": str(tenant_id),
+            "rep_id": str(rep_id),
+            "zone_id": str(first_zone.id),
+            "violation_id": str(violation.id),
+            "detected_at": violation.detected_at.isoformat(),
+        },
+    )
+    return violation, True
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/violations/test_service.py -v`
+Expected: all 11 tests `PASSED`.
+
+- [ ] **Step 5: Run the full suite**
+
+Run: `cd backend && uv run pytest -q`
+Expected: no regressions.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/violations/service.py backend/tests/violations/test_service.py
+git commit -m "feat(backend): zone-violation detection/resolution on ping evaluation
+
+Refs PLAN 6.1"
+```
+
+---
+
+### Task 3: Wire detection into ping ingestion + violations list endpoint
+
+**Files:**
+- Modify: `backend/app/pings/router.py`
+- Create: `backend/app/violations/schemas.py` (violation half only — push-subscription schemas come in Task 4/5)
+- Modify: `backend/app/violations/service.py` (append `list_violations`)
+- Create: `backend/app/violations/router.py` (`violations_router` only — `push_subscriptions_router` comes in Task 5)
+- Modify: `backend/app/main.py` (mount `violations_router`)
+- Modify: `backend/tests/pings/test_router.py` (append one integration test)
+- Create: `backend/tests/violations/test_router.py`
+
+**Interfaces:**
+- Consumes: `evaluate_ping` (Task 2), `app.auth.deps.require_manager`.
+- Produces: `list_violations(db, limit=50, offset=0) -> list[ZoneViolation]`, `GET /api/v1/violations`.
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `backend/tests/pings/test_router.py` (read the existing file first for its exact registration/auth helper conventions and fixture usage — match that style; do not redefine any existing helper):
+
+```python
+async def test_ping_outside_assigned_zone_during_work_hours_creates_violation(client):
+    import uuid
+
+    tenant_id = str(uuid.uuid4())
+    mgr_response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "mgr@example.com", "password": "hunter2pass", "role": "manager"},
+        headers={"X-Tenant-Id": tenant_id},
+    )
+    mgr_token = mgr_response.json()["access_token"]
+    rep_response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "rep@example.com", "password": "hunter2pass", "role": "rep"},
+        headers={"X-Tenant-Id": tenant_id},
+    )
+    rep_token = rep_response.json()["access_token"]
+    me_response = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {rep_token}"})
+    rep_id = me_response.json()["id"]
+
+    zone_response = await client.post(
+        "/api/v1/zones",
+        json={
+            "name": "Territory",
+            "boundary": {"type": "Polygon", "coordinates": [[[0, 0], [10, 0], [10, 1], [0, 1], [0, 0]]]},
+        },
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+    zone_id = zone_response.json()["id"]
+    await client.post(
+        f"/api/v1/zones/{zone_id}/assignments",
+        json={"rep_id": rep_id},
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+
+    ping_response = await client.post(
+        "/api/v1/pings",
+        json={
+            "recorded_at": "2026-08-03T10:00:00Z",
+            "latitude": 50.0,
+            "longitude": 50.0,
+            "idempotency_key": "ping-1",
+        },
+        headers={"Authorization": f"Bearer {rep_token}"},
+    )
+    assert ping_response.status_code == 201
+
+    violations_response = await client.get(
+        "/api/v1/violations", headers={"Authorization": f"Bearer {mgr_token}"}
+    )
+    assert violations_response.status_code == 200
+    assert len(violations_response.json()) == 1
+    assert violations_response.json()[0]["rep_id"] == rep_id
+```
+
+**Before writing this test, confirm the exact zone-creation and zone-assignment endpoint paths/bodies against `backend/app/zones/router.py`** — the paths and body shapes above are inferred from the plan's own memory of Phase 2 and may not be byte-exact. Read `zones/router.py` and adjust the test to match its real routes/schemas exactly; this note is more important than the literal JSON above.
+
+```python
+# backend/tests/violations/test_router.py
+import uuid
+
+import pytest
+
+pytestmark = pytest.mark.asyncio
+
+
+async def test_rep_cannot_list_violations(client):
+    tenant_id = str(uuid.uuid4())
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "rep@example.com", "password": "hunter2pass", "role": "rep"},
+        headers={"X-Tenant-Id": tenant_id},
+    )
+    token = response.json()["access_token"]
+
+    violations_response = await client.get(
+        "/api/v1/violations", headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert violations_response.status_code == 403
+
+
+async def test_manager_lists_violations_empty_by_default(client):
+    tenant_id = str(uuid.uuid4())
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "mgr@example.com", "password": "hunter2pass", "role": "manager"},
+        headers={"X-Tenant-Id": tenant_id},
+    )
+    token = response.json()["access_token"]
+
+    violations_response = await client.get(
+        "/api/v1/violations", headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert violations_response.status_code == 200
+    assert violations_response.json() == []
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/violations/test_router.py tests/pings/test_router.py -v`
+Expected: FAIL — `404` on `/api/v1/violations` (router doesn't exist yet), and the pings test doesn't yet create a violation.
+
+- [ ] **Step 3: Write `app/violations/schemas.py`**
+
+```python
+# backend/app/violations/schemas.py
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel
+
+
+class ZoneViolationOut(BaseModel):
+    id: uuid.UUID
+    rep_id: uuid.UUID
+    zone_id: uuid.UUID
+    detected_at: datetime
+    resolved_at: datetime | None
+
+    model_config = {"from_attributes": True}
+```
+
+- [ ] **Step 4: Append `list_violations` to `app/violations/service.py`**
+
+```python
+async def list_violations(db: AsyncSession, limit: int = 50, offset: int = 0) -> list[ZoneViolation]:
+    result = await db.execute(
+        select(ZoneViolation)
+        .order_by(ZoneViolation.detected_at.desc(), ZoneViolation.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    return list(result.scalars().all())
+```
+
+- [ ] **Step 5: Write `app/violations/router.py`**
+
+```python
+# backend/app/violations/router.py
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth.deps import require_manager
+from app.auth.models import User
+from app.db import get_db
+from app.violations.schemas import ZoneViolationOut
+from app.violations.service import list_violations
+
+violations_router = APIRouter(prefix="/api/v1/violations", tags=["violations"])
+
+
+@violations_router.get("", response_model=list[ZoneViolationOut])
+async def list_violations_endpoint(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+) -> list[ZoneViolationOut]:
+    return await list_violations(db, limit=limit, offset=offset)
+```
+
+- [ ] **Step 6: Wire `evaluate_ping` into `app/pings/router.py`**
+
+Read the current file in full first. Add the import and the call — do not change `record_ping`'s call, the status-code logic, or anything else:
+
+```python
+from app.violations.service import evaluate_ping
+```
+
+```python
+    ping, created = await record_ping(
+        db,
+        tenant_id=current_user.tenant_id,
+        rep_id=current_user.id,
+        recorded_at=body.recorded_at,
+        latitude=body.latitude,
+        longitude=body.longitude,
+        accuracy=body.accuracy,
+        idempotency_key=body.idempotency_key,
+    )
+    if created:
+        await evaluate_ping(
+            db,
+            tenant_id=current_user.tenant_id,
+            rep_id=current_user.id,
+            latitude=ping.latitude,
+            longitude=ping.longitude,
+            recorded_at=ping.recorded_at,
+        )
+    response.status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+    return ping
+```
+
+- [ ] **Step 7: Mount `violations_router` in `app/main.py`**
+
+Read the current file in full first (it mounts six routers in a fixed order and has the `lifespan` handler + `install_tenancy_filter()` call — none of that changes here). Add, following the exact existing pattern:
+
+```python
+from app.violations.router import violations_router
+```
+
+```python
+app.include_router(violations_router)
+```
+
+- [ ] **Step 8: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/violations/ tests/pings/ -v`
+Expected: all pass.
+
+- [ ] **Step 9: Run the full suite and ruff**
+
+Run: `cd backend && uv run pytest -q && uv run ruff check .`
+Expected: all tests pass, ruff clean.
+
+- [ ] **Step 10: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/pings/router.py backend/app/violations/schemas.py backend/app/violations/service.py backend/app/violations/router.py backend/app/main.py backend/tests/pings/test_router.py backend/tests/violations/test_router.py
+git commit -m "feat(backend): wire violation detection into ping ingestion, add violations list endpoint
+
+Refs PLAN 6.1, 6.2"
+```
+
+---
+
+### Task 4: Push-subscription service + push-sending
+
+**Files:**
+- Modify: `backend/pyproject.toml` (add `pywebpush`)
+- Modify: `backend/app/config.py` (VAPID settings)
+- Modify: `backend/.env.example` (VAPID lines)
+- Modify: `backend/app/violations/service.py` (append push-subscription + push-sending functions)
+- Modify: `backend/app/violations/schemas.py` (append `PushSubscriptionCreate`, `PushSubscriptionOut`)
+- Test: `backend/tests/violations/test_service.py` (append)
+
+**Interfaces:**
+- Produces: `register_push_subscription(db, tenant_id, manager_id, endpoint, p256dh, auth) -> PushSubscription`, `list_push_subscriptions(db, manager_id) -> list[PushSubscription]`, `send_zone_violation_push(subscription, payload: dict) -> None`, `notify_managers_of_violation(db, tenant_id, violation) -> None`.
+
+Read the Global Constraint on `asyncio.to_thread` before writing `send_zone_violation_push` — `pywebpush.webpush()` is a blocking call, confirmed by inspecting the installed package's signature directly (`inspect.signature(webpush)` shows no `async def`; it wraps the synchronous `requests` library). Calling it without `asyncio.to_thread` would stall the event loop for the HTTPS round-trip; this would NOT fail any functional test, so get it right the first time rather than relying on a test to catch it.
+
+- [ ] **Step 1: Add `pywebpush`**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/backend
+uv add pywebpush
+```
+
+Expected: `pyproject.toml` gets a new `pywebpush>=...` line under `dependencies`, `uv.lock` updates.
+
+- [ ] **Step 2: Add VAPID settings to `app/config.py`**
+
+Read the current file first. Add three new fields to the `Settings` class, alongside the existing fields (do not change any existing field or validator):
+
+```python
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_claim_email: str = "mailto:admin@example.com"
+```
+
+- [ ] **Step 3: Add VAPID lines to `.env.example`**
+
+Append to the existing file (do not remove any existing line):
+
+```
+VAPID_PUBLIC_KEY=
+VAPID_PRIVATE_KEY=
+VAPID_CLAIM_EMAIL=mailto:admin@example.com
+```
+
+- [ ] **Step 4: Write the failing tests**
+
+Append to `backend/tests/violations/test_service.py` (merge these imports with the file's existing ones, don't duplicate):
+
+```python
+from app.config import Settings
+from app.violations.service import (
+    WebPushException,
+    list_push_subscriptions,
+    notify_managers_of_violation,
+    register_push_subscription,
+    send_zone_violation_push,
+)
+```
+
+```python
+async def test_register_push_subscription_creates_row(db_session):
+    tenant_id = uuid.uuid4()
+    manager = await _make_user(db_session, tenant_id, "manager")
+
+    subscription = await register_push_subscription(
+        db_session, tenant_id=tenant_id, manager_id=manager.id,
+        endpoint="https://push.example.com/abc", p256dh="key1", auth="key2",
+    )
+
+    assert subscription.endpoint == "https://push.example.com/abc"
+
+
+async def test_register_push_subscription_is_idempotent_on_endpoint(db_session):
+    tenant_id = uuid.uuid4()
+    manager = await _make_user(db_session, tenant_id, "manager")
+    first = await register_push_subscription(
+        db_session, tenant_id=tenant_id, manager_id=manager.id,
+        endpoint="https://push.example.com/abc", p256dh="key1", auth="key2",
+    )
+
+    second = await register_push_subscription(
+        db_session, tenant_id=tenant_id, manager_id=manager.id,
+        endpoint="https://push.example.com/abc", p256dh="key1-rotated", auth="key2-rotated",
+    )
+
+    assert second.id == first.id
+    assert second.p256dh == "key1-rotated"
+
+    subscriptions = await list_push_subscriptions(db_session, manager_id=manager.id)
+    assert len(subscriptions) == 1
+
+
+async def test_send_zone_violation_push_noop_when_vapid_not_configured(db_session, monkeypatch):
+    calls = []
+    monkeypatch.setattr("app.violations.service.webpush", lambda **kwargs: calls.append(kwargs))
+    tenant_id = uuid.uuid4()
+    manager = await _make_user(db_session, tenant_id, "manager")
+    subscription = await register_push_subscription(
+        db_session, tenant_id=tenant_id, manager_id=manager.id,
+        endpoint="https://push.example.com/abc", p256dh="key1", auth="key2",
+    )
+
+    await send_zone_violation_push(subscription, {"hello": "world"})
+
+    assert calls == []
+
+
+async def test_send_zone_violation_push_calls_webpush_when_configured(db_session, monkeypatch):
+    calls = []
+    monkeypatch.setattr("app.violations.service.webpush", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(
+        "app.violations.service.get_settings",
+        lambda: Settings(vapid_private_key="fake-priv-key", vapid_public_key="fake-pub-key"),
+    )
+    tenant_id = uuid.uuid4()
+    manager = await _make_user(db_session, tenant_id, "manager")
+    subscription = await register_push_subscription(
+        db_session, tenant_id=tenant_id, manager_id=manager.id,
+        endpoint="https://push.example.com/abc", p256dh="key1", auth="key2",
+    )
+
+    await send_zone_violation_push(subscription, {"hello": "world"})
+
+    assert len(calls) == 1
+    assert calls[0]["subscription_info"]["endpoint"] == "https://push.example.com/abc"
+    assert calls[0]["subscription_info"]["keys"] == {"p256dh": "key1", "auth": "key2"}
+    assert calls[0]["vapid_private_key"] == "fake-priv-key"
+
+
+async def test_send_zone_violation_push_swallows_webpush_exception(db_session, monkeypatch):
+    def _raise(**kwargs):
+        raise WebPushException("push service returned an error")
+
+    monkeypatch.setattr("app.violations.service.webpush", _raise)
+    monkeypatch.setattr(
+        "app.violations.service.get_settings",
+        lambda: Settings(vapid_private_key="fake-priv-key"),
+    )
+    tenant_id = uuid.uuid4()
+    manager = await _make_user(db_session, tenant_id, "manager")
+    subscription = await register_push_subscription(
+        db_session, tenant_id=tenant_id, manager_id=manager.id,
+        endpoint="https://push.example.com/abc", p256dh="key1", auth="key2",
+    )
+
+    # Must not raise.
+    await send_zone_violation_push(subscription, {"hello": "world"})
+
+
+async def test_notify_managers_of_violation_notifies_all_tenant_subscriptions(db_session, monkeypatch):
+    calls = []
+    monkeypatch.setattr("app.violations.service.webpush", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(
+        "app.violations.service.get_settings",
+        lambda: Settings(vapid_private_key="fake-priv-key"),
+    )
+    tenant_id = uuid.uuid4()
+    manager_a = await _make_user(db_session, tenant_id, "manager")
+    manager_b = await _make_user(db_session, tenant_id, "manager")
+    await register_push_subscription(
+        db_session, tenant_id=tenant_id, manager_id=manager_a.id,
+        endpoint="https://push.example.com/a", p256dh="key1", auth="key2",
+    )
+    await register_push_subscription(
+        db_session, tenant_id=tenant_id, manager_id=manager_b.id,
+        endpoint="https://push.example.com/b", p256dh="key3", auth="key4",
+    )
+    rep, zone = await _make_assigned_rep(db_session, tenant_id)
+    violation, _newly_detected = await evaluate_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep.id,
+        latitude=FAR_OUTSIDE[0], longitude=FAR_OUTSIDE[1], recorded_at=WORK_HOURS_TS,
+    )
+
+    await notify_managers_of_violation(db_session, tenant_id=tenant_id, violation=violation)
+
+    assert len(calls) == 2
+    endpoints = {call["subscription_info"]["endpoint"] for call in calls}
+    assert endpoints == {"https://push.example.com/a", "https://push.example.com/b"}
+
+
+async def test_notify_managers_of_violation_one_failure_does_not_block_others(db_session, monkeypatch):
+    calls = []
+
+    def _maybe_raise(**kwargs):
+        if kwargs["subscription_info"]["endpoint"].endswith("/a"):
+            raise WebPushException("gone")
+        calls.append(kwargs)
+
+    monkeypatch.setattr("app.violations.service.webpush", _maybe_raise)
+    monkeypatch.setattr(
+        "app.violations.service.get_settings",
+        lambda: Settings(vapid_private_key="fake-priv-key"),
+    )
+    tenant_id = uuid.uuid4()
+    manager_a = await _make_user(db_session, tenant_id, "manager")
+    manager_b = await _make_user(db_session, tenant_id, "manager")
+    await register_push_subscription(
+        db_session, tenant_id=tenant_id, manager_id=manager_a.id,
+        endpoint="https://push.example.com/a", p256dh="key1", auth="key2",
+    )
+    await register_push_subscription(
+        db_session, tenant_id=tenant_id, manager_id=manager_b.id,
+        endpoint="https://push.example.com/b", p256dh="key3", auth="key4",
+    )
+    rep, zone = await _make_assigned_rep(db_session, tenant_id)
+    violation, _newly_detected = await evaluate_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep.id,
+        latitude=FAR_OUTSIDE[0], longitude=FAR_OUTSIDE[1], recorded_at=WORK_HOURS_TS,
+    )
+
+    # Must not raise, and must still reach subscription /b.
+    await notify_managers_of_violation(db_session, tenant_id=tenant_id, violation=violation)
+
+    assert len(calls) == 1
+    assert calls[0]["subscription_info"]["endpoint"] == "https://push.example.com/b"
+```
+
+- [ ] **Step 5: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/violations/test_service.py -v`
+Expected: FAIL — `ImportError: cannot import name 'register_push_subscription'`
+
+- [ ] **Step 6: Append to `app/violations/service.py`**
+
+Add these imports to the top of the file (merge with existing imports):
+
+```python
+import asyncio
+import json
+import logging
+
+from sqlalchemy.exc import IntegrityError
+from pywebpush import WebPushException, webpush
+
+from app.config import get_settings
+from app.violations.models import PushSubscription
+
+logger = logging.getLogger(__name__)
+```
+
+Append to the end of the file:
+
+```python
+async def register_push_subscription(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    manager_id: uuid.UUID,
+    endpoint: str,
+    p256dh: str,
+    auth: str,
+) -> PushSubscription:
+    result = await db.execute(
+        select(PushSubscription).where(
+            PushSubscription.tenant_id == tenant_id,
+            PushSubscription.manager_id == manager_id,
+            PushSubscription.endpoint == endpoint,
+        )
+    )
+    existing = result.scalar_one_or_none()
+    if existing is not None:
+        existing.p256dh = p256dh
+        existing.auth = auth
+        await db.commit()
+        await db.refresh(existing)
+        return existing
+
+    subscription = PushSubscription(
+        id=uuid.uuid4(), tenant_id=tenant_id, manager_id=manager_id,
+        endpoint=endpoint, p256dh=p256dh, auth=auth,
+    )
+    db.add(subscription)
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        # Race condition: concurrent request registered the same endpoint first.
+        result = await db.execute(
+            select(PushSubscription).where(
+                PushSubscription.tenant_id == tenant_id,
+                PushSubscription.manager_id == manager_id,
+                PushSubscription.endpoint == endpoint,
+            )
+        )
+        existing = result.scalar_one_or_none()
+        if existing is not None:
+            return existing
+        raise
+    await db.refresh(subscription)
+    return subscription
+
+
+async def list_push_subscriptions(db: AsyncSession, manager_id: uuid.UUID) -> list[PushSubscription]:
+    result = await db.execute(select(PushSubscription).where(PushSubscription.manager_id == manager_id))
+    return list(result.scalars().all())
+
+
+async def send_zone_violation_push(subscription: PushSubscription, payload: dict) -> None:
+    settings = get_settings()
+    if not settings.vapid_private_key:
+        # ponytail: no-op until real VAPID keys are configured -- browser
+        # push can't be exercised end-to-end without real deploy infra
+        # (HTTPS, a registered service worker, FCM).
+        logger.info("VAPID not configured, skipping push to %s", subscription.endpoint)
+        return
+
+    try:
+        # webpush() is a blocking call (wraps `requests`), not async --
+        # must run off the event loop or it stalls every other request
+        # for the duration of the HTTPS round-trip.
+        await asyncio.to_thread(
+            webpush,
+            subscription_info={
+                "endpoint": subscription.endpoint,
+                "keys": {"p256dh": subscription.p256dh, "auth": subscription.auth},
+            },
+            data=json.dumps(payload),
+            vapid_private_key=settings.vapid_private_key,
+            vapid_claims={"sub": settings.vapid_claim_email},
+        )
+    except WebPushException as exc:
+        logger.warning("push send failed for %s: %s", subscription.endpoint, exc)
+
+
+async def notify_managers_of_violation(
+    db: AsyncSession, tenant_id: uuid.UUID, violation: ZoneViolation
+) -> None:
+    result = await db.execute(select(PushSubscription).where(PushSubscription.tenant_id == tenant_id))
+    subscriptions = list(result.scalars().all())
+    payload = {
+        "type": "ZoneViolationDetected",
+        "violation_id": str(violation.id),
+        "rep_id": str(violation.rep_id),
+        "zone_id": str(violation.zone_id),
+        "detected_at": violation.detected_at.isoformat(),
+    }
+    for subscription in subscriptions:
+        await send_zone_violation_push(subscription, payload)
+```
+
+- [ ] **Step 7: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/violations/test_service.py -v`
+Expected: all 18 tests (11 from Task 2 + 7 new) `PASSED`.
+
+- [ ] **Step 8: Run the full suite**
+
+Run: `cd backend && uv run pytest -q`
+Expected: no regressions.
+
+- [ ] **Step 9: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/pyproject.toml backend/uv.lock backend/app/config.py backend/.env.example backend/app/violations/service.py backend/tests/violations/test_service.py
+git commit -m "feat(backend): push-subscription registration and VAPID web-push sending
+
+Refs PLAN 6.2"
+```
+
+---
+
+### Task 5: Wire push into ping flow + push-subscription router
+
+**Files:**
+- Modify: `backend/app/pings/router.py`
+- Modify: `backend/app/violations/schemas.py` (append `PushSubscriptionCreate`, `PushSubscriptionOut`)
+- Modify: `backend/app/violations/router.py` (append `push_subscriptions_router`)
+- Modify: `backend/app/main.py` (mount `push_subscriptions_router`)
+- Modify: `backend/tests/pings/test_router.py` (append)
+- Modify: `backend/tests/violations/test_router.py` (append)
+
+**Interfaces:**
+- Consumes: `notify_managers_of_violation` (Task 4), `register_push_subscription`/`list_push_subscriptions` (Task 4).
+- Produces: `POST /api/v1/push-subscriptions` → 201 `PushSubscriptionOut` (manager only), `GET /api/v1/push-subscriptions` → 200 `list[PushSubscriptionOut]` (manager only, own subscriptions).
+
+- [ ] **Step 1: Write the failing tests**
+
+Append to `backend/tests/violations/test_router.py`:
+
+```python
+async def test_manager_can_register_push_subscription(client):
+    tenant_id = str(uuid.uuid4())
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "mgr@example.com", "password": "hunter2pass", "role": "manager"},
+        headers={"X-Tenant-Id": tenant_id},
+    )
+    token = response.json()["access_token"]
+
+    sub_response = await client.post(
+        "/api/v1/push-subscriptions",
+        json={"endpoint": "https://push.example.com/abc", "p256dh": "key1", "auth": "key2"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert sub_response.status_code == 201
+    assert sub_response.json()["endpoint"] == "https://push.example.com/abc"
+    assert "p256dh" not in sub_response.json()
+
+
+async def test_rep_cannot_register_push_subscription(client):
+    tenant_id = str(uuid.uuid4())
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "rep@example.com", "password": "hunter2pass", "role": "rep"},
+        headers={"X-Tenant-Id": tenant_id},
+    )
+    token = response.json()["access_token"]
+
+    sub_response = await client.post(
+        "/api/v1/push-subscriptions",
+        json={"endpoint": "https://push.example.com/abc", "p256dh": "key1", "auth": "key2"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert sub_response.status_code == 403
+
+
+async def test_manager_lists_own_push_subscriptions(client):
+    tenant_id = str(uuid.uuid4())
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "mgr@example.com", "password": "hunter2pass", "role": "manager"},
+        headers={"X-Tenant-Id": tenant_id},
+    )
+    token = response.json()["access_token"]
+    await client.post(
+        "/api/v1/push-subscriptions",
+        json={"endpoint": "https://push.example.com/abc", "p256dh": "key1", "auth": "key2"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    list_response = await client.get(
+        "/api/v1/push-subscriptions", headers={"Authorization": f"Bearer {token}"}
+    )
+
+    assert list_response.status_code == 200
+    assert len(list_response.json()) == 1
+```
+
+Append to `backend/tests/pings/test_router.py` (extends the Task 3 integration test to prove the whole chain fires):
+
+```python
+async def test_ping_outside_zone_triggers_push_to_subscribed_manager(client, monkeypatch):
+    import uuid
+
+    calls = []
+    monkeypatch.setattr("app.violations.service.webpush", lambda **kwargs: calls.append(kwargs))
+    monkeypatch.setattr(
+        "app.violations.service.get_settings",
+        lambda: __import__("app.config", fromlist=["Settings"]).Settings(vapid_private_key="fake-priv-key"),
+    )
+
+    tenant_id = str(uuid.uuid4())
+    mgr_response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "mgr@example.com", "password": "hunter2pass", "role": "manager"},
+        headers={"X-Tenant-Id": tenant_id},
+    )
+    mgr_token = mgr_response.json()["access_token"]
+    await client.post(
+        "/api/v1/push-subscriptions",
+        json={"endpoint": "https://push.example.com/abc", "p256dh": "key1", "auth": "key2"},
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+    rep_response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": "rep@example.com", "password": "hunter2pass", "role": "rep"},
+        headers={"X-Tenant-Id": tenant_id},
+    )
+    rep_token = rep_response.json()["access_token"]
+    me_response = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {rep_token}"})
+    rep_id = me_response.json()["id"]
+
+    zone_response = await client.post(
+        "/api/v1/zones",
+        json={
+            "name": "Territory",
+            "boundary": {"type": "Polygon", "coordinates": [[[0, 0], [10, 0], [10, 1], [0, 1], [0, 0]]]},
+        },
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+    zone_id = zone_response.json()["id"]
+    await client.post(
+        f"/api/v1/zones/{zone_id}/assignments",
+        json={"rep_id": rep_id},
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+
+    await client.post(
+        "/api/v1/pings",
+        json={
+            "recorded_at": "2026-08-03T10:00:00Z",
+            "latitude": 50.0,
+            "longitude": 50.0,
+            "idempotency_key": "ping-push-1",
+        },
+        headers={"Authorization": f"Bearer {rep_token}"},
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["subscription_info"]["endpoint"] == "https://push.example.com/abc"
+```
+
+**Before writing this test, confirm the exact zone-creation/zone-assignment endpoint paths against `backend/app/zones/router.py`** (same note as Task 3).
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/violations/test_router.py tests/pings/test_router.py -v`
+Expected: FAIL — `404` on `/api/v1/push-subscriptions`.
+
+- [ ] **Step 3: Append to `app/violations/schemas.py`**
+
+```python
+class PushSubscriptionCreate(BaseModel):
+    endpoint: str
+    p256dh: str
+    auth: str
+
+
+class PushSubscriptionOut(BaseModel):
+    id: uuid.UUID
+    manager_id: uuid.UUID
+    endpoint: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+```
+
+- [ ] **Step 4: Append `push_subscriptions_router` to `app/violations/router.py`**
+
+Add these imports to the top of the file (merge with existing):
+
+```python
+from fastapi import status
+
+from app.violations.schemas import PushSubscriptionCreate, PushSubscriptionOut
+from app.violations.service import list_push_subscriptions, register_push_subscription
+```
+
+Append to the end of the file:
+
+```python
+push_subscriptions_router = APIRouter(prefix="/api/v1/push-subscriptions", tags=["push-subscriptions"])
+
+
+@push_subscriptions_router.post("", response_model=PushSubscriptionOut, status_code=status.HTTP_201_CREATED)
+async def register_push_subscription_endpoint(
+    body: PushSubscriptionCreate,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+) -> PushSubscriptionOut:
+    return await register_push_subscription(
+        db, tenant_id=current_user.tenant_id, manager_id=current_user.id,
+        endpoint=body.endpoint, p256dh=body.p256dh, auth=body.auth,
+    )
+
+
+@push_subscriptions_router.get("", response_model=list[PushSubscriptionOut])
+async def list_push_subscriptions_endpoint(
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+) -> list[PushSubscriptionOut]:
+    return await list_push_subscriptions(db, manager_id=current_user.id)
+```
+
+- [ ] **Step 5: Wire `notify_managers_of_violation` into `app/pings/router.py`**
+
+Read the current file in full first. Change the import and the `if created:` block from Task 3's shape to:
+
+```python
+from app.violations.service import evaluate_ping, notify_managers_of_violation
+```
+
+```python
+    if created:
+        violation, newly_detected = await evaluate_ping(
+            db,
+            tenant_id=current_user.tenant_id,
+            rep_id=current_user.id,
+            latitude=ping.latitude,
+            longitude=ping.longitude,
+            recorded_at=ping.recorded_at,
+        )
+        if newly_detected:
+            await notify_managers_of_violation(db, tenant_id=current_user.tenant_id, violation=violation)
+```
+
+- [ ] **Step 6: Mount `push_subscriptions_router` in `app/main.py`**
+
+Read the current file in full first. Add, following the exact existing pattern:
+
+```python
+from app.violations.router import push_subscriptions_router, violations_router
+```
+
+(this replaces the Task 3 import of `violations_router` alone with both names on one line)
+
+```python
+app.include_router(violations_router)
+app.include_router(push_subscriptions_router)
+```
+
+- [ ] **Step 7: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/violations/ tests/pings/ -v`
+Expected: all pass.
+
+- [ ] **Step 8: Run the full suite and ruff**
+
+Run: `cd backend && uv run pytest -v && uv run ruff check .`
+Expected: all tests pass, ruff clean.
+
+- [ ] **Step 9: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/pings/router.py backend/app/violations/schemas.py backend/app/violations/router.py backend/app/main.py backend/tests/pings/test_router.py backend/tests/violations/test_router.py
+git commit -m "feat(backend): push-subscription endpoints, wire push-send into ping ingestion
+
+Refs PLAN 6.2"
+```
+
+---
+
+## After this plan
+
+Update `PROGRESS.md` with a new entry (append, don't replace) summarizing violations & alerts: work-hours-gated zone-violation detection wired into ping ingestion, open/resolved lifecycle keyed on one-open-violation-per-rep, `ZoneViolationDetected` published for architectural documentation while push-sending is a direct awaited call (not a bus subscriber, with the reasoning why), `pywebpush`-backed VAPID push via `asyncio.to_thread` (since `webpush()` is blocking), no-op when VAPID isn't configured. Note the two design decisions worth calling out explicitly: work-hours gates detection but not resolution, and the third coordinate-order call site this codebase has had to get right (with its own asymmetric test). Tick PLAN.md 6.1 and 6.2. Then a final whole-branch review before merge, then plan Phase 7 (manager web dashboard) fresh against the actual code.

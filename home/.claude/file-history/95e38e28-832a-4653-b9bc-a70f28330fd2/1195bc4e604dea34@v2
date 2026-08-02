@@ -1,0 +1,22 @@
+import { describe, expect, it } from 'vitest';
+import { render } from '@testing-library/react';
+import DocCard from '@/components/documents/DocCard';
+
+describe('DocCard', () => {
+  it('links to /blog-detail for a normal research entry', () => {
+    const { container } = render(<DocCard doc={{ title: 'Eye of the Heart' }} />);
+    const link = container.querySelector('a');
+    expect(link?.getAttribute('href')).toBe('/blog-detail');
+    expect(link?.getAttribute('target')).toBeNull();
+  });
+
+  it('links out to an external url with target=_blank when doc.url is set', () => {
+    const { container } = render(
+      <DocCard doc={{ title: 'Third Eye Kit', url: 'https://github.com/sadeqisaidmohaddes-star/third-eye-kit' }} />
+    );
+    const link = container.querySelector('a');
+    expect(link?.getAttribute('href')).toBe('https://github.com/sadeqisaidmohaddes-star/third-eye-kit');
+    expect(link?.getAttribute('target')).toBe('_blank');
+    expect(link?.getAttribute('rel')).toBe('noopener noreferrer');
+  });
+});

@@ -1,0 +1,127 @@
+import * as THREE from "three";
+import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import { effectiveStage, mockVaults, mulberry32, type Project, type Vault } from "./data";
+import { STAGE_PALETTE } from "./galaxy";
+
+// Semantic LOD tier 2: inside one galaxy, vaults resolve as individual stars.
+// Notes do NOT render individually here — each star carries a soft particle
+// halo whose radius hints at its note count. Planets come at tier 3.
+
+export interface VaultStarLayer {
+  group: THREE.Group;
+  starMat: THREE.PointsMaterial;
+  haloMat: THREE.PointsMaterial;
+  labels: CSS2DObject[];
+  vaults: Vault[];
+  positions: THREE.Vector3[];
+  /** invisible spheres for raycast-picking individual vault stars */
+  hitSpheres: THREE.Mesh[];
+}
+
+export function buildVaultStars(
+  project: Project,
+  now: number,
+  galaxyRadius: number,
+  sprite: THREE.Texture,
+): VaultStarLayer {
+  const vaults = mockVaults(project);
+  const pal = STAGE_PALETTE[effectiveStage(project, now)];
+  const rnd = mulberry32(project.id.length * 397 + 5);
+
+  const group = new THREE.Group();
+  const positions: THREE.Vector3[] = [];
+  const starPos = new Float32Array(vaults.length * 3);
+  const starCol = new Float32Array(vaults.length * 3);
+  const core = new THREE.Color(pal.core);
+  const white = new THREE.Color(0xffffff);
+  const c = new THREE.Color();
+
+  // place vault stars along the same spiral logic the galaxy cloud uses,
+  // so tier 2 reads as "the same galaxy, resolved" rather than a new scene
+  vaults.forEach((v, i) => {
+    const t = 0.25 + 0.7 * (i / Math.max(1, vaults.length - 1));
+    const angle = t * 2.6 + rnd() * Math.PI * 2;
+    const r = t * galaxyRadius * (0.85 + rnd() * 0.3);
+    const p = new THREE.Vector3(
+      Math.cos(angle) * r,
+      (rnd() - 0.5) * galaxyRadius * 0.08,
+      Math.sin(angle) * r,
+    );
+    positions.push(p);
+    starPos.set([p.x, p.y, p.z], i * 3);
+    c.lerpColors(core, white, 0.55);
+    starCol.set([c.r, c.g, c.b], i * 3);
+  });
+
+  const starGeo = new THREE.BufferGeometry();
+  starGeo.setAttribute("position", new THREE.BufferAttribute(starPos, 3));
+  starGeo.setAttribute("color", new THREE.BufferAttribute(starCol, 3));
+  const starMat = new THREE.PointsMaterial({
+    size: 4.6,
+    map: sprite,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    sizeAttenuation: true,
+  });
+  group.add(new THREE.Points(starGeo, starMat));
+
+  // halos: one merged geometry, a tilted ring of fine particles per star
+  const HALO_N = 42;
+  const haloPos = new Float32Array(vaults.length * HALO_N * 3);
+  const rim = new THREE.Color(pal.rim);
+  vaults.forEach((v, i) => {
+    const haloR = 1.6 + Math.sqrt(v.noteCount) * 0.34;
+    const tilt = new THREE.Euler((rnd() - 0.5) * 1.2, 0, (rnd() - 0.5) * 1.2);
+    for (let k = 0; k < HALO_N; k++) {
+      const a = (k / HALO_N) * Math.PI * 2;
+      const pt = new THREE.Vector3(Math.cos(a) * haloR, 0, Math.sin(a) * haloR)
+        .applyEuler(tilt)
+        .add(positions[i]);
+      haloPos.set([pt.x, pt.y, pt.z], (i * HALO_N + k) * 3);
+    }
+  });
+  const haloGeo = new THREE.BufferGeometry();
+  haloGeo.setAttribute("position", new THREE.BufferAttribute(haloPos, 3));
+  const haloMat = new THREE.PointsMaterial({
+    size: 0.55,
+    color: rim,
+    map: sprite,
+    transparent: true,
+    opacity: 0,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    sizeAttenuation: true,
+  });
+  group.add(new THREE.Points(haloGeo, haloMat));
+
+  // proximity-fade labels (research finding: labels appear near, fade far)
+  const labels = vaults.map((v, i) => {
+    const el = document.createElement("div");
+    el.className = "yz-label";
+    el.textContent = v.name;
+    const label = new CSS2DObject(el);
+    // stagger label heights so clustered stars don't stack their names
+    label.position
+      .copy(positions[i])
+      .add(new THREE.Vector3(0, 2.6 + (i % 3) * 1.5, 0));
+    group.add(label);
+    return label;
+  });
+
+  const hitSpheres = vaults.map((v, i) => {
+    const hit = new THREE.Mesh(
+      new THREE.SphereGeometry(2.4, 8, 8),
+      new THREE.MeshBasicMaterial({ visible: false }),
+    );
+    hit.position.copy(positions[i]);
+    hit.userData.vaultId = v.id;
+    group.add(hit);
+    return hit;
+  });
+
+  group.visible = false;
+  return { group, starMat, haloMat, labels, vaults, positions, hitSpheres };
+}

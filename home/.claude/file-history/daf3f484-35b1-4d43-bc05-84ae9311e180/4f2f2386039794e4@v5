@@ -1,0 +1,87 @@
+import {
+  decayCountdown,
+  earnedStage,
+  effectiveStage,
+  isDust,
+  type Project,
+  type Stage,
+  type Vault,
+} from "./data";
+
+// Hover-triggered side panel (research finding: per-object stats live in a
+// dedicated panel, never as floating text inside the 3D scene).
+
+const STAGE_LABEL: Record<Stage, string> = {
+  "nebula": "Nebula",
+  "red-dwarf": "Red Dwarf",
+  "main-sequence": "Main Sequence",
+  "blue-giant": "Blue Giant",
+  "black-hole": "Black Hole",
+};
+
+let el: HTMLDivElement | null = null;
+
+function ensure(): HTMLDivElement {
+  if (el) return el;
+  el = document.createElement("div");
+  el.id = "yz-panel";
+  document.body.appendChild(el);
+  return el;
+}
+
+export function showPanel(p: Project, now: number, hint: string): void {
+  const dust = isDust(p, now);
+  const stage = dust ? "Dust Cloud" : STAGE_LABEL[effectiveStage(p, now)];
+  const days = decayCountdown(p, now);
+  const cooling = dust
+    ? `<div class="yz-row yz-decay">collapsed from neglect — any activity begins recovery</div>`
+    : days !== null && earnedStage(p) !== "nebula"
+      ? `<div class="yz-row yz-decay">cools in ${days.toFixed(1)} days without activity</div>`
+      : "";
+  ensure().innerHTML = `
+    <div class="yz-name">${p.name}</div>
+    <div class="yz-stage">${stage}</div>
+    <div class="yz-row">${p.noteCount} notes · ${p.contributors} contributor${p.contributors === 1 ? "" : "s"}</div>
+    ${cooling}
+    <div class="yz-hint">${hint}</div>
+  `;
+  ensure().style.opacity = "1";
+}
+
+export function showVaultPanel(v: Vault, hint: string): void {
+  ensure().innerHTML = `
+    <div class="yz-name">${v.name}</div>
+    <div class="yz-stage">Vault</div>
+    <div class="yz-row">${v.noteCount} notes</div>
+    <div class="yz-hint">${hint}</div>
+  `;
+  ensure().style.opacity = "1";
+}
+
+export interface UserPanelData {
+  name: string;
+  mass: number;
+  projectsTouched: number;
+  idleDays: number;
+}
+
+/** Aggregate stats only — a person's knowledge is visible in scale,
+ *  never in content. */
+export function showUserPanel(u: UserPanelData): void {
+  const active =
+    u.idleDays < 5
+      ? "active this week"
+      : `quiet for ${Math.round(u.idleDays)} days`;
+  ensure().innerHTML = `
+    <div class="yz-name">${u.name}</div>
+    <div class="yz-stage">Personal universe</div>
+    <div class="yz-row">${u.mass} notes · ${u.projectsTouched} projects</div>
+    <div class="yz-row">${active}</div>
+    <div class="yz-hint">content is private</div>
+  `;
+  ensure().style.opacity = "1";
+}
+
+export function hidePanel(): void {
+  if (el) el.style.opacity = "0";
+}

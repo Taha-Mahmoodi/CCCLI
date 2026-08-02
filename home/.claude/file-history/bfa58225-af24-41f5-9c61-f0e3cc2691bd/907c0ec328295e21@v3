@@ -1,0 +1,143 @@
+# Tablet release APK + auto-update — design
+
+Date: 2026-07-25
+Status: approved, ready for implementation plan
+Revised 2026-07-25: repo made public (verified: `visibility: public`, and a
+full git-history secret scan turned up nothing but placeholder/dev-default
+values before this change — safe). This removes the entire "no GitHub
+credential in the APK" problem increment 2 was built around: public-repo
+release assets are fetchable with a plain unauthenticated request, so the
+tablet can talk to GitHub directly. Increment 2 below is rewritten
+accordingly — no backend proxy, no PAT, no token-expiry concern.
+
+## Context
+
+`atlas.piiix.org` is now a live, verified production deployment (backend +
+dashboard, real HTTPS, real Postgres). The tablet app (`tablet/`) has so far
+only ever produced debug-signed APKs, verified by CI (`assembleDebug`) but
+never installed on a physical device. The user wants:
+
+1. A real, downloadable, installable release APK, distributed via this
+   repo's GitHub Releases, pointed at the live backend — to install
+   on multiple physical test devices now.
+2. An auto-update mechanism so already-installed devices pick up new
+   versions automatically once released.
+
+Split into two increments so (1) ships without waiting on (2) — it's the
+part that unblocks real-device testing, which has been an open gap since
+Phase 8.
+
+## Increment 1 — Signed release APK via GitHub Actions
+
+**Keystore.** A single Android release keystore, generated once, locally.
+This is the one unrecoverable artifact in the whole project — GitHub
+Actions secrets are write-only (can't be read back once set), so the local
+`.jks` file plus its passwords are the only durable copy. Handed to the
+user to archive off-machine (password manager, encrypted backup) before any
+cleanup — never committed to the repo, not even gitignored-but-present.
+
+**Gradle wiring.** `tablet/android/app/build.gradle` gets a
+`signingConfigs.release` block reading keystore path/passwords from Gradle
+properties (populated from CI secrets at build time via `-P` flags or a
+generated `keystore.properties`, matching Android's standard pattern). The
+existing `buildTypes.release` block (currently `minifyEnabled false`,
+default proguard files, untouched since `cap add android` generated it) is
+verified via a local `./gradlew assembleRelease` spike before writing any
+CI workflow, since every previous APK in this project has been debug-built
+and this is a genuinely untested path (minify/proguard state, missing
+signing config).
+
+**CI workflow (`tablet-release.yml`).** Triggers on push of a
+`tablet-vX.Y.Z` tag. Steps: checkout, JDK 21 + Android SDK setup (mirrors
+the existing `tablet` CI job), `npm ci` + `npm run build` with
+`VITE_API_BASE_URL=https://atlas.piiix.org` (a repo **variable**, not a
+secret — not sensitive, but must be set so the build baked into the release
+APK points at the live backend rather than the `.env` default of
+`localhost`), `npx cap sync android`, decode the keystore from a base64
+secret to a file, `./gradlew assembleRelease` with the signing properties
+injected from secrets, then publish the resulting `.apk` as a GitHub
+Release asset via `gh release create` (tag becomes the release name).
+
+**`versionCode` derivation.** Parsed from the tag itself
+(`tablet-v1.2.3` → `1*10000 + 2*100 + 3`), not `github.run_number` —
+`run_number` is per-workflow-file and resets on rename/recreate, silently
+breaking Android's "new versionCode must be higher" update contract with no
+useful error surfaced anywhere. Tag-derived means `versionCode` and
+`versionName` can never disagree and the scheme is immune to CI/workflow
+churn.
+
+**Secrets/variables needed in the repo:** `ANDROID_KEYSTORE_BASE64`,
+`ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`
+(secrets); `TABLET_API_BASE_URL` (variable, `https://atlas.piiix.org`).
+
+**Docs.** `tablet/README.md` gains two notes so real-device testing doesn't
+read as broken: (a) a release-signed APK cannot install over an existing
+debug build on the same device (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`) —
+uninstall debug builds first; (b) sideloading prompts an OS "install
+unknown apps" permission screen and may trigger a Play Protect warning —
+both expected, not a sign anything is wrong.
+
+**Outcome:** tagging a commit produces a signed APK on the repo's Releases
+page, downloadable by anyone with the link (`gh release download` or the
+web UI), installable on any Android device with "unknown sources" allowed.
+
+## Increment 2 — Auto-update for installed devices
+
+**Direct-to-GitHub, no backend involvement.** With the repo public, GitHub's
+release API and asset downloads are both fetchable with a plain
+unauthenticated request — no credential needed anywhere, so no backend
+proxy, no PAT, nothing server-side to build or maintain for this feature.
+
+**Tablet: update check.** On launch, `@capacitor/app`'s `getInfo()` reads
+the installed app's own version; a plain `fetch` to
+`https://api.github.com/repos/Taha-Mahmoodi/atlas-fieldforce/releases/latest`
+returns the latest `tablet-v*` tag plus its asset list (`browser_download_url`
+for the `.apk`). Version compared using the same tag-parsing scheme as CI's
+`versionCode` derivation, so client and CI can never disagree on what
+"newer" means. If newer, prompt the rep (not silent/forced — a rep
+mid-visit shouldn't be interrupted by a forced reinstall).
+
+**Rate limit.** GitHub's unauthenticated REST API is capped at 60
+requests/hour per source IP. A once-per-launch check across a handful of
+test devices is nowhere near that; noted here rather than solved, since
+building around a limit this far from being hit would be pure YAGNI — if
+it ever matters (many devices behind one NAT'd IP, polling on an interval
+rather than per-launch), the fix is a longer check interval, not new
+infrastructure.
+
+**Tablet: download + install.** A **dedicated fetch function**, not the
+existing `apiFetch` helper (which unconditionally calls `.json()` on the
+response and would throw on a multi-MB binary) — plain `fetch` against the
+release asset's `browser_download_url` (no auth header needed now), reading
+`arrayBuffer()`. Written to disk via `@capacitor/filesystem`
+(`writeFile`/`getUri`), then handed to
+`@capawesome-team/capacitor-file-opener`'s `openFile()` to invoke Android's
+package installer. Requires `REQUEST_INSTALL_PACKAGES` permission and a
+FileProvider `file_paths.xml` entry in the Android manifest — necessary but
+not sufficient; the OS still prompts an "install unknown apps" toggle the
+first time, same as increment 1's fresh install. No permission pre-check
+built — attempt the install, let the OS handle the prompt.
+
+## Testing
+
+- Increment 1: a local `assembleRelease` spike proves the signing path
+  before any CI is written. CI itself is the test — a real tag push must
+  produce a real, installable signed APK, verified by actually installing
+  it on a device (the user, since no physical device exists in this
+  environment).
+- Increment 2: the tag-parsing / version-comparison logic is a pure
+  function (tag string in, newer-or-not out) — unit-tested directly, no
+  network mocking needed. The actual download/install flow (talking to a
+  real `api.github.com`, writing a file, invoking the OS installer) cannot
+  be unit-tested meaningfully — verified manually by the user on a real
+  device once increment 1's APK is already installed, by publishing a
+  second tagged release and confirming the prompt/download/install
+  sequence.
+
+## What this doesn't do
+
+- No forced/silent updates — always a rep-visible prompt.
+- No rollback mechanism if a bad version ships (would need a manual new
+  release with a higher version, same as today's manual flow).
+- No delta/incremental APK downloads — every update re-downloads the full
+  APK (acceptable at this app's size and user count).

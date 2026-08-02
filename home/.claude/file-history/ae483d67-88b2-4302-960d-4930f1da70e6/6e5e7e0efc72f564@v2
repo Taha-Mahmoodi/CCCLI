@@ -1,0 +1,39 @@
+# @tew/api — backend
+
+Small, cursor-paginated API for Third Eye World (spec §8). **No ranking, no
+follow graph, no like counts.** Runs locally with zero external services:
+`node:sqlite` (built-in) + filesystem audio storage + a stub transcriber.
+
+## Run
+
+```bash
+pnpm --filter @tew/api start        # serves on :4000 (PORT to override)
+pnpm --filter @tew/api test         # 10 integration tests, no server/network
+```
+
+Data lands in `.data/` (gitignored): `tew.sqlite` + `audio/`.
+
+## Endpoints
+
+| Method | Path | Notes |
+|---|---|---|
+| GET  | `/health` | liveness |
+| POST | `/memos` | multipart: `audio` file + `channelId`, `durationMs`, `mime`; or `isTts=true` + `sourceText`. Runs LID→ASR, stores audio + transcript. |
+| GET  | `/timeline?channel=&cursor=&limit=` | chronological, compound `"<ts>_<id>"` cursor (handles same-ms ties). No ranking. |
+| GET  | `/audio/:id` | streams the stored audio |
+| POST | `/memos/:id/like` | `{ userId }` — records a per-user like, **returns no count** (#4) |
+| POST | `/memos/:id/comments` | multipart `audio` — a voice comment |
+| POST | `/memos/:id/transcript/correction` | `{ text }` — stores a correction, **never overwrites** machine text (§8.3) |
+| GET  | `/search?q=` | full-text over transcripts (correction preferred) |
+| POST | `/reports` | `{ targetType, targetId, reason }` — DM reports get a faster SLA (§9) |
+
+All requests are token-bucket rate-limited per IP.
+
+## Swapping the stubs for production
+
+- **Transcription** (`src/transcribe.ts`): replace `stubTranscriber` with
+  self-hosted **Whisper large-v3** (faster-whisper on GPU). LID stays mandatory
+  and runs first. Same interface — one-file change.
+- **Storage** (`src/storage.ts`): replace filesystem with S3-compatible +
+  zero-egress CDN (Cloudflare R2). Same interface.
+- **DB**: `node:sqlite` → Postgres for multi-instance. Schema in `src/db.ts`.

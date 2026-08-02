@@ -1,0 +1,16 @@
+const container = document.querySelector('.leaflet-container');
+const rect = container.getBoundingClientRect();
+
+function clickAt(x, y) {
+  const opts = { bubbles: true, cancelable: true, clientX: rect.left + x, clientY: rect.top + y, view: window };
+  container.dispatchEvent(new MouseEvent('mousedown', opts));
+  container.dispatchEvent(new MouseEvent('mouseup', opts));
+  container.dispatchEvent(new MouseEvent('click', opts));
+}
+
+clickAt(300, 200);
+clickAt(500, 200);
+clickAt(400, 400);
+clickAt(300, 200);
+
+'drawn';

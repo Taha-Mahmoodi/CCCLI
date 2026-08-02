@@ -1,0 +1,82 @@
+// Real-viewport screenshot + overflow probe via CDP.
+// Headless Chrome floors --window-size below ~500px CSS width and resamples the
+// PNG, so narrow "mobile" screenshots taken that way are silently wrong.
+// Emulation.setDeviceMetricsOverride is the only honest way to get 360px.
+//
+// --force-dark-mode is Chromium's auto-darkening filter and does NOT drive the
+// prefers-color-scheme media query. Emulation.setEmulatedMedia does.
+//
+// usage: node shot.mjs <file-url> <out-prefix> <w>x<h>[,...] [scheme] [motion]
+import { spawn } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+
+const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+const [url, prefix, sizes = '360x780,768x1024,1440x1000',
+       scheme = 'dark', motion = 'no-preference'] = process.argv.slice(2);
+if (!url || !prefix) { console.error('usage: node shot.mjs <url> <prefix> [sizes]'); process.exit(1); }
+
+const port = 9222 + (process.pid % 500);
+const chrome = spawn(CHROME, [
+  '--headless', '--disable-gpu', '--hide-scrollbars', '--no-first-run',
+  `--remote-debugging-port=${port}`, '--user-data-dir=/tmp/cdp-' + process.pid,
+  'about:blank',
+], { stdio: 'ignore' });
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function target() {
+  for (let i = 0; i < 60; i++) {
+    try {
+      const r = await fetch(`http://127.0.0.1:${port}/json/list`);
+      const t = (await r.json()).find(t => t.type === 'page');
+      if (t?.webSocketDebuggerUrl) return t.webSocketDebuggerUrl;
+    } catch {}
+    await sleep(120);
+  }
+  throw new Error('chrome did not come up');
+}
+
+const ws = new WebSocket(await target());
+await new Promise(r => ws.addEventListener('open', r, { once: true }));
+
+let id = 0;
+const waiting = new Map();
+ws.addEventListener('message', e => {
+  const m = JSON.parse(e.data);
+  if (m.id && waiting.has(m.id)) { waiting.get(m.id)(m.result); waiting.delete(m.id); }
+});
+const send = (method, params = {}) =>
+  new Promise(res => { const i = ++id; waiting.set(i, res); ws.send(JSON.stringify({ id: i, method, params })); });
+
+await send('Page.enable');
+await send('Emulation.setEmulatedMedia', {
+  features: [
+    { name: 'prefers-color-scheme', value: scheme },
+    { name: 'prefers-reduced-motion', value: motion },
+  ],
+});
+const results = [];
+
+for (const size of sizes.split(',')) {
+  const [w, h] = size.split('x').map(Number);
+  await send('Emulation.setDeviceMetricsOverride',
+    { width: w, height: h, deviceScaleFactor: 2, mobile: w < 600 });
+  await send('Page.navigate', { url });
+  await sleep(2200);
+
+  const { result } = await send('Runtime.evaluate', {
+    returnByValue: true,
+    expression: `(()=>{const d=document.documentElement;return{
+      inner:innerWidth, scroll:d.scrollWidth, client:d.clientWidth,
+      overflow:d.scrollWidth-d.clientWidth}})()`,
+  });
+  const { data } = await send('Page.captureScreenshot', { format: 'png', captureBeyondViewport: false });
+  writeFileSync(`${prefix}-${w}.png`, Buffer.from(data, 'base64'));
+  results.push({ requested: w, ...result.value });
+}
+
+console.table(results);
+const bad = results.filter(r => r.inner !== r.requested || r.overflow > 0);
+ws.close(); chrome.kill();
+if (bad.length) { console.error('FAIL', JSON.stringify(bad)); process.exit(1); }
+console.log('OK — every viewport is the real width and none overflow');

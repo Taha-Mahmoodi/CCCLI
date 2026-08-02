@@ -1,0 +1,52 @@
+"use client";
+
+import { useActionState, useEffect, useRef } from "react";
+import { addComment, type CommentFormState } from "@/actions/posts";
+import { COMMENT_MAX } from "@/lib/validation";
+
+const initial: CommentFormState = {};
+
+export function CommentComposer({ postId }: { postId: string }) {
+  const action = addComment.bind(null, postId);
+  const [state, formAction, pending] = useActionState(action, initial);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    if (state.ok) formRef.current?.reset();
+  }, [state]);
+
+  return (
+    <form
+      ref={formRef}
+      action={formAction}
+      className="rounded-xl border border-border bg-surface p-4"
+    >
+      <label htmlFor="comment-body" className="text-sm font-medium">
+        Add a reply
+      </label>
+      <textarea
+        id="comment-body"
+        name="body"
+        rows={2}
+        required
+        maxLength={COMMENT_MAX}
+        placeholder="Be kind. Share what you know."
+        className="mt-2 w-full resize-y rounded-lg border border-border bg-transparent px-3 py-2 text-fg placeholder:text-muted"
+      />
+      {state.error ? (
+        <p role="alert" aria-live="assertive" className="mt-2 text-sm text-red-600">
+          {state.error}
+        </p>
+      ) : null}
+      <div className="mt-3 flex justify-end">
+        <button
+          type="submit"
+          disabled={pending}
+          className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-accent-fg transition-transform active:translate-y-px disabled:opacity-60"
+        >
+          {pending ? "Replying…" : "Reply"}
+        </button>
+      </div>
+    </form>
+  );
+}

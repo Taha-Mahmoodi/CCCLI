@@ -1,0 +1,129 @@
+import { fuzzyScore } from "./data";
+
+// Command palette (Cmd/Ctrl+K or /): the C2 answer to "I know its
+// name, take me there." Fuzzy-searches everything reachable — projects,
+// vaults, people — and flies you through the correct tier path.
+// The item list is supplied fresh on every open so it always reflects
+// live state (reborn black holes, new signatures, etc).
+
+export interface PaletteItem {
+  label: string;
+  tag: string;
+  color: string;
+  action: () => void;
+}
+
+export class Palette {
+  private overlay: HTMLDivElement;
+  private input: HTMLInputElement;
+  private list: HTMLDivElement;
+  private supply: () => PaletteItem[];
+  private items: PaletteItem[] = [];
+  private filtered: PaletteItem[] = [];
+  private sel = 0;
+  private onMove?: () => void;
+
+  constructor(supply: () => PaletteItem[], onMove?: () => void) {
+    this.supply = supply;
+    this.onMove = onMove;
+
+    this.overlay = document.createElement("div");
+    this.overlay.id = "yz-palette";
+    this.overlay.innerHTML = `
+      <div class="yz-palette-panel">
+        <input class="yz-palette-input" placeholder="Jump to a project, vault, or person…" spellcheck="false" />
+        <div class="yz-palette-list"></div>
+        <div class="yz-palette-hint">↑↓ select · enter fly · esc close</div>
+      </div>`;
+    document.body.appendChild(this.overlay);
+    this.input = this.overlay.querySelector(".yz-palette-input")!;
+    this.list = this.overlay.querySelector(".yz-palette-list")!;
+
+    // clicks outside the panel close; inside, keep focus in the input
+    this.overlay.addEventListener("pointerdown", (e) => {
+      if (e.target === this.overlay) this.close();
+    });
+
+    this.input.addEventListener("input", () => this.filter());
+    this.input.addEventListener("keydown", (e) => {
+      // the palette owns the keyboard while open — no mute toggles or
+      // tier exits from typing a name
+      e.stopPropagation();
+      if (e.key === "Escape") this.close();
+      else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        this.select(this.sel + 1);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        this.select(this.sel - 1);
+      } else if (e.key === "Enter") {
+        const item = this.filtered[this.sel];
+        if (item) {
+          this.close();
+          item.action();
+        }
+      }
+    });
+  }
+
+  get isOpen(): boolean {
+    return this.overlay.classList.contains("yz-palette-open");
+  }
+
+  open(): void {
+    this.items = this.supply();
+    this.input.value = "";
+    this.overlay.classList.add("yz-palette-open");
+    this.filter();
+    this.input.focus();
+  }
+
+  close(): void {
+    this.overlay.classList.remove("yz-palette-open");
+    this.input.blur();
+  }
+
+  toggle(): void {
+    if (this.isOpen) this.close();
+    else this.open();
+  }
+
+  private filter(): void {
+    const q = this.input.value.trim();
+    this.filtered = this.items
+      .map((item) => ({ item, score: fuzzyScore(q, item.label) }))
+      .filter((r) => r.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 9)
+      .map((r) => r.item);
+    this.sel = 0;
+    this.render();
+  }
+
+  private select(i: number): void {
+    if (!this.filtered.length) return;
+    this.sel = (i + this.filtered.length) % this.filtered.length;
+    this.onMove?.();
+    this.render();
+  }
+
+  private render(): void {
+    this.list.innerHTML = this.filtered
+      .map(
+        (item, i) => `
+      <div class="yz-palette-row ${i === this.sel ? "yz-palette-sel" : ""}" data-i="${i}">
+        <span class="yz-contact-dot" style="background:${item.color}"></span>
+        <span class="yz-palette-label">${item.label}</span>
+        <span class="yz-palette-tag">${item.tag}</span>
+      </div>`,
+      )
+      .join("");
+    this.list.querySelectorAll<HTMLElement>(".yz-palette-row").forEach((el) => {
+      el.onclick = () => {
+        const item = this.filtered[Number(el.dataset.i)];
+        this.close();
+        item.action();
+      };
+    });
+  }
+}

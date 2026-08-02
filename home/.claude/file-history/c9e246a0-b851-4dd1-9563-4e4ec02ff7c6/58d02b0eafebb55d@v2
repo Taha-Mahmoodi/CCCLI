@@ -1,0 +1,72 @@
+# Production stack for a single VPS: Postgres + one-shot migrate/seed + the app +
+# Caddy (automatic HTTPS via Let's Encrypt). The app is NOT exposed to the host;
+# only Caddy is, on 80/443.
+#
+#   cp .env.production.example .env   # then fill APP_DOMAIN, AUTH_SECRET, POSTGRES_PASSWORD
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# See DEPLOY.md for the full walkthrough.
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: third_eye
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: third_eye
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U third_eye"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrate:
+    build:
+      context: .
+      target: migrator
+    restart: "no"
+    environment:
+      DATABASE_URL: postgresql://third_eye:${POSTGRES_PASSWORD:?}@db:5432/third_eye?schema=public
+    depends_on:
+      db:
+        condition: service_healthy
+
+  app:
+    build:
+      context: .
+      target: runner
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      DATABASE_URL: postgresql://third_eye:${POSTGRES_PASSWORD:?}@db:5432/third_eye?schema=public
+      AUTH_SECRET: ${AUTH_SECRET:?set AUTH_SECRET (openssl rand -base64 32)}
+      AUTH_URL: https://${APP_DOMAIN:?set APP_DOMAIN in .env}
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:

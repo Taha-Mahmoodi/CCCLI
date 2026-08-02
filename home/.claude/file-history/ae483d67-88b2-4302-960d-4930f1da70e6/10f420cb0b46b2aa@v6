@@ -1,0 +1,93 @@
+# STATE — live progress ledger
+
+> **Read this first on any resume** (after an outage, a new session, or context loss). It is the single source of live truth. If it disagrees with `git status`, trust the tree and correct this file. See `docs/handling-protocols.md` §2–3.
+
+_Last updated: 2026-07-20_
+
+**Release status: `v0.8.2` — BETA.** The delivery plan is feature-complete and the build is tagged `v0.8.2-beta` (GitHub pre-release) on `prod`. The programme is in **closed beta testing**; tester feedback is driving product changes ahead of the stable release. Hardening toward **stable v1.0** is underway (currently `v0.8.2`), targeted for public availability by the end of August 2026. The public spec's programme status was updated in step (`sadeqisaidmohaddes-star/third-eye-world-paper`).
+
+## Where we are
+
+- **Repo:** `~/Documents/third-eye-world-mono` (durable clone — never work from the scratchpad).
+- **Branches:** `dev` (default, integration) · `prod` (production). Feature branches off `dev`.
+- **Every slice is built and verified on `prod` — including the iOS SwiftUI UI, the Android Jetpack Compose UI, and both native engines.** 46 PRs, ~133 checks (web 41 · api 28 · crypto 9 · dm 5 · iOS 19 + SwiftUI compile · Android 22 + Compose APK build) + 6 e2e, 0 axe, green CI across **6 jobs** (Linux sandbox, Linux a11y/playwright, macOS Swift **build**, Linux libsignal, Linux Kotlin core, Linux Android-SDK **`assembleDebug` APK build**). The only untouched surface is the **on-device screen-reader runtime** (VoiceOver/TalkBack on a real device/simulator) + external provider accounts.
+
+## Verified & shipped (the ✅ set)
+
+Foundation + Slice 0 + Slice 1 (transcripts/channels/shuffle/search) + Slice 2 (moderation + accessible console + **magic-link auth**) + Slice 3 (backend + **real ASR** whisper.cpp CPU + **text-memo TTS** say/Piper) + **Slice 4 core logic** (Swift `ThirdEyeCore`, macOS-CI-verified) + **Slice 6 E2EE DMs** (real **libsignal** crypto in `@tew/dm` + §7 request-queue transport relay) + **Slice 7 IVR** (TwiML) + spoken onboarding + playback speed.
+
+Key insight that dissolved most of the "impossible" list: **a GPU is for throughput, not capability** (whisper/Piper run on CPU), **native/server logic is testable without a simulator** (Swift `swift run`, TwiML/auth/DM over HTTP), and **libsignal ships prebuilt binaries** (real Signal-protocol E2EE, not hand-rolled). The `packages/crypto` franking sketch is superseded by real libsignal and stays only as a labeled reference.
+
+## What's left — native GUI + external accounts (do NOT fake)
+
+| Item | What the user must provide | Already done + verified here |
+|---|---|---|
+| **On-device screen-reader runtime** | a real device / simulator + emulator | ✅ Android Compose UI *and* iOS SwiftUI UI both **compile green in CI**; TalkBack/VoiceOver semantics + custom actions authored per §6.3. Only the live on-hardware screen-reader pass remains |
+| On-device screen-reader pass | a **device/simulator** (VoiceOver / TalkBack) | ✅ iOS SwiftUI screens + accessibility compile-verified (macOS CI); a11y is annotated, needs a runtime to *drive* |
+| Auth **delivery** | an **email/SMS provider** | ✅ magic-link real + tested (dev returns token); passkeys/OTP remain |
+| Whisper **at scale** | a **GPU** (large-v3 speed) | ✅ real CPU ASR shipped; one-line model swap |
+| IVR **phone number** | a **Twilio** account | ✅ full TwiML call flow tested over HTTP |
+
+To proceed: provide any of the above and resume from this ledger.
+
+## v1 line (branch `v1`) — gesture-led card deck
+
+**Separate from the frozen `v0.8.2-beta` line (`dev`/`prod`).** Feature branches use `v1-*` names (a `v1/...` ref can't coexist with the `v1` branch). CI runs on PRs into `v1` (added to `pull_request` triggers on `v1` itself — GitHub reads triggers from the PR's *base*).
+
+| v1 slice | Status |
+|---|---|
+| A — card deck home (`SwipeDeck`/`MemoCard`, pure `lib/gestures.ts`) | ✅ merged (#58) — swipe right = like, right-twice-fast = like & next, left = skip |
+| B — press-and-hold to record (+ tap-toggle twin) | ✅ merged (#59) |
+| C — onboarding wizard that teaches **and drills** each gesture | ✅ merged (#60, opened from Said's account) |
+
+**Accessibility floor (non-negotiable, holds despite the principle 5/6 reversal):** every gesture action also has a labelled button *and* a keyboard shortcut *and* an aria-live announcement; the persistent media-transport `RadioPlayer` stays mounted; press-and-hold always has a tap twin. Screen readers consume raw swipes, so these non-gesture routes are what actually reach a blind user. The reversal + its unresolved engineering dissent are recorded publicly in spec **§4.1**.
+
+**Still unverified (do NOT claim):** no screen-reader user has driven the deck on a real device. The "gestures are more accessible for blind people" rationale is a leadership view, not a measured result.
+
+## Slice progress
+
+| Slice | Scope | Status |
+|---|---|---|
+| — | Governance docs + branch model | ✅ shipped dev+prod (#1, #2) |
+| 0 | Web walking skeleton: record → radio → 3-route controls | ✅ **shipped dev+prod (#3, #4)** |
+| 1a | Transcripts: auto (client ASR) + correctable + search + toggle | ✅ **shipped dev+prod (#5, #6)** |
+| 1b | Channels/stations: per-station queue + posting + create/switch | ✅ **shipped dev+prod (#7, #9)** |
+| 1c | Shuffle order | ✅ **shipped dev+prod (#11, #12)** |
+| 3 | Backend: memos/timeline/search/likes/comments/reports (node:sqlite + fs) | ✅ **shipped (#13, #14)** |
+| 3-ASR | **Real ASR** — whisper.cpp on CPU (ffmpeg convert, env-gated) | ✅ **shipped (#32, #33)** — verified say→webm→whisper |
+| 3-TTS | **Text-memo TTS** — say (dev) / Piper (prod) | ✅ **shipped (#34, #35)** — text memos synthesized to playable audio (§3.3) |
+| 2a | Moderation backend: queue/decisions/appeals/transparency (different-reviewer) | ✅ **shipped (#16, #17)** |
+| 2b | Accessible moderator console (web↔API) | ✅ **shipped (#18, #19)** — 0 axe, browser-verified |
+| 2-auth | **Magic-link auth** (request→verify→session, hashed tokens) | ✅ **shipped (#28, #29)** — email provider deferred; passkeys/OTP remain |
+| 4 (logic) | iOS `ThirdEyeCore` (Swift RadioEngine port) | ✅ **shipped (#26, #27)** — `swift run` 19-check, macOS CI |
+| 4 (UI) | iOS **SwiftUI screens** + accessibility + audio-service | ✅ **shipped (#42, #43)** — `swift build` compiles SwiftUI + a11y on macOS CI |
+| 5 (logic) | Android `RadioEngine.kt` (Kotlin port) | ✅ **shipped (#44, #45)** — kotlinc + JVM 19-check, Linux CI |
+| 6-crypto | **Real E2EE** — libsignal Signal protocol (`@tew/dm`) | ✅ **shipped (#37, #38)** — 5 checks (roundtrip/ratchet/bidir/tamper), own CI job |
+| 6-transport | DM relay — §7 request-queue (opaque ciphertext, accept-to-open) | ✅ **shipped (#39, #40)** — 4 api tests + smoke |
+| 7 | IVR dial-in — TwiML call flow (keypad nav) | ✅ **shipped (#30, #31)** |
+| onboarding | Spoken first-run onboarding (§3.1) + playback speed | ✅ **shipped (#23, #24)** |
+| 6a | DM franking — **unaudited reference** (superseded by libsignal `@tew/dm`) | ⚠️ kept as a labeled reference only; not the DM path |
+| 5 (UI) | Android **Jetpack Compose** screens | ✅ **shipped (#47, #49, #52)** — `RadioScreen`/`RadioViewModel`/`PlaybackService` (Media3), TalkBack semantics + custom actions; CI `android-app` job builds a **full debug APK** (`assembleDebug`: manifest merge + resource linking + dexing + packaging), not just a Kotlin type-check |
+| on-device a11y | drive VoiceOver/TalkBack on the running apps | ⬜ needs a device/simulator; screens + a11y already compile-verified |
+| whisper/piper at scale | GPU throughput | ⬜ CPU versions shipped; GPU is speed-only |
+| auth delivery / IVR line | email/SMS provider, Twilio number | ⬜ flows built + tested; need provider accounts |
+
+**Honesty note:** anything needing an external GUI toolchain (Xcode, Android SDK) or provider account (GPU, Twilio, email/SMS) is marked `⬜`, never faked. Everything ✅ was run and verified (tests + browser + axe + green CI on dev and prod).
+
+## In-flight / at-risk work
+
+_None. Every slice's core capability is shipped and verified; tree clean on `dev`/`prod`._
+
+## Open issues / blockers
+
+- Transcripts need ASR (Whisper), which is Slice 3 (backend). Slice 1 builds the transcript UI/UX (display, on-by-default, correction, search) against a **client-side stub** (manual entry + Web Speech API where available), clearly labelled "machine transcript", with real Whisper wired at Slice 3.
+
+## Decisions log (why, not what)
+
+- **Branch model:** renamed original `main` → `prod`, created `dev` as default. Exactly two long-lived branches per the workflow spec. (2026-07-19)
+- **Docs in `docs/`, ledger at root** — ledger is root-level for maximum discoverability on resume.
+- **Identity:** commits authored as **Taha-Mahmoodi** (this is Taha's repo). The "commit credited to Said" pattern applies **only** to the paper repo, never here.
+- **Stack:** Next 16 (Turbopack) + React 19 + Tailwind v4 + shadcn/ui (radix base, Nova, RTL) + zustand. gsap + anime.js **dynamically imported** (kept out of first-load). anime.js is v4 → named exports (`import { animate }`).
+- **shadcn Button:** repointed `Slot` import from the `radix-ui` umbrella to `@radix-ui/react-slot` (umbrella tree-shakes poorly). Regenerated shadcn components must be re-patched the same way.
+- **JS budget amended (honest):** original ≤170KB/route was below the React19+Next16 framework floor (~165KB incl. ~38KB legacy polyfills kept for old-device reach, spec §10.4). Real gate: app-authored ≤40KB (now ~20KB) + total ≤200KB (now 188KB). See implementation.md §1.
+- **shadcn MCP** disconnected mid-session once; CLI (`pnpm dlx shadcn@latest add`) is the equivalent fallback (same registry).

@@ -1,0 +1,9 @@
+{
+  "id": "3",
+  "subject": "Phase 2: Author Docker artifacts",
+  "description": "Add Dockerfile.backend, Dockerfile.frontend, .dockerignore to repo (develop then main). Clone main->/opt/lucifers-diary/prod, develop->/opt/lucifers-diary/staging. Write docker-compose.yml, Caddyfile, env/*.env (DATABASE_URL host localhost->postgres).",
+  "activeForm": "Authoring Docker artifacts",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

@@ -1,0 +1,171 @@
+"use client";
+
+import * as React from "react";
+import { ShieldCheck, LifeBuoy, Phone, Flag } from "lucide-react";
+import { Dialog } from "@/components/ui/Dialog";
+import { Button } from "@/components/ui/Button";
+import { Field } from "@/components/ui/Field";
+import { Container } from "@/components/shared/Container";
+import { submitReport } from "@/app/report-actions";
+import { t } from "@/lib/i18n";
+import { useToast } from "@/components/ui/Toast";
+
+/**
+ * Persistent safety affordance, present on every page (rendered in the root
+ * layout). States plainly that Heard is companionship, not therapy, opens a
+ * calm crisis-support dialog, and — when signed in — offers a "Report a problem"
+ * hook that writes to `reports` (SPEC §10 / §12).
+ */
+export function SafetyBanner({ canReport = false }: { canReport?: boolean }) {
+  const { toast } = useToast();
+  const [open, setOpen] = React.useState(false);
+  const [reportOpen, setReportOpen] = React.useState(false);
+  const [reason, setReason] = React.useState("");
+  const [sending, setSending] = React.useState(false);
+  const [reportError, setReportError] = React.useState<string | null>(null);
+
+  async function sendReport() {
+    if (reason.trim().length === 0) {
+      setReportError(t("safety.reportBody"));
+      return;
+    }
+    setSending(true);
+    setReportError(null);
+    const res = await submitReport({ reason: reason.trim() });
+    setSending(false);
+    if (res.error) {
+      setReportError(res.error);
+      return;
+    }
+    setReportOpen(false);
+    setReason("");
+    toast(t("safety.reportSent"), "success");
+  }
+
+  return (
+    <>
+      <footer className="mt-auto border-t border-border bg-surface">
+        <Container
+          as="div"
+          role="note"
+          className="flex flex-wrap items-start justify-between gap-2.5 py-3.5"
+        >
+          <p className="flex items-start gap-2.5 text-sm leading-snug text-ink">
+            <ShieldCheck
+              size={20}
+              strokeWidth={2}
+              aria-hidden="true"
+              className="mt-0.5 flex-none text-primary"
+            />
+            <span>
+              {t("safety.short")}{" "}
+              <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className="font-bold text-primary underline underline-offset-[3px] hover:text-primary-dark"
+              >
+                {t("safety.linkText")}
+              </button>
+              .
+            </span>
+          </p>
+          {canReport ? (
+            <button
+              type="button"
+              onClick={() => setReportOpen(true)}
+              className="inline-flex items-center gap-1.5 text-sm font-bold text-ink-soft underline underline-offset-[3px] hover:text-ink"
+            >
+              <Flag size={16} strokeWidth={2} aria-hidden="true" />
+              {t("safety.report")}
+            </button>
+          ) : null}
+        </Container>
+      </footer>
+
+      <Dialog
+        open={open}
+        onClose={() => setOpen(false)}
+        title={t("safety.dialogTitle")}
+        footer={
+          <Button variant="primary" onClick={() => setOpen(false)}>
+            {t("safety.close")}
+          </Button>
+        }
+      >
+        <p className="mb-5 text-base leading-body text-ink">
+          {t("safety.dialogBody")}
+        </p>
+        <ul className="flex flex-col gap-3">
+          <li className="flex items-start gap-3 rounded-card border border-border bg-bg p-4">
+            <LifeBuoy
+              size={22}
+              strokeWidth={2}
+              aria-hidden="true"
+              className="mt-0.5 flex-none text-primary"
+            />
+            <div>
+              <p className="text-base font-bold text-ink">
+                {t("safety.resource988Title")}
+              </p>
+              <p className="text-sm text-ink-soft">
+                {t("safety.resource988Body")}
+              </p>
+            </div>
+          </li>
+          <li className="flex items-start gap-3 rounded-card border border-border bg-bg p-4">
+            <Phone
+              size={22}
+              strokeWidth={2}
+              aria-hidden="true"
+              className="mt-0.5 flex-none text-alert"
+            />
+            <div>
+              <p className="text-base font-bold text-ink">
+                {t("safety.resourceEmergencyTitle")}
+              </p>
+              <p className="text-sm text-ink-soft">
+                {t("safety.resourceEmergencyBody")}
+              </p>
+            </div>
+          </li>
+        </ul>
+      </Dialog>
+
+      <Dialog
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        title={t("safety.reportTitle")}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setReportOpen(false)}>
+              {t("safety.close")}
+            </Button>
+            <Button onClick={sendReport} disabled={sending}>
+              {sending ? t("ui.loading") : t("safety.reportSubmit")}
+            </Button>
+          </>
+        }
+      >
+        <p className="mb-4 text-base text-ink">{t("safety.reportBody")}</p>
+        {reportError ? (
+          <p role="alert" className="mb-3 text-base font-semibold text-alert">
+            {reportError}
+          </p>
+        ) : null}
+        <Field label={t("safety.reportReasonLabel")} required>
+          {(p) => (
+            <textarea
+              {...p}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={4}
+              maxLength={2000}
+              placeholder={t("safety.reportReasonPlaceholder")}
+              className="rounded-btn border border-border-strong bg-surface px-3.5 py-2.5 text-base text-ink placeholder:text-ink-faint"
+            />
+          )}
+        </Field>
+      </Dialog>
+    </>
+  );
+}

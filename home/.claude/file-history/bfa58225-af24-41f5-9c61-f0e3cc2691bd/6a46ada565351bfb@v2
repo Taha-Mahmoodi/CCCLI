@@ -1,0 +1,58 @@
+# tablet
+
+Capacitor + React + TypeScript Android app.
+
+## Requirements
+
+- **JDK 21** (not 17, not your system default). Capacitor 8's Android Gradle
+  module targets Java source/target compatibility 21; building with an older
+  JDK fails at the very first native compile step with `error: invalid
+  source release: 21`.
+
+  ```bash
+  brew install openjdk@21
+  ```
+
+- **Android SDK** with `platform-tools`, `platforms;android-34`, and
+  `build-tools;34.0.0` installed (via `sdkmanager`, or Android Studio).
+
+Every command that touches `android/` needs these exported first:
+
+```bash
+export JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+```
+
+(Adjust `JAVA_HOME` if your JDK 21 is installed somewhere other than the
+Homebrew default above.)
+
+## Building the Android app
+
+Capacitor's synced artifacts (`android/app/src/main/assets/public`, the
+generated `capacitor.config.json`/`capacitor.plugins.json`, and
+`android/capacitor-cordova-android-plugins/`) are gitignored on purpose —
+they're build output, not source. Running `./gradlew assembleDebug` directly
+on a fresh clone fails with `Could not read script
+'.../capacitor-cordova-android-plugins/cordova.variables.gradle' as it does
+not exist` because that sync step hasn't run yet.
+
+Always run `npx cap sync android` before building natively — or just use the
+one-command script, which does the whole sequence (build the web app, sync,
+build the APK):
+
+```bash
+npm install
+npm run build:android
+```
+
+Equivalent to, if you want the steps separately:
+
+```bash
+npm install
+npm run build
+npx cap sync android
+cd android && ./gradlew assembleDebug
+```
+
+APK output: `android/app/build/outputs/apk/debug/app-debug.apk`.

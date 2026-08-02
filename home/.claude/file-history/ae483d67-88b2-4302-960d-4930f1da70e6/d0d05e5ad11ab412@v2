@@ -1,0 +1,382 @@
+// The API surface (spec §8.5): small, cursor-paginated, NO ranking endpoint.
+// Every dependency is injected so tests run against in-memory SQLite + temp
+// storage + a stub transcriber, with no server and no network.
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import type { Db, MemoRowRaw, ReportRowRaw, TranscriptRowRaw } from "./db";
+import type { Storage } from "./storage";
+import type { Transcriber } from "./transcribe";
+import type { RateLimiter } from "./ratelimit";
+
+export interface AppDeps {
+  db: Db;
+  storage: Storage;
+  transcribe: Transcriber;
+  rateLimit: RateLimiter;
+  // Bearer token -> moderator id. Production replaces this with real auth
+  // (passkeys / magic link). Curation leadership is majority-blind by
+  // governance rule (spec §9) — enforced organizationally, not in code.
+  moderators: Record<string, string>;
+  corsOrigins?: string | string[];
+}
+
+type Vars = { Variables: { moderatorId: string } };
+
+const uid = (): string => crypto.randomUUID();
+
+function serializeMemo(db: Db, memoId: string) {
+  const m = db.prepare("SELECT * FROM memos WHERE id = ?").get(memoId) as MemoRowRaw | undefined;
+  if (!m) return null;
+  const t = db
+    .prepare("SELECT * FROM transcripts WHERE memo_id = ? ORDER BY created_at ASC LIMIT 1")
+    .get(memoId) as TranscriptRowRaw | undefined;
+  return {
+    id: m.id,
+    channelId: m.channel_id,
+    mime: m.mime,
+    durationMs: m.duration_ms,
+    isTts: !!m.is_tts,
+    lang: m.lang_id,
+    createdAt: m.created_at,
+    audioUrl: `/audio/${m.id}`,
+    // correction preferred; machine text honestly labeled. No like count (#4).
+    transcript: t
+      ? {
+          text: t.corrected_text ?? t.text,
+          isMachine: !!t.is_machine && !t.corrected_text,
+          engine: t.engine,
+          lang: t.lang,
+        }
+      : null,
+  };
+}
+
+export function createApp(deps: AppDeps): Hono<Vars> {
+  const { db, storage, transcribe, rateLimit, moderators } = deps;
+  const app = new Hono<Vars>();
+
+  // CORS — the web app calls this API cross-origin. Auth is by bearer token
+  // (not cookies), so no credentialed-origin restriction is needed.
+  app.use("*", cors({ origin: deps.corsOrigins ?? "*", allowHeaders: ["authorization", "content-type"] }));
+
+  // Token-bucket rate limit, per IP.
+  app.use("*", async (c, next) => {
+    const ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim() || "local";
+    if (!rateLimit.allow(ip)) return c.json({ error: "rate_limited" }, 429);
+    await next();
+  });
+
+  app.get("/health", (c) => c.json({ ok: true }));
+
+  // POST /memos — multipart audio + metadata (or typed/TTS memo with sourceText).
+  app.post("/memos", async (c) => {
+    const form = await c.req.formData();
+    const channelId = String(form.get("channelId") || "main");
+    const durationMs = Number(form.get("durationMs") || 0);
+    const sourceText = form.get("sourceText") ? String(form.get("sourceText")) : undefined;
+    const isTts = String(form.get("isTts") || "") === "true";
+    const hintLang = form.get("hintLang") ? String(form.get("hintLang")) : undefined;
+    const file = form.get("audio");
+
+    if (!(file instanceof File) && !isTts) return c.json({ error: "audio required" }, 400);
+    const channel = db.prepare("SELECT id FROM channels WHERE id = ?").get(channelId);
+    if (!channel) return c.json({ error: "unknown channel" }, 400);
+
+    const memoId = uid();
+    const audioKey = `memos/${memoId}`;
+    let mime = String(form.get("mime") || "audio/webm");
+    let audioBytes = new Uint8Array();
+    if (file instanceof File) {
+      audioBytes = new Uint8Array(await file.arrayBuffer());
+      mime = file.type || mime;
+      await storage.put(audioKey, audioBytes);
+    }
+
+    // LID → ASR, in that order (mandatory).
+    const t = await transcribe({ audio: audioBytes, mime, hintLang, sourceText });
+    const now = Date.now();
+    db.prepare(
+      `INSERT INTO memos (id, channel_id, audio_key, mime, duration_ms, is_tts, source_text, lang_id, created_at)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
+    ).run(memoId, channelId, audioKey, mime, durationMs, isTts ? 1 : 0, sourceText ?? null, t.lang, now);
+    db.prepare(
+      `INSERT INTO transcripts (id, memo_id, text, lang, engine, confidence, is_machine, created_at)
+       VALUES (?,?,?,?,?,?,?,?)`,
+    ).run(uid(), memoId, t.text, t.lang, t.engine, t.confidence, t.isMachine ? 1 : 0, now);
+
+    return c.json(serializeMemo(db, memoId), 201);
+  });
+
+  // GET /timeline?channel=&cursor=&limit=  (cursor pagination, no ranking).
+  // Cursor is "<created_at>_<id>" so same-millisecond memos paginate correctly
+  // (a plain created_at cursor would skip or repeat ties).
+  app.get("/timeline", (c) => {
+    const channel = c.req.query("channel");
+    const cursor = c.req.query("cursor") || "";
+    const limit = Math.min(50, Math.max(1, Number(c.req.query("limit") || 20)));
+    const where: string[] = [];
+    const params: (string | number)[] = [];
+    if (channel && channel !== "all") {
+      where.push("channel_id = ?");
+      params.push(channel);
+    }
+    if (cursor) {
+      const sep = cursor.lastIndexOf("_");
+      const cts = Number(cursor.slice(0, sep));
+      const cid = cursor.slice(sep + 1);
+      // row-value tie-break matching ORDER BY created_at DESC, id DESC
+      where.push("(created_at < ? OR (created_at = ? AND id < ?))");
+      params.push(cts, cts, cid);
+    }
+    const sql = `SELECT id, created_at FROM memos ${
+      where.length ? "WHERE " + where.join(" AND ") : ""
+    } ORDER BY created_at DESC, id DESC LIMIT ?`;
+    params.push(limit + 1);
+    const rows = db.prepare(sql).all(...params) as { id: string; created_at: number }[];
+    const hasMore = rows.length > limit;
+    const page = rows.slice(0, limit);
+    const items = page.map((r) => serializeMemo(db, r.id));
+    const last = page[page.length - 1];
+    const nextCursor = hasMore && last ? `${last.created_at}_${last.id}` : null;
+    return c.json({ items, nextCursor });
+  });
+
+  // GET /audio/:id — serve the stored audio.
+  app.get("/audio/:id", async (c) => {
+    const m = db.prepare("SELECT audio_key, mime FROM memos WHERE id = ?").get(c.req.param("id")) as
+      | { audio_key: string; mime: string }
+      | undefined;
+    if (!m) return c.json({ error: "not found" }, 404);
+    try {
+      const bytes = await storage.get(m.audio_key);
+      // copy into a fresh ArrayBuffer (readFile's buffer types as ArrayBufferLike)
+      const ab = bytes.slice().buffer as ArrayBuffer;
+      return c.body(ab, 200, { "content-type": m.mime });
+    } catch {
+      return c.json({ error: "audio missing" }, 404);
+    }
+  });
+
+  // POST /memos/:id/like  { userId } — records per-user like, returns NO count.
+  app.post("/memos/:id/like", async (c) => {
+    const memoId = c.req.param("id");
+    const body = (await c.req.json().catch(() => ({}))) as { userId?: string };
+    if (!db.prepare("SELECT id FROM memos WHERE id = ?").get(memoId))
+      return c.json({ error: "not found" }, 404);
+    db.prepare("INSERT OR IGNORE INTO likes (memo_id, user_id, created_at) VALUES (?,?,?)").run(
+      memoId,
+      String(body.userId || "anon"),
+      Date.now(),
+    );
+    return c.json({ liked: true });
+  });
+
+  // POST /memos/:id/comments — multipart audio comment.
+  app.post("/memos/:id/comments", async (c) => {
+    const memoId = c.req.param("id");
+    if (!db.prepare("SELECT id FROM memos WHERE id = ?").get(memoId))
+      return c.json({ error: "not found" }, 404);
+    const form = await c.req.formData();
+    const file = form.get("audio");
+    if (!(file instanceof File)) return c.json({ error: "audio required" }, 400);
+    const commentId = uid();
+    const audioKey = `comments/${commentId}`;
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    await storage.put(audioKey, bytes);
+    const t = await transcribe({ audio: bytes, mime: file.type });
+    const now = Date.now();
+    const transcriptId = uid();
+    db.prepare(
+      `INSERT INTO transcripts (id, memo_id, text, lang, engine, confidence, is_machine, created_at)
+       VALUES (?,?,?,?,?,?,?,?)`,
+    ).run(transcriptId, memoId, t.text, t.lang, t.engine, t.confidence, t.isMachine ? 1 : 0, now);
+    db.prepare(
+      "INSERT INTO comments (id, memo_id, audio_key, transcript_id, created_at) VALUES (?,?,?,?,?)",
+    ).run(commentId, memoId, audioKey, transcriptId, now);
+    return c.json({ id: commentId, memoId, transcript: t.text }, 201);
+  });
+
+  // POST /memos/:id/transcript/correction { text } — never overwrites machine text.
+  app.post("/memos/:id/transcript/correction", async (c) => {
+    const memoId = c.req.param("id");
+    const body = (await c.req.json().catch(() => ({}))) as { text?: string };
+    const t = db
+      .prepare("SELECT id FROM transcripts WHERE memo_id = ? ORDER BY created_at ASC LIMIT 1")
+      .get(memoId) as { id: string } | undefined;
+    if (!t) return c.json({ error: "not found" }, 404);
+    db.prepare("UPDATE transcripts SET corrected_text = ? WHERE id = ?").run(
+      String(body.text || "").trim(),
+      t.id,
+    );
+    return c.json(serializeMemo(db, memoId));
+  });
+
+  // GET /search?q= — full-text over transcripts (correction preferred).
+  app.get("/search", (c) => {
+    const q = (c.req.query("q") || "").trim();
+    if (!q) return c.json({ items: [] });
+    const rows = db
+      .prepare(
+        `SELECT DISTINCT m.id AS id FROM memos m
+         JOIN transcripts t ON t.memo_id = m.id
+         WHERE COALESCE(NULLIF(t.corrected_text, ''), t.text) LIKE ?
+         ORDER BY m.created_at DESC LIMIT 50`,
+      )
+      .all(`%${q}%`) as { id: string }[];
+    return c.json({ items: rows.map((r) => serializeMemo(db, r.id)) });
+  });
+
+  // POST /reports { targetType, targetId, reason, frankingProof? }
+  app.post("/reports", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as {
+      targetType?: string;
+      targetId?: string;
+      reason?: string;
+      reporterId?: string;
+      frankingProof?: string;
+    };
+    const targetType = String(body.targetType || "");
+    const targetId = String(body.targetId || "");
+    if (!targetType || !targetId)
+      return c.json({ error: "targetType and targetId required" }, 400);
+    const reportId = uid();
+    const now = Date.now();
+    // DM reports get a faster review SLA than public content (spec §9).
+    const slaMs = (targetType === "dm" ? 4 : 24) * 3600_000;
+    db.prepare(
+      `INSERT INTO reports (id, target_type, target_id, reporter_id, franking_proof, reason, status, sla_due_at, created_at)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      reportId,
+      targetType,
+      targetId,
+      String(body.reporterId || "anon"),
+      body.frankingProof ?? null,
+      String(body.reason || ""),
+      "open",
+      now + slaMs,
+      now,
+    );
+    return c.json({ id: reportId, status: "open", slaDueAt: now + slaMs }, 201);
+  });
+
+  // POST /reports/:id/appeal — the affected user reopens a resolved report; the
+  // next decision must come from a different reviewer (spec §9).
+  app.post("/reports/:id/appeal", async (c) => {
+    const id = c.req.param("id");
+    const report = db.prepare("SELECT status FROM reports WHERE id = ?").get(id) as
+      | { status: string }
+      | undefined;
+    if (!report) return c.json({ error: "not found" }, 404);
+    if (report.status !== "resolved")
+      return c.json({ error: "only resolved reports can be appealed" }, 400);
+    db.prepare("UPDATE reports SET status = ? WHERE id = ?").run("appealed", id);
+    return c.json({ id, status: "appealed" });
+  });
+
+  // --- Moderation (protected). No silent shadowbanning: every action is logged
+  //     with a rationale and is disclosable; the console itself must be as
+  //     accessible as the product (its moderators are blind).
+  app.use("/moderation/*", async (c, next) => {
+    const auth = c.req.header("authorization") || "";
+    const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+    const moderatorId = moderators[token];
+    if (!moderatorId) return c.json({ error: "unauthorized" }, 401);
+    c.set("moderatorId", moderatorId);
+    await next();
+  });
+
+  // GET /moderation/queue?status=open|appealed — reports awaiting review, each
+  // with the reported item (audio + transcript) for accessible review.
+  app.get("/moderation/queue", (c) => {
+    const status = c.req.query("status") || "open";
+    const reports = db
+      .prepare("SELECT * FROM reports WHERE status = ? ORDER BY sla_due_at ASC LIMIT 100")
+      .all(status) as unknown as ReportRowRaw[];
+    const items = reports.map((r) => ({
+      id: r.id,
+      targetType: r.target_type,
+      targetId: r.target_id,
+      reason: r.reason,
+      status: r.status,
+      slaDueAt: r.sla_due_at,
+      createdAt: r.created_at,
+      target: r.target_type === "memo" ? serializeMemo(db, r.target_id) : null,
+    }));
+    return c.json({ items });
+  });
+
+  // POST /moderation/decisions { reportId, action, rationaleCode }
+  app.post("/moderation/decisions", async (c) => {
+    const moderatorId = c.get("moderatorId");
+    const body = (await c.req.json().catch(() => ({}))) as {
+      reportId?: string;
+      action?: string;
+      rationaleCode?: string;
+    };
+    const reportId = String(body.reportId || "");
+    const action = String(body.action || "");
+    const rationaleCode = String(body.rationaleCode || "");
+    if (!reportId || !action || !rationaleCode)
+      return c.json({ error: "reportId, action, rationaleCode required" }, 400);
+    const report = db.prepare("SELECT * FROM reports WHERE id = ?").get(reportId) as
+      | ReportRowRaw
+      | undefined;
+    if (!report) return c.json({ error: "report not found" }, 404);
+
+    const isAppeal = report.status === "appealed";
+    if (isAppeal) {
+      const original = db
+        .prepare(
+          "SELECT moderator_id FROM moderation_decisions WHERE report_id = ? AND is_appeal = 0 ORDER BY created_at DESC LIMIT 1",
+        )
+        .get(reportId) as { moderator_id: string } | undefined;
+      if (original && original.moderator_id === moderatorId)
+        return c.json({ error: "an appeal must be reviewed by a different moderator" }, 403);
+    }
+
+    // Record the reported memo's language for bias transparency (spec §9).
+    let lang: string | null = null;
+    if (report.target_type === "memo") {
+      const m = db.prepare("SELECT lang_id FROM memos WHERE id = ?").get(report.target_id) as
+        | { lang_id: string | null }
+        | undefined;
+      lang = m?.lang_id ?? null;
+    }
+    const now = Date.now();
+    const decisionId = uid();
+    db.prepare(
+      `INSERT INTO moderation_decisions (id, report_id, target_type, target_id, moderator_id, action, rationale_code, is_appeal, lang, created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      decisionId,
+      reportId,
+      report.target_type,
+      report.target_id,
+      moderatorId,
+      action,
+      rationaleCode,
+      isAppeal ? 1 : 0,
+      lang,
+      now,
+    );
+    db.prepare("UPDATE reports SET status = ? WHERE id = ?").run("resolved", reportId);
+    return c.json(
+      { id: decisionId, reportId, action, rationaleCode, isAppeal, disclosedAt: now },
+      201,
+    );
+  });
+
+  // GET /moderation/transparency — decisions by rationale + language, to detect
+  // the platform's own bias (spec §9). Counts only, never content.
+  app.get("/moderation/transparency", (c) => {
+    const rows = db
+      .prepare(
+        "SELECT rationale_code AS rationale, COALESCE(lang, 'und') AS lang, COUNT(*) AS count FROM moderation_decisions GROUP BY rationale_code, lang ORDER BY count DESC",
+      )
+      .all() as { rationale: string; lang: string; count: number }[];
+    return c.json({ breakdown: rows });
+  });
+
+  return app;
+}

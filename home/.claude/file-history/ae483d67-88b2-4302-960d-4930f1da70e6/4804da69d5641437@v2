@@ -1,0 +1,55 @@
+import { describe, it, expect } from "vitest";
+import { createApp } from "../src/app";
+import { openDb } from "../src/db";
+import { stubTranscriber } from "../src/transcribe";
+import { makeSayTts } from "../src/tts";
+import { createRateLimiter } from "../src/ratelimit";
+import type { Storage } from "../src/storage";
+
+function memStorage(): Storage {
+  const map = new Map<string, Uint8Array>();
+  return {
+    async put(k, d) {
+      map.set(k, d);
+    },
+    async get(k) {
+      const v = map.get(k);
+      if (!v) throw new Error("missing");
+      return v;
+    },
+  };
+}
+
+// macOS `say` synthesizes; on CI (Linux) this skips. Production uses Piper.
+const hasSay = process.platform === "darwin";
+
+describe.skipIf(!hasSay)("TTS text memos", () => {
+  it("synthesizes audio for a text memo so blind users hear it (§3.3)", async () => {
+    const app = createApp({
+      db: openDb(":memory:"),
+      storage: memStorage(),
+      transcribe: stubTranscriber,
+      rateLimit: createRateLimiter({ capacity: 1000, refillPerSec: 1000 }),
+      moderators: {},
+      synthesize: makeSayTts(),
+    });
+
+    const fd = new FormData();
+    fd.set("isTts", "true");
+    fd.set("sourceText", "hello from a text memo");
+    fd.set("channelId", "main");
+    fd.set("durationMs", "0");
+
+    const memo = (await (await app.request("/memos", { method: "POST", body: fd })).json()) as any;
+    // the source text is the (non-machine) transcript
+    expect(memo.transcript.text).toBe("hello from a text memo");
+    expect(memo.transcript.isMachine).toBe(false);
+    // duration was estimated from the synthesized audio
+    expect(memo.durationMs).toBeGreaterThan(0);
+
+    // the memo is now playable — real audio bytes are stored
+    const audio = await app.request(`/audio/${memo.id}`);
+    expect(audio.status).toBe(200);
+    expect(new Uint8Array(await audio.arrayBuffer()).length).toBeGreaterThan(1000);
+  }, 30_000);
+});

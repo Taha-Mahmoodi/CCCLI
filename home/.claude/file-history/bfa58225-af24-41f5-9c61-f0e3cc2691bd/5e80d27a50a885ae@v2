@@ -1,0 +1,1034 @@
+# Visits Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Add rep check-in/check-out with geofence verification against Phase 2's zones — PLAN.md 4.1 (photo upload deferred, see Global Constraints).
+
+**Architecture:** New `app/visits/` package mirrors `app/pings/`'s anatomy. Check-in reuses Phase 2's `point_in_geojson_polygon` (the whole reason that utility was built generically instead of zones-specific) and `app.zones.service.get_zone`/`ZoneNotFoundError` directly — this is the first real cross-module composition between two "business" packages (`pings` never needed `zones`; `visits` needs both `zones` and `auth`).
+
+**Tech Stack:** Same as prior phases — Python 3.12, FastAPI, SQLAlchemy 2.0 async, Alembic, Pydantic v2, pytest.
+
+## Global Constraints
+
+- `tenant_id` on every table via `TenantScopedMixin` — per `docs/design.md` Core data model.
+- **Photo upload is deferred, not built in this phase.** PLAN 4.1 lists it, but no cloud storage (S3/R2) is configured yet and no real client exists to send photo bytes until Phase 8 (tablet app). The `Visit` model gets a nullable `photo_path` column now (schema-ready), but no upload endpoint or storage backend is built until a real consumer needs it — same deferral pattern as Phase 3's downsampling decision. `# ponytail: photo_path reserved, wire an upload endpoint + storage backend when Phase 8's tablet client needs to send bytes`.
+- **Check-in does NOT hard-reject a rep outside the zone boundary.** `geofence_verified` is a recorded flag a manager can review, not a block — GPS drift and legitimate edge-of-zone work are common, and `docs/design.md`'s own baseline list frames it as "geofence-gated visit check-in/out" alongside "Remote check-in for off-site work not tied to a geofence" as an explicit, separate supported case (`zone_id` is optional; omitting it is a remote check-in with `geofence_verified=False`, not an error).
+- **Timestamps are server-set**, not client-supplied like Phase 3's `LocationPing.recorded_at`. Check-in/out are deliberate, infrequent taps (not a 15-60s background stream), so the offline-queue/idempotency-key complexity that justified client-supplied timestamps for pings isn't needed here. If Phase 8's offline queue later needs to sync a check-in captured while offline, revisit this — not now.
+- **Cross-tenant access is reported as "not found," never a distinct error** — matches every prior phase's convention (a rep checking out someone else's visit, or referencing another tenant's zone, gets the same 404 as a nonexistent one).
+- **Defense-in-depth tenant check on the zone lookup, but NOT on the zone-assignment lookup.** Mirrors Phase 2's `assign_rep_to_zone`: after `get_zone` (which relies on the global filter, not an explicit `tenant_id` clause), explicitly verify `zone.tenant_id == tenant_id` before using it — this is the same gap Phase 2's review caught and fixed, don't reintroduce it. The subsequent `ZoneAssignment` existence check does NOT need its own explicit tenant check: by that point `zone_id` is already proven to belong to `tenant_id`, and `rep_id` is always the authenticated caller's own ID (trustworthy, never request-supplied) — so `ZoneAssignment.zone_id == zone_id AND ZoneAssignment.rep_id == rep_id` is sufficient without redundant tenant filtering. If a reviewer flags this as a gap, this reasoning is why it isn't one — but verify the reasoning holds, don't just cite it.
+- Service layer owns business rules; routers thin; models logic-free — per `docs/design.md` Stack section.
+- `point_in_geojson_polygon(point, geojson)` requires `point = (longitude, latitude)` — GeoJSON's coordinate order, NOT `(latitude, longitude)`. `Visit` stores `latitude`/`longitude` as separate columns (matching `LocationPing`'s pattern) — when calling the geo utility, the point tuple must be built as `(longitude, latitude)`. Get this backwards and every geofence check silently computes against transposed coordinates. Phase 2 already had a near-miss here (undocumented order) that was caught and fixed with a docstring + discriminating test — this plan's code gets the order right from the start; don't re-introduce the ambiguity.
+
+---
+
+## File Structure
+
+```
+backend/
+  app/
+    visits/
+      __init__.py                 # NEW
+      models.py                    # NEW: Visit
+      schemas.py                    # NEW: VisitCheckIn, VisitOut
+      service.py                     # NEW: check_in, check_out, list_visits, get_visit
+      router.py                       # NEW: POST /check-in, POST /{id}/check-out, GET, GET /{id}
+    main.py                     # MODIFY: mount visits_router
+  alembic/versions/
+    <new migration>              # NEW: create visits table
+  tests/
+    visits/
+      __init__.py                  # NEW
+      test_models.py                # NEW
+      test_service.py                # NEW
+      test_router.py                  # NEW
+```
+
+**Interfaces summary (for cross-task consistency):**
+- `app.visits.models.Visit` — `id: Mapped[uuid.UUID]` (PK), `tenant_id` (via mixin), `rep_id: Mapped[uuid.UUID]` (FK → `users.id`, indexed), `zone_id: Mapped[uuid.UUID | None]` (FK → `zones.id`, nullable, indexed), `checked_in_at: Mapped[datetime]` (`DateTime(timezone=True)`, server default), `checked_out_at: Mapped[datetime | None]` (nullable), `latitude: Mapped[float]`, `longitude: Mapped[float]`, `geofence_verified: Mapped[bool]`, `notes: Mapped[str | None]`, `photo_path: Mapped[str | None]` (reserved, unused this phase), `external_reference: Mapped[str | None]`, `created_at: Mapped[datetime]` (server default).
+- `app.visits.service.check_in(db, tenant_id, rep_id, latitude, longitude, zone_id=None, notes=None, external_reference=None) -> Visit`
+- `app.visits.service.check_out(db, tenant_id, rep_id, visit_id) -> Visit`
+- `app.visits.service.list_visits(db, current_user) -> list[Visit]` — reps see only their own; managers see all tenant visits.
+- `app.visits.service.get_visit(db, current_user, visit_id) -> Visit | None` — same rep/manager visibility split; returns `None` on any not-found-or-not-visible case (router turns that into 404).
+- Exceptions (new, in `app.visits.service`): `VisitNotFoundError`, `AlreadyCheckedOutError`, `NotAssignedToZoneError`. Reused (from `app.zones.service`): `ZoneNotFoundError`.
+- `app.visits.schemas.VisitCheckIn` (`zone_id: uuid.UUID | None = None`, `latitude: float`, `longitude: float`, `notes: str | None = None`, `external_reference: str | None = None`), `VisitOut` (`id`, `rep_id`, `zone_id`, `checked_in_at`, `checked_out_at`, `latitude`, `longitude`, `geofence_verified`, `notes`, `external_reference`).
+
+---
+
+### Task 1: Visit model + migration
+
+**Files:**
+- Create: `backend/app/visits/__init__.py`
+- Create: `backend/app/visits/models.py`
+- Create: `backend/tests/visits/__init__.py` (empty)
+- Create: `backend/tests/visits/test_models.py`
+
+**Interfaces:**
+- Consumes: `app.db.Base`, `app.core.tenancy.TenantScopedMixin`, `app.auth.models.User`, `app.zones.models.Zone` (all prior phases).
+- Produces: `Visit` (columns per the plan header's Interfaces summary).
+
+- [ ] **Step 1: Write `backend/app/visits/__init__.py`** (empty)
+
+```python
+# backend/app/visits/__init__.py
+```
+
+- [ ] **Step 2: Write `backend/tests/visits/__init__.py`** (empty)
+
+```python
+# backend/tests/visits/__init__.py
+```
+
+- [ ] **Step 3: Write the failing test**
+
+```python
+# backend/tests/visits/test_models.py
+import uuid
+from datetime import datetime, timezone
+
+import pytest
+from sqlalchemy import select
+
+from app.auth.models import User
+from app.visits.models import Visit
+from app.zones.models import Zone
+
+pytestmark = pytest.mark.asyncio
+
+SQUARE_GEOJSON = {
+    "type": "Polygon",
+    "coordinates": [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]],
+}
+
+
+async def _make_rep_and_zone(db_session, tenant_id):
+    rep = User(
+        id=uuid.uuid4(), tenant_id=tenant_id, email=f"{uuid.uuid4()}@example.com",
+        hashed_password="irrelevant", role="rep",
+    )
+    zone = Zone(id=uuid.uuid4(), tenant_id=tenant_id, name="Downtown", boundary=SQUARE_GEOJSON)
+    db_session.add_all([rep, zone])
+    await db_session.flush()
+    return rep, zone
+
+
+async def test_create_and_fetch_visit_with_zone(db_session):
+    tenant_id = uuid.uuid4()
+    rep, zone = await _make_rep_and_zone(db_session, tenant_id)
+
+    visit = Visit(
+        id=uuid.uuid4(), tenant_id=tenant_id, rep_id=rep.id, zone_id=zone.id,
+        latitude=5.0, longitude=5.0, geofence_verified=True,
+        notes="all good", external_reference="lead-123",
+    )
+    db_session.add(visit)
+    await db_session.commit()
+
+    result = await db_session.execute(select(Visit).where(Visit.rep_id == rep.id))
+    fetched = result.scalar_one()
+
+    assert fetched.zone_id == zone.id
+    assert fetched.geofence_verified is True
+    assert fetched.checked_out_at is None
+    assert isinstance(fetched.checked_in_at, datetime)
+    assert fetched.checked_in_at.tzinfo is not None
+    assert fetched.photo_path is None
+
+
+async def test_create_visit_without_zone_for_remote_checkin(db_session):
+    tenant_id = uuid.uuid4()
+    rep, _zone = await _make_rep_and_zone(db_session, tenant_id)
+
+    visit = Visit(
+        id=uuid.uuid4(), tenant_id=tenant_id, rep_id=rep.id, zone_id=None,
+        latitude=99.0, longitude=99.0, geofence_verified=False,
+    )
+    db_session.add(visit)
+    await db_session.commit()
+
+    result = await db_session.execute(select(Visit).where(Visit.rep_id == rep.id))
+    fetched = result.scalar_one()
+
+    assert fetched.zone_id is None
+    assert fetched.geofence_verified is False
+
+
+async def test_check_out_sets_checked_out_at(db_session):
+    tenant_id = uuid.uuid4()
+    rep, zone = await _make_rep_and_zone(db_session, tenant_id)
+
+    visit = Visit(
+        id=uuid.uuid4(), tenant_id=tenant_id, rep_id=rep.id, zone_id=zone.id,
+        latitude=5.0, longitude=5.0, geofence_verified=True,
+    )
+    db_session.add(visit)
+    await db_session.commit()
+
+    visit.checked_out_at = datetime.now(timezone.utc)
+    await db_session.commit()
+
+    result = await db_session.execute(select(Visit).where(Visit.rep_id == rep.id))
+    fetched = result.scalar_one()
+    assert fetched.checked_out_at is not None
+```
+
+- [ ] **Step 4: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/visits/test_models.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'app.visits.models'`
+
+- [ ] **Step 5: Write `app/visits/models.py`**
+
+```python
+# backend/app/visits/models.py
+import uuid
+from datetime import datetime, timezone
+
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.core.tenancy import TenantScopedMixin
+from app.db import Base
+
+
+class Visit(Base, TenantScopedMixin):
+    __tablename__ = "visits"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    rep_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    zone_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("zones.id"), nullable=True, index=True)
+    checked_in_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    checked_out_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    latitude: Mapped[float] = mapped_column(Float, nullable=False)
+    longitude: Mapped[float] = mapped_column(Float, nullable=False)
+    geofence_verified: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    notes: Mapped[str | None] = mapped_column(String, nullable=True)
+    photo_path: Mapped[str | None] = mapped_column(String, nullable=True)
+    external_reference: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+```
+
+- [ ] **Step 6: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/visits/test_models.py -v`
+Expected: all 3 tests `PASSED`.
+
+- [ ] **Step 7: Register the model with Alembic**
+
+Edit `backend/alembic/env.py` — add a new import line directly below the existing `from app.pings.models import LocationPing  # noqa: E402, F401` line:
+
+```python
+from app.visits.models import Visit  # noqa: E402, F401
+```
+
+- [ ] **Step 8: Generate the migration**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/backend
+uv run alembic revision --autogenerate -m "create visits table"
+```
+
+Expected: a new file under `alembic/versions/` with `op.create_table("visits", ...)` using `sa.Uuid()` for `id`/`tenant_id`/`rep_id`/`zone_id`, `sa.DateTime(timezone=True)` for BOTH `checked_in_at` and `checked_out_at` and `created_at` (three timezone-aware columns this time — check all three), `sa.Float()` for `latitude`/`longitude`, `sa.Boolean()` for `geofence_verified`, `sa.String()` for `notes`/`photo_path`/`external_reference`, FKs to both `users.id` and `zones.id`, and indexes on `rep_id`/`zone_id`. If autogenerate omits `timezone=True` on any of the three datetime columns, fix it manually — same class of mistake three prior phases have each had to catch.
+
+- [ ] **Step 9: Verify the migration applies cleanly**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/backend
+DATABASE_URL="sqlite+aiosqlite:///./alembic_check.db" uv run alembic upgrade head
+rm -f alembic_check.db
+```
+
+Expected: no errors.
+
+- [ ] **Step 10: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/
+git commit -m "feat(backend): Visit model, Alembic migration
+
+Refs PLAN 4.1"
+```
+
+---
+
+### Task 2: `check_in` service (geofence verification)
+
+**Files:**
+- Create: `backend/app/visits/schemas.py`
+- Create: `backend/app/visits/service.py`
+- Test: `backend/tests/visits/test_service.py`
+
+**Interfaces:**
+- Consumes: `app.visits.models.Visit` (Task 1), `app.zones.service.get_zone`, `ZoneNotFoundError` (Phase 2), `app.zones.models.ZoneAssignment` (Phase 2), `app.core.geo.point_in_geojson_polygon` (Phase 2).
+- Produces: `app.visits.service.check_in(db, tenant_id, rep_id, latitude, longitude, zone_id=None, notes=None, external_reference=None) -> Visit`, `NotAssignedToZoneError`. `app.visits.schemas.VisitCheckIn`, `VisitOut`.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# backend/tests/visits/test_service.py
+import uuid
+
+import pytest
+
+from app.auth.models import User
+from app.zones.models import Zone, ZoneAssignment
+from app.zones.service import ZoneNotFoundError
+from app.visits.service import NotAssignedToZoneError, check_in
+
+pytestmark = pytest.mark.asyncio
+
+SQUARE_GEOJSON = {
+    "type": "Polygon",
+    "coordinates": [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]],
+}
+
+
+async def _make_rep(db_session, tenant_id):
+    rep = User(
+        id=uuid.uuid4(), tenant_id=tenant_id, email=f"{uuid.uuid4()}@example.com",
+        hashed_password="irrelevant", role="rep",
+    )
+    db_session.add(rep)
+    await db_session.flush()
+    return rep
+
+
+async def _make_zone(db_session, tenant_id):
+    zone = Zone(id=uuid.uuid4(), tenant_id=tenant_id, name="Downtown", boundary=SQUARE_GEOJSON)
+    db_session.add(zone)
+    await db_session.flush()
+    return zone
+
+
+async def _assign(db_session, tenant_id, zone_id, rep_id):
+    db_session.add(ZoneAssignment(id=uuid.uuid4(), tenant_id=tenant_id, zone_id=zone_id, rep_id=rep_id))
+    await db_session.flush()
+
+
+async def test_check_in_inside_zone_boundary_is_geofence_verified(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+    zone = await _make_zone(db_session, tenant_id)
+    await _assign(db_session, tenant_id, zone.id, rep.id)
+
+    # (longitude=5, latitude=5) is inside the 0-10 square -- point tuple is
+    # (longitude, latitude) to match point_in_geojson_polygon's contract.
+    visit = await check_in(
+        db_session, tenant_id=tenant_id, rep_id=rep.id, zone_id=zone.id,
+        latitude=5.0, longitude=5.0,
+    )
+
+    assert visit.geofence_verified is True
+    assert visit.zone_id == zone.id
+    assert visit.rep_id == rep.id
+
+
+async def test_check_in_outside_zone_boundary_is_not_geofence_verified_but_still_succeeds(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+    zone = await _make_zone(db_session, tenant_id)
+    await _assign(db_session, tenant_id, zone.id, rep.id)
+
+    visit = await check_in(
+        db_session, tenant_id=tenant_id, rep_id=rep.id, zone_id=zone.id,
+        latitude=99.0, longitude=99.0,
+    )
+
+    assert visit.geofence_verified is False
+    assert visit.zone_id == zone.id
+
+
+async def test_check_in_without_zone_id_is_remote_and_not_geofence_verified(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+
+    visit = await check_in(
+        db_session, tenant_id=tenant_id, rep_id=rep.id, zone_id=None,
+        latitude=5.0, longitude=5.0, notes="working from a customer site not on the map",
+    )
+
+    assert visit.zone_id is None
+    assert visit.geofence_verified is False
+    assert visit.notes == "working from a customer site not on the map"
+
+
+async def test_check_in_to_unknown_zone_raises(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+
+    with pytest.raises(ZoneNotFoundError):
+        await check_in(
+            db_session, tenant_id=tenant_id, rep_id=rep.id, zone_id=uuid.uuid4(),
+            latitude=5.0, longitude=5.0,
+        )
+
+
+async def test_check_in_to_zone_not_assigned_to_rep_raises(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+    zone = await _make_zone(db_session, tenant_id)
+    # deliberately NOT assigning rep to zone
+
+    with pytest.raises(NotAssignedToZoneError):
+        await check_in(
+            db_session, tenant_id=tenant_id, rep_id=rep.id, zone_id=zone.id,
+            latitude=5.0, longitude=5.0,
+        )
+
+
+async def test_check_in_with_external_reference(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+
+    visit = await check_in(
+        db_session, tenant_id=tenant_id, rep_id=rep.id, zone_id=None,
+        latitude=5.0, longitude=5.0, external_reference="lead-456",
+    )
+
+    assert visit.external_reference == "lead-456"
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/visits/test_service.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'app.visits.service'`
+
+- [ ] **Step 3: Write `app/visits/schemas.py`**
+
+```python
+# backend/app/visits/schemas.py
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel
+
+
+class VisitCheckIn(BaseModel):
+    zone_id: uuid.UUID | None = None
+    latitude: float
+    longitude: float
+    notes: str | None = None
+    external_reference: str | None = None
+
+
+class VisitOut(BaseModel):
+    id: uuid.UUID
+    rep_id: uuid.UUID
+    zone_id: uuid.UUID | None
+    checked_in_at: datetime
+    checked_out_at: datetime | None
+    latitude: float
+    longitude: float
+    geofence_verified: bool
+    notes: str | None
+    external_reference: str | None
+
+    model_config = {"from_attributes": True}
+```
+
+- [ ] **Step 4: Write `app/visits/service.py`**
+
+```python
+# backend/app/visits/service.py
+import uuid
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.geo import point_in_geojson_polygon
+from app.visits.models import Visit
+from app.zones.models import ZoneAssignment
+from app.zones.service import ZoneNotFoundError, get_zone
+
+
+class NotAssignedToZoneError(Exception):
+    pass
+
+
+class VisitNotFoundError(Exception):
+    pass
+
+
+class AlreadyCheckedOutError(Exception):
+    pass
+
+
+async def check_in(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    rep_id: uuid.UUID,
+    latitude: float,
+    longitude: float,
+    zone_id: uuid.UUID | None = None,
+    notes: str | None = None,
+    external_reference: str | None = None,
+) -> Visit:
+    geofence_verified = False
+
+    if zone_id is not None:
+        zone = await get_zone(db, zone_id)
+        if zone is None or zone.tenant_id != tenant_id:
+            raise ZoneNotFoundError(zone_id)
+
+        assignment_result = await db.execute(
+            select(ZoneAssignment).where(
+                ZoneAssignment.zone_id == zone_id, ZoneAssignment.rep_id == rep_id
+            )
+        )
+        if assignment_result.scalar_one_or_none() is None:
+            raise NotAssignedToZoneError(zone_id, rep_id)
+
+        # point_in_geojson_polygon requires (longitude, latitude) order.
+        geofence_verified = point_in_geojson_polygon((longitude, latitude), zone.boundary)
+
+    visit = Visit(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        rep_id=rep_id,
+        zone_id=zone_id,
+        latitude=latitude,
+        longitude=longitude,
+        geofence_verified=geofence_verified,
+        notes=notes,
+        external_reference=external_reference,
+    )
+    db.add(visit)
+    await db.commit()
+    await db.refresh(visit)
+    return visit
+```
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/visits/test_service.py -v`
+Expected: all 6 tests `PASSED`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/visits/schemas.py backend/app/visits/service.py backend/tests/visits/test_service.py
+git commit -m "feat(backend): visit check-in with geofence verification
+
+Refs PLAN 4.1"
+```
+
+---
+
+### Task 3: `check_out`, `list_visits`, `get_visit` services
+
+**Files:**
+- Modify: `backend/app/visits/service.py` (add `check_out`, `list_visits`, `get_visit`)
+- Modify: `backend/tests/visits/test_service.py` (append — do not replace)
+
+**Interfaces:**
+- Consumes: `app.visits.models.Visit`, `check_in` (Task 2), `app.auth.models.User` (Phase 1).
+- Produces: `check_out(db, tenant_id, rep_id, visit_id) -> Visit`, `list_visits(db, current_user) -> list[Visit]`, `get_visit(db, current_user, visit_id) -> Visit | None`.
+
+- [ ] **Step 1: Append the failing tests to `backend/tests/visits/test_service.py`**
+
+Add to the existing imports at the top (merge, don't duplicate):
+
+```python
+from app.visits.service import AlreadyCheckedOutError, VisitNotFoundError, check_out, get_visit, list_visits
+```
+
+Append these test functions:
+
+```python
+async def test_check_out_sets_checked_out_at(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+    visit = await check_in(db_session, tenant_id=tenant_id, rep_id=rep.id, latitude=1.0, longitude=1.0)
+    assert visit.checked_out_at is None
+
+    checked_out = await check_out(db_session, tenant_id=tenant_id, rep_id=rep.id, visit_id=visit.id)
+
+    assert checked_out.checked_out_at is not None
+
+
+async def test_check_out_unknown_visit_raises(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+
+    with pytest.raises(VisitNotFoundError):
+        await check_out(db_session, tenant_id=tenant_id, rep_id=rep.id, visit_id=uuid.uuid4())
+
+
+async def test_check_out_someone_elses_visit_raises_not_found(db_session):
+    tenant_id = uuid.uuid4()
+    rep_a = await _make_rep(db_session, tenant_id)
+    rep_b = await _make_rep(db_session, tenant_id)
+    visit = await check_in(db_session, tenant_id=tenant_id, rep_id=rep_a.id, latitude=1.0, longitude=1.0)
+
+    with pytest.raises(VisitNotFoundError):
+        await check_out(db_session, tenant_id=tenant_id, rep_id=rep_b.id, visit_id=visit.id)
+
+
+async def test_check_out_already_checked_out_visit_raises(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+    visit = await check_in(db_session, tenant_id=tenant_id, rep_id=rep.id, latitude=1.0, longitude=1.0)
+    await check_out(db_session, tenant_id=tenant_id, rep_id=rep.id, visit_id=visit.id)
+
+    with pytest.raises(AlreadyCheckedOutError):
+        await check_out(db_session, tenant_id=tenant_id, rep_id=rep.id, visit_id=visit.id)
+
+
+async def test_list_visits_for_rep_returns_only_own_visits(db_session):
+    tenant_id = uuid.uuid4()
+    rep_a = await _make_rep(db_session, tenant_id)
+    rep_b = await _make_rep(db_session, tenant_id)
+    await check_in(db_session, tenant_id=tenant_id, rep_id=rep_a.id, latitude=1.0, longitude=1.0)
+    await check_in(db_session, tenant_id=tenant_id, rep_id=rep_b.id, latitude=2.0, longitude=2.0)
+
+    visits = await list_visits(db_session, current_user=rep_a)
+
+    assert len(visits) == 1
+    assert visits[0].rep_id == rep_a.id
+
+
+async def test_list_visits_for_manager_returns_all_tenant_visits(db_session):
+    tenant_id = uuid.uuid4()
+    rep_a = await _make_rep(db_session, tenant_id)
+    rep_b = await _make_rep(db_session, tenant_id)
+    manager = User(
+        id=uuid.uuid4(), tenant_id=tenant_id, email=f"{uuid.uuid4()}@example.com",
+        hashed_password="irrelevant", role="manager",
+    )
+    db_session.add(manager)
+    await db_session.flush()
+    await check_in(db_session, tenant_id=tenant_id, rep_id=rep_a.id, latitude=1.0, longitude=1.0)
+    await check_in(db_session, tenant_id=tenant_id, rep_id=rep_b.id, latitude=2.0, longitude=2.0)
+
+    visits = await list_visits(db_session, current_user=manager)
+
+    assert len(visits) == 2
+
+
+async def test_get_visit_for_owning_rep_returns_it(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+    visit = await check_in(db_session, tenant_id=tenant_id, rep_id=rep.id, latitude=1.0, longitude=1.0)
+
+    fetched = await get_visit(db_session, current_user=rep, visit_id=visit.id)
+
+    assert fetched is not None
+    assert fetched.id == visit.id
+
+
+async def test_get_visit_for_other_rep_returns_none(db_session):
+    tenant_id = uuid.uuid4()
+    rep_a = await _make_rep(db_session, tenant_id)
+    rep_b = await _make_rep(db_session, tenant_id)
+    visit = await check_in(db_session, tenant_id=tenant_id, rep_id=rep_a.id, latitude=1.0, longitude=1.0)
+
+    fetched = await get_visit(db_session, current_user=rep_b, visit_id=visit.id)
+
+    assert fetched is None
+
+
+async def test_get_visit_for_manager_returns_any_tenant_visit(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+    manager = User(
+        id=uuid.uuid4(), tenant_id=tenant_id, email=f"{uuid.uuid4()}@example.com",
+        hashed_password="irrelevant", role="manager",
+    )
+    db_session.add(manager)
+    await db_session.flush()
+    visit = await check_in(db_session, tenant_id=tenant_id, rep_id=rep.id, latitude=1.0, longitude=1.0)
+
+    fetched = await get_visit(db_session, current_user=manager, visit_id=visit.id)
+
+    assert fetched is not None
+    assert fetched.id == visit.id
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/visits/test_service.py -v`
+Expected: FAIL — `ImportError: cannot import name 'check_out'`
+
+- [ ] **Step 3: Append `check_out`, `list_visits`, `get_visit` to `app/visits/service.py`**
+
+Add these imports to the top of the file (merge with existing imports — `import uuid` is already there, add the `datetime` import as a new line and `User` alongside the other `app.*` imports):
+
+```python
+from datetime import datetime, timezone
+
+from app.auth.models import User
+```
+
+Append to the end of the file:
+
+```python
+async def check_out(db: AsyncSession, tenant_id: uuid.UUID, rep_id: uuid.UUID, visit_id: uuid.UUID) -> Visit:
+    result = await db.execute(
+        select(Visit).where(Visit.id == visit_id, Visit.rep_id == rep_id)
+    )
+    visit = result.scalar_one_or_none()
+    if visit is None or visit.tenant_id != tenant_id:
+        raise VisitNotFoundError(visit_id)
+
+    if visit.checked_out_at is not None:
+        raise AlreadyCheckedOutError(visit_id)
+
+    visit.checked_out_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(visit)
+    return visit
+
+
+async def list_visits(db: AsyncSession, current_user: User) -> list[Visit]:
+    query = select(Visit)
+    if current_user.role != "manager":
+        query = query.where(Visit.rep_id == current_user.id)
+    result = await db.execute(query)
+    return list(result.scalars().all())
+
+
+async def get_visit(db: AsyncSession, current_user: User, visit_id: uuid.UUID) -> Visit | None:
+    query = select(Visit).where(Visit.id == visit_id)
+    if current_user.role != "manager":
+        query = query.where(Visit.rep_id == current_user.id)
+    result = await db.execute(query)
+    return result.scalar_one_or_none()
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/visits/test_service.py -v`
+Expected: all 15 tests (6 from Task 2 + 9 new) `PASSED`.
+
+- [ ] **Step 5: Run the full suite**
+
+Run: `cd backend && uv run pytest -v`
+Expected: no regressions.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/visits/service.py backend/tests/visits/test_service.py
+git commit -m "feat(backend): visit check-out, list, and get services with rep/manager visibility split
+
+Refs PLAN 4.1"
+```
+
+---
+
+### Task 4: Visit router
+
+**Files:**
+- Create: `backend/app/visits/router.py`
+- Modify: `backend/app/main.py` (mount the router)
+- Test: `backend/tests/visits/test_router.py`
+
+**Interfaces:**
+- Consumes: `app.visits.service.*`, `app.visits.schemas.*` (Tasks 2-3), `app.auth.deps.require_rep`, `get_current_user` (Phases 1-3).
+- Produces: `POST /api/v1/visits/check-in` → 201 `VisitOut` (rep only), `POST /api/v1/visits/{visit_id}/check-out` → 200 `VisitOut` | 404 | 409 (rep only), `GET /api/v1/visits` → 200 `list[VisitOut]` (rep or manager, filtered), `GET /api/v1/visits/{visit_id}` → 200 `VisitOut` | 404 (rep or manager, filtered).
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# backend/tests/visits/test_router.py
+import uuid
+
+import pytest
+
+pytestmark = pytest.mark.asyncio
+
+TENANT_HEADER = "X-Tenant-Id"
+
+
+async def _register(client, tenant_id, email, role):
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": "hunter2pass", "role": role},
+        headers={TENANT_HEADER: tenant_id},
+    )
+    return response.json()["access_token"]
+
+
+async def _me(client, token):
+    response = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    return response.json()
+
+
+async def test_rep_can_check_in_remotely(client):
+    tenant_id = str(uuid.uuid4())
+    token = await _register(client, tenant_id, "rep@example.com", "rep")
+
+    response = await client.post(
+        "/api/v1/visits/check-in",
+        json={"latitude": 5.0, "longitude": 5.0, "notes": "remote visit"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["zone_id"] is None
+    assert body["geofence_verified"] is False
+
+
+async def test_manager_cannot_check_in(client):
+    tenant_id = str(uuid.uuid4())
+    token = await _register(client, tenant_id, "mgr@example.com", "manager")
+
+    response = await client.post(
+        "/api/v1/visits/check-in",
+        json={"latitude": 5.0, "longitude": 5.0},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 403
+
+
+async def test_check_in_to_zone_and_check_out(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    rep_token = await _register(client, tenant_id, "rep@example.com", "rep")
+    rep_id = (await _me(client, rep_token))["id"]
+
+    zone_response = await client.post(
+        "/api/v1/zones",
+        json={
+            "name": "Downtown",
+            "boundary": {"type": "Polygon", "coordinates": [[[0, 0], [10, 0], [10, 10], [0, 10], [0, 0]]]},
+        },
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+    zone_id = zone_response.json()["id"]
+    await client.post(
+        f"/api/v1/zones/{zone_id}/assignments",
+        json={"rep_id": rep_id},
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+
+    checkin_response = await client.post(
+        "/api/v1/visits/check-in",
+        json={"zone_id": zone_id, "latitude": 5.0, "longitude": 5.0},
+        headers={"Authorization": f"Bearer {rep_token}"},
+    )
+    assert checkin_response.status_code == 201
+    assert checkin_response.json()["geofence_verified"] is True
+    visit_id = checkin_response.json()["id"]
+
+    checkout_response = await client.post(
+        f"/api/v1/visits/{visit_id}/check-out",
+        headers={"Authorization": f"Bearer {rep_token}"},
+    )
+    assert checkout_response.status_code == 200
+    assert checkout_response.json()["checked_out_at"] is not None
+
+
+async def test_check_out_unknown_visit_returns_404(client):
+    tenant_id = str(uuid.uuid4())
+    token = await _register(client, tenant_id, "rep@example.com", "rep")
+
+    response = await client.post(
+        f"/api/v1/visits/{uuid.uuid4()}/check-out",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+
+
+async def test_check_out_twice_returns_409(client):
+    tenant_id = str(uuid.uuid4())
+    token = await _register(client, tenant_id, "rep@example.com", "rep")
+    checkin = await client.post(
+        "/api/v1/visits/check-in",
+        json={"latitude": 1.0, "longitude": 1.0},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    visit_id = checkin.json()["id"]
+    await client.post(f"/api/v1/visits/{visit_id}/check-out", headers={"Authorization": f"Bearer {token}"})
+
+    second = await client.post(f"/api/v1/visits/{visit_id}/check-out", headers={"Authorization": f"Bearer {token}"})
+
+    assert second.status_code == 409
+
+
+async def test_rep_lists_only_own_visits(client):
+    tenant_id = str(uuid.uuid4())
+    token_a = await _register(client, tenant_id, "rep-a@example.com", "rep")
+    token_b = await _register(client, tenant_id, "rep-b@example.com", "rep")
+    await client.post(
+        "/api/v1/visits/check-in", json={"latitude": 1.0, "longitude": 1.0},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    await client.post(
+        "/api/v1/visits/check-in", json={"latitude": 2.0, "longitude": 2.0},
+        headers={"Authorization": f"Bearer {token_b}"},
+    )
+
+    response = await client.get("/api/v1/visits", headers={"Authorization": f"Bearer {token_a}"})
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+
+async def test_manager_lists_all_tenant_visits(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    rep_token = await _register(client, tenant_id, "rep@example.com", "rep")
+    await client.post(
+        "/api/v1/visits/check-in", json={"latitude": 1.0, "longitude": 1.0},
+        headers={"Authorization": f"Bearer {rep_token}"},
+    )
+
+    response = await client.get("/api/v1/visits", headers={"Authorization": f"Bearer {mgr_token}"})
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+
+async def test_get_visit_belonging_to_other_rep_returns_404(client):
+    tenant_id = str(uuid.uuid4())
+    token_a = await _register(client, tenant_id, "rep-a@example.com", "rep")
+    token_b = await _register(client, tenant_id, "rep-b@example.com", "rep")
+    checkin = await client.post(
+        "/api/v1/visits/check-in", json={"latitude": 1.0, "longitude": 1.0},
+        headers={"Authorization": f"Bearer {token_a}"},
+    )
+    visit_id = checkin.json()["id"]
+
+    response = await client.get(f"/api/v1/visits/{visit_id}", headers={"Authorization": f"Bearer {token_b}"})
+
+    assert response.status_code == 404
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/visits/test_router.py -v`
+Expected: FAIL — `404` on `/api/v1/visits/check-in` (router not mounted) or `ModuleNotFoundError` for `app.visits.router`.
+
+- [ ] **Step 3: Write `app/visits/router.py`**
+
+```python
+# backend/app/visits/router.py
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth.deps import get_current_user, require_rep
+from app.auth.models import User
+from app.db import get_db
+from app.visits.schemas import VisitCheckIn, VisitOut
+from app.visits.service import (
+    AlreadyCheckedOutError,
+    NotAssignedToZoneError,
+    VisitNotFoundError,
+    check_in,
+    check_out,
+    get_visit,
+    list_visits,
+)
+from app.zones.service import ZoneNotFoundError
+
+router = APIRouter(prefix="/api/v1/visits", tags=["visits"])
+
+
+@router.post("/check-in", response_model=VisitOut, status_code=status.HTTP_201_CREATED)
+async def check_in_endpoint(
+    body: VisitCheckIn,
+    current_user: User = Depends(require_rep),
+    db: AsyncSession = Depends(get_db),
+) -> VisitOut:
+    try:
+        return await check_in(
+            db,
+            tenant_id=current_user.tenant_id,
+            rep_id=current_user.id,
+            latitude=body.latitude,
+            longitude=body.longitude,
+            zone_id=body.zone_id,
+            notes=body.notes,
+            external_reference=body.external_reference,
+        )
+    except ZoneNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="zone not found") from exc
+    except NotAssignedToZoneError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="not assigned to this zone"
+        ) from exc
+
+
+@router.post("/{visit_id}/check-out", response_model=VisitOut)
+async def check_out_endpoint(
+    visit_id: uuid.UUID,
+    current_user: User = Depends(require_rep),
+    db: AsyncSession = Depends(get_db),
+) -> VisitOut:
+    try:
+        return await check_out(db, tenant_id=current_user.tenant_id, rep_id=current_user.id, visit_id=visit_id)
+    except VisitNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="visit not found") from exc
+    except AlreadyCheckedOutError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="visit already checked out") from exc
+
+
+@router.get("", response_model=list[VisitOut])
+async def list_visits_endpoint(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[VisitOut]:
+    return await list_visits(db, current_user)
+
+
+@router.get("/{visit_id}", response_model=VisitOut)
+async def get_visit_endpoint(
+    visit_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> VisitOut:
+    visit = await get_visit(db, current_user, visit_id)
+    if visit is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="visit not found")
+    return visit
+```
+
+- [ ] **Step 4: Mount the router in `app/main.py`**
+
+Read the current `backend/app/main.py` in full first (it mounts `auth_router`, `zones_router`, `pings_router`, calls `install_tenancy_filter()`, and has the `lifespan` handler from Phase 3 — all of that must stay). Add, following the exact existing pattern:
+
+```python
+from app.visits.router import router as visits_router
+```
+
+```python
+app.include_router(visits_router)
+```
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/visits/test_router.py -v`
+Expected: all 8 tests `PASSED`.
+
+- [ ] **Step 6: Run the full suite and ruff**
+
+Run: `cd backend && uv run pytest -v && uv run ruff check .`
+Expected: all tests pass, ruff clean.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/visits/router.py backend/app/main.py backend/tests/visits/test_router.py
+git commit -m "feat(backend): visit router (check-in/check-out/list/get)
+
+Refs PLAN 4.1"
+```
+
+---
+
+## After this plan
+
+Update `PROGRESS.md` with a new entry (append, don't replace) summarizing visits: check-in with geofence verification against Phase 2 zones (reusing `point_in_geojson_polygon` and `zone_assignments`), remote/off-site check-in support, check-out, rep/manager visibility split on list/get. Photo upload deliberately deferred (schema-ready `photo_path` column only). Tick PLAN.md 4.1. Then a final whole-branch review before merge (same as Phases 1-3), then plan tasks (PLAN.md 4.2) fresh against the actual code.

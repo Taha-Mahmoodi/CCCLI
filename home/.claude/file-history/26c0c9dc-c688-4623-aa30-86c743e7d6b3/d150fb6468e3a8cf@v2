@@ -1,0 +1,221 @@
+# Loop 4 — Build
+
+**Goal:** the site exists, coded to the approved images, with real copy in it, in all
+three states, under budget, and editable by the client.
+
+**Input:** `DIRECTION.md`, the design images, `COPY.md`, the prototypes.
+
+**Output:** the site, in the client's repository.
+
+---
+
+## Stack
+
+Settled at Gate A (`ARCHITECTURE.md`). Default is hand-authored HTML and CSS with
+committed assets — it runs on all nine deploy targets and it is the fastest thing that
+can be built. A publishing cadence moves it to a generator; a non-technical editor
+moves it to a CMS.
+
+**Do not ship a framework to the browser for a marketing site.** It is the most common
+reason a company site fails Core Web Vitals, and Core Web Vitals are a ranking input
+(`§19`). A generator that outputs static HTML is a build-time tool and is fine.
+
+## The shell contract, first
+
+Before any page is built, one person builds the shell and everything else consumes it.
+Parallel page builds that each invent their own spacing scale produce a site that
+looks assembled, which is exactly what this pipeline exists to avoid.
+
+The shell owns:
+
+### The token file
+
+One file. Every value in it, nothing hardcoded anywhere else.
+
+- Color: substrate, surfaces, text ramp, accent, and the full state set — error,
+  success, warning, focus, disabled. Both modes, art-directed separately
+- Type: families, the scale, line heights, measures, and the separate mobile scale
+- Space: one scale, used everywhere
+- Radius, border, shadow: the small set the design actually uses
+- Motion: durations and easings from the motion spec, and the reduced-motion values
+- Breakpoints and container widths
+- Z-index: a named ladder, so the sticky CTA and the cookie banner and the nav do not
+  fight in production
+
+### The head
+
+Charset, viewport, title and description per page, canonical, OG and Twitter tags,
+favicon set, theme-color, preloads for the LCP image and any font in the LCP element,
+and the JSON-LD block. Loop 5 fills the per-page values; the shape lives here.
+
+### The frame
+
+Skip link, header, nav, footer, and the `§27` attribution. Keyboard reachable, current
+page indicated, works at 360px, and present on every page including the deepest post.
+
+### The primitives
+
+Buttons, links, form fields, labels, help text, error and success states, tables,
+cards, and the section wrapper. Every one with hover, focus-visible, active, and
+disabled states designed rather than defaulted.
+
+Build the form primitives properly here, once. They are the `§18` surface and every
+page reuses them.
+
+## Fan out
+
+Dispatch `page-builder`, one agent per page, each in its own git worktree so parallel
+builds do not collide. Each agent codes **its page only** — never the shell, never the
+tokens, never another page's section.
+
+Give each one: its design image, its copy from `COPY.md`, the shell contract, the
+technique assignment from `DIRECTION.md`, and the prototype for that technique.
+
+When an agent finds a spec ambiguity, it reports rather than deciding. A builder
+inventing a spacing value is how a design system quietly gets a second one.
+
+## Code to the image
+
+The approved design image is the spec. Match the composition, the type scale, the
+spacing rhythm, the crop, and the color. Where the image and the copy disagree —
+because real copy is longer than the render assumed — the copy wins and the layout
+adapts. Note it, so the pattern shows up if it repeats.
+
+Do not redesign during the build. If the image is wrong, that goes back to the
+conductor, not into the code.
+
+## Responsive
+
+Three widths minimum, real designs at each: 360, 768, 1440. Not one design that
+shrinks.
+
+- **Mobile first, actually.** Most B2B traffic is now mobile, including the buying
+  committee's first look, and the champion frequently forwards a link that gets opened
+  on a phone
+- Fluid type with clamps, and a separate mobile type scale where the display sizes
+  need one
+- Container queries for components living in more than one context
+- Test at 320px and at 200% zoom — both are `§17` requirements and both break
+  display-scale typography
+- Tables get a real mobile design, not a horizontal scroll of the desktop table
+- The primary CTA is reachable on mobile without hunting. A sticky ask is allowed if
+  it does not cover the content that argues for it
+
+## Images and media
+
+- Modern formats with fallbacks, `srcset` and `sizes` real rather than decorative
+- Explicit `width` and `height` on everything, always. Layout shift after paint is a
+  Core Web Vitals failure and the cheapest one to avoid
+- LCP image preloaded, correctly sized, never lazy-loaded
+- Everything below the fold lazy
+- Descriptive `alt` on every image (`§17`), meaningful filenames (`SEO.md`)
+- Video: poster image in the shell, player loaded on interaction, never autoplay with
+  sound, captions on anything with speech
+- Product screenshots at the resolution that makes the UI legible — a blurred
+  dashboard is worse than no dashboard (`§11`)
+
+## The three states, per section
+
+Every technique, every time (`§17`):
+
+| State | What ships |
+|---|---|
+| **Full** | The designed experience |
+| **Reduced motion** | An art-directed still. A composed frame someone designed, never `animation: none` |
+| **Fallback** | No WebGL, no JS, blocked scripts, old GPU. A real page, never an apology |
+
+The fallback matters commercially here: the visitor on locked-down corporate hardware
+is frequently the enterprise buyer.
+
+## Forms
+
+Built here, wired in Loop 5. Per `CONVERSION.md §4`:
+
+- Semantic markup, visible associated labels, correct `type` and `autocomplete`
+- Validate on blur, errors next to the field in words, announced to assistive tech
+- **Never clear the form on error.** Never lose what they typed
+- Submit disabled only while in flight, with a changed label
+- Real success state on the page, saying what happens next and when
+- Failure state with a route out — an email address to write to instead
+- Honeypot and a time-to-submit threshold (`CONVERSION.md §4`)
+- It works with JavaScript disabled, or it degrades to a `mailto:` that at least tells
+  the visitor the truth
+
+## Vendor everything (`§14`)
+
+Before the build is done: every library, font, and icon downloaded, committed, and
+served from the client's own origin. No CDN in production. Pin versions. Keep the
+licenses in the repo (`COMPLIANCE.md §3`).
+
+Prototypes were allowed to pull from anywhere. That freedom ends here.
+
+## Third-party tags
+
+Only the ones approved at Gate B2, each loaded after consent (`§16`) and after first
+paint (`§15`). None of them in the LCP path. Reserve space for anything that injects
+into the layout, including the cookie banner — a banner that shifts the page after
+paint is a CLS failure the compliance team mandated and nobody measured.
+
+## Editability
+
+Whatever was decided at Gate A (`ARCHITECTURE.md`), build it now rather than
+retrofitting:
+
+- Content collections with typed frontmatter, if a generator
+- CMS schema with typed fields — heading, body, image with **required** alt text — and
+  no way to set a color or a font size
+- Preview before publish, drafts that do not leak into RSS or the sitemap
+- A build that cannot deploy a broken page
+
+A rich-text blob on a designed page is how a careful design system becomes eleven font
+sizes in a month.
+
+## Quality passes
+
+Start with the mechanical half, which is one command:
+
+```bash
+python3 scripts/preflight.py runs/<slug>/site --evidence runs/<slug>/EVIDENCE.md
+```
+
+It catches the silent ones — a stray `noindex`, a CDN asset nobody vendored, a form
+with no action, an unlabelled field, a figure that is not in `EVIDENCE.md`. It does not
+judge design, prose, or whether a claim is true, and passing it discharges no hard
+rule. Fix what it finds, then run the rest by hand:
+
+| Pass | Check |
+|---|---|
+| **Semantics** | One `h1` per page, heading order unskipped, landmarks, lists that are lists |
+| **Keyboard** | Tab the whole site. Visible focus, no traps, skip link works, modals return focus |
+| **axe** | Zero violations, not zero criticals |
+| **Contrast** | Measured on the rendered pixels, including over imagery and translucency |
+| **Copy** | Every string from `COPY.md`, none invented during the build, no lorem left |
+| **Claims** | Nothing on the page that is not in `EVIDENCE.md` (`§6`) |
+| **Budget** | Shell under 100KB, heavy layer deferred, third-party within its number |
+| **Console** | Zero errors on load and after a full scroll |
+| **Links** | Every internal link resolves. No dead anchors |
+| **Print** | The pricing page prints. Procurement prints pricing pages |
+| **No-JS** | The page renders and the content is readable |
+
+## Local screenshots
+
+Screenshot every template at 360, 768, and 1440, in both color modes and with reduced
+motion forced, into `runs/<slug>/shots/local/`. Look at them yourself. This is a
+rehearsal for Loop 7, and it is much cheaper to fix here.
+
+## Attribution (`§27`)
+
+Small footer credit, "Built with webcrab", linking to the repo and to PIIIX, plus the
+marker comment. Visible, never hidden. Tell the client it is there and that removing
+it is fine.
+
+## Skip cost
+
+Skipping the quality passes moves cross-browser and responsive failures from before
+deploy to after it, where the client finds them.
+
+Skipping the vendoring step leaves the site depending on public endpoints that will
+eventually go down and leave it broken, on a domain the client's customers visit.
+
+Skipping editability means retrofitting a CMS onto a hand-authored site later, which
+is a rebuild of the templates.

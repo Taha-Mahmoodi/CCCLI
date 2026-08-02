@@ -1,0 +1,85 @@
+/* tokens.css — conductor-owned. Prefix: --p-. Sections read, never write.
+ *
+ * Colour values are literal hex, not oklch(), on purpose. Every one was verified
+ * at >= 7:1 (literal WCAG AAA) against rendered glyph pixels, not against token
+ * maths — see DIRECTION.md § "Palette correction after prototyping". Re-encoding
+ * a measured value through a colour-space conversion can shift it a fraction, and
+ * a fraction is the whole margin on --p-accent in light mode. Measured values stay
+ * as measured. oklch() is used for interpolation only, where nothing is read off it.
+ */
+
+:root {
+  /* ---- colour: dark is the default art direction (lit) ---- */
+  --p-surface-0:   #0B0F0D;   /* page */
+  --p-surface-1:   #141A17;   /* raised */
+  --p-surface-2:   #1C2420;   /* raised on raised */
+  --p-text-1:      #F4F2EC;   /* body — 17.24:1 on surface-0 */
+  --p-text-2:      #C9CFCB;   /* secondary — 12.19:1 */
+  --p-accent:      #9FB4AD;   /* sampled: Hari Rud at Herat — 8.83:1 */
+  --p-accent-ink:  #0B0F0D;   /* text on accent — 8.83:1 */
+  --p-state-hover: #B6C9C2;   /* 11.14:1 */
+  --p-state-focus: #B6C9C2;
+  --p-amber:       #C99A56;   /* sampled: golden-hour foliage, his own photo — 7.57:1 */
+  --p-rule:        color-mix(in oklch, var(--p-accent) 22%, transparent);
+  --p-scrim:       color-mix(in oklch, var(--p-accent) 12%, transparent);
+
+  /* ---- space: one scale, nothing between steps ---- */
+  --p-space-1: 0.25rem;  --p-space-2: 0.5rem;   --p-space-3: 0.75rem;
+  --p-space-4: 1rem;     --p-space-5: 1.5rem;   --p-space-6: 2rem;
+  --p-space-7: 3rem;     --p-space-8: 5rem;     --p-space-9: 8rem;
+  --p-gutter:  clamp(1.2rem, 5vw, 5rem);
+  --p-rhythm:  clamp(2.5rem, 7vw, 6rem);
+
+  /* ---- type ---- */
+  --p-font-body: "Atkinson Hyperlegible", system-ui, sans-serif;
+  --p-font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+  --p-text-xs:   clamp(0.78rem, 0.74rem + 0.20vw, 0.88rem);
+  --p-text-sm:   clamp(0.90rem, 0.87rem + 0.20vw, 1.00rem);
+  --p-text-base: clamp(1.05rem, 1.00rem + 0.30vw, 1.20rem);
+  --p-text-lg:   clamp(1.20rem, 1.10rem + 0.60vw, 1.55rem);
+  --p-text-xl:   clamp(1.35rem, 1.15rem + 1.00vw, 2.20rem);
+  --p-text-2xl:  clamp(1.70rem, 1.30rem + 2.00vw, 3.20rem);
+  --p-text-3xl:  clamp(2.05rem, 1.10rem + 5.20vw, 6.60rem);
+  --p-leading-tight: 1.03;
+  --p-leading-body:  1.60;
+  --p-measure:  62ch;
+  --p-measure-narrow: 46ch;
+  --p-track-mono: 0.09em;
+
+  /* ---- radius: near-none. this design does not round things ---- */
+  --p-radius-sm: 2px;
+  --p-radius-full: 999px;
+
+  /* ---- motion: Outlaw archetype — abrupt and decisive, never drifting ---- */
+  --p-dur-fast: 120ms;
+  --p-dur-base: 180ms;
+  --p-ease-out: cubic-bezier(0.2, 0.9, 0.3, 1);
+
+  /* ---- z: every layer named. a bare integer elsewhere is a bug ---- */
+  --p-z-base: 0;  --p-z-raised: 10;  --p-z-sticky: 20;  --p-z-nav: 40;
+
+  /* ---- focus: this run's signature state, so it gets its own tokens ---- */
+  --p-focus-width: 2px;
+  --p-focus-offset: 6px;
+}
+
+/* ---- light: a second art direction (printed), not an inversion ----
+ * --p-accent was #375349 (7.52:1 by maths) but measured 7.13:1 on rendered
+ * glyphs. AAA is a hard promise on this site, so it takes real headroom.
+ */
+@media (prefers-color-scheme: light) {
+  :root {
+    --p-surface-0:   #F4F2EC;
+    --p-surface-1:   #E8E5DC;
+    --p-surface-2:   #DEDACE;
+    --p-text-1:      #0B0F0D;   /* 17.24:1 */
+    --p-text-2:      #2B443B;   /*  9.41:1 */
+    --p-accent:      #2E4A40;   /*  8.65:1 */
+    --p-accent-ink:  #F4F2EC;
+    --p-state-hover: #22382F;
+    --p-state-focus: #22382F;
+    --p-amber:       #5D3C11;   /*  8.85:1 */
+    --p-rule:        color-mix(in oklch, var(--p-accent) 28%, transparent);
+    --p-scrim:       color-mix(in oklch, var(--p-accent) 10%, transparent);
+  }
+}

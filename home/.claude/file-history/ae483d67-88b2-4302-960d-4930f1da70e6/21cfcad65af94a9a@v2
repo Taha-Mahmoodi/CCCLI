@@ -1,0 +1,365 @@
+"use client";
+
+// v1 first-run wizard — teaches the deck's gestures AND has the user practice
+// each one before entering the app (spec §3.1, extended for the gesture model).
+// Voice-first, not voice-only: every instruction is spoken and on screen.
+//
+// Accessibility is the point, not an afterthought: each action can be practised
+// three ways (gesture · button · key), the practice is never a trap (every step
+// has Skip, and the whole tour has "Skip the tour"), targets are ≥44px, focus
+// moves to each step's heading, and success is announced via aria-live.
+
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Heart, Mic, SkipForward, ThumbsDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { announce } from "@/lib/a11y";
+import { classifySwipe, isDoubleActivation } from "@/lib/gestures";
+
+const KEY = "tew:onboarded:v1";
+
+type Kind = "welcome" | "like" | "skip" | "likeNext" | "record" | "ready";
+
+type Step = {
+  kind: Kind;
+  title: string;
+  body: string;
+  practice?: string; // spoken + shown prompt for the hands-on bit
+};
+
+const STEPS: Step[] = [
+  {
+    kind: "welcome",
+    title: "Welcome to Third Eye World",
+    body: "This is a voice-first place for blind and low-vision people — a stream of short voice memos, one card at a time. Let's learn the four moves. You can do each one by gesture, by button, or by keyboard — whatever suits you. Nothing here is timed, and you can skip any step.",
+  },
+  {
+    kind: "like",
+    title: "Like a memo",
+    body: "When a card is one you like, swipe it to the right. Or press the Like button. Or press the Right Arrow key.",
+    practice: "Try it now: like this practice card.",
+  },
+  {
+    kind: "skip",
+    title: "Skip a memo",
+    body: "Not for you? Swipe left to skip it and move on. Or press the Skip button. Or press the Left Arrow key.",
+    practice: "Try it now: skip this practice card.",
+  },
+  {
+    kind: "likeNext",
+    title: "Like and move on",
+    body: "To like a card and jump straight to the next, swipe right twice quickly. Or press the Like and next button. Or hold Shift and press the Right Arrow.",
+    practice: "Try it now: like and go to the next.",
+  },
+  {
+    kind: "record",
+    title: "Record your own memo",
+    body: "To speak, press and hold the record button while you talk, then let go. If holding is hard, a single tap starts and stops it instead — both work.",
+    practice: "Try it now: press and hold, or tap, to practise.",
+  },
+  {
+    kind: "ready",
+    title: "You're ready",
+    body: "That's everything: like, skip, like and move on, and record. Your stream always has an end — no endless scroll. Be kind here; this is a place to feel less alone.",
+  },
+];
+
+function speak(text: string) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  try {
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.rate = 1;
+    window.speechSynthesis.speak(u);
+  } catch {
+    /* speech is an enhancement — the text is always on screen */
+  }
+}
+function stopSpeaking() {
+  if (typeof window !== "undefined" && "speechSynthesis" in window) {
+    try {
+      window.speechSynthesis.cancel();
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+const noopSubscribe = () => () => {};
+
+export function OnboardingWizard() {
+  // SSR-safe: server renders nothing (no flash); client reads localStorage.
+  const initiallyDone = useSyncExternalStore(
+    noopSubscribe,
+    () => {
+      try {
+        return localStorage.getItem(KEY) === "true";
+      } catch {
+        return true;
+      }
+    },
+    () => true,
+  );
+  const [dismissed, setDismissed] = useState(false);
+  const [step, setStep] = useState(0);
+  const [donePractice, setDonePractice] = useState<Record<number, boolean>>({});
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  const show = !initiallyDone && !dismissed;
+  const s = STEPS[step];
+  const isLast = step === STEPS.length - 1;
+  const needsPractice = !!s.practice;
+  const practiced = donePractice[step];
+
+  useEffect(() => {
+    if (!show) return;
+    headingRef.current?.focus();
+    speak(`${s.title}. ${s.body}${s.practice ? " " + s.practice : ""}`);
+    return () => stopSpeaking();
+    // announce per step; s is derived from step
+  }, [show, step]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const finish = () => {
+    stopSpeaking();
+    try {
+      localStorage.setItem(KEY, "true");
+    } catch {
+      /* private mode — it'll just show again next time */
+    }
+    setDismissed(true);
+  };
+
+  const goNext = () => {
+    stopSpeaking();
+    if (isLast) finish();
+    else setStep((i) => Math.min(STEPS.length - 1, i + 1));
+  };
+  const goBack = () => {
+    stopSpeaking();
+    setStep((i) => Math.max(0, i - 1));
+  };
+
+  const pass = (message: string) => {
+    if (donePractice[step]) return;
+    setDonePractice((d) => ({ ...d, [step]: true }));
+    announce(message);
+  };
+
+  if (!show) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 p-5 backdrop-blur"
+      onKeyDown={(e) => {
+        if (e.key === "Escape") finish();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wizard-title"
+        className="flex max-h-full w-full max-w-md flex-col gap-4 overflow-auto rounded-2xl border border-border bg-card p-6"
+      >
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Step {step + 1} of {STEPS.length}
+        </p>
+        <h2 id="wizard-title" ref={headingRef} tabIndex={-1} className="text-xl font-semibold">
+          {s.title}
+        </h2>
+        <p className="text-sm leading-relaxed text-foreground/90">{s.body}</p>
+
+        {needsPractice && (
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-medium">{s.practice}</p>
+            <PracticeSurface
+              kind={s.kind}
+              done={!!practiced}
+              onPass={pass}
+            />
+            {practiced && (
+              <p className="text-sm font-medium text-primary">✓ Nicely done. Press Next to go on.</p>
+            )}
+          </div>
+        )}
+
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          {step > 0 && (
+            <Button type="button" variant="ghost" className="h-11 px-4" onClick={goBack}>
+              Back
+            </Button>
+          )}
+          <Button
+            type="button"
+            className="h-11 px-5"
+            onClick={goNext}
+          >
+            {isLast ? "Enter Third Eye World" : needsPractice && !practiced ? "Skip this step" : "Next"}
+          </Button>
+          {!isLast && (
+            <Button
+              type="button"
+              variant="ghost"
+              className="ms-auto h-11 px-4 text-muted-foreground"
+              onClick={finish}
+            >
+              Skip the tour
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// The hands-on bit. Every step can be completed by gesture, by button, or by
+// key — practising the accessibility floor itself, not just the swipe.
+function PracticeSurface({
+  kind,
+  done,
+  onPass,
+}: {
+  kind: Kind;
+  done: boolean;
+  onPass: (message: string) => void;
+}) {
+  const [drag, setDrag] = useState<{ dx: number; dy: number } | null>(null);
+  const start = useRef<{ x: number; y: number; id: number } | null>(null);
+  const rightHits = useRef<{ count: number; ts: number | null }>({ count: 0, ts: null });
+  const holdTimer = useRef<number | null>(null);
+  const holdFired = useRef(false);
+
+  const now = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
+
+  // ---- like / skip / likeNext: a draggable practice card ----
+  const registerRight = () => {
+    // two quick right activations = the "like & next" double
+    const t = now();
+    if (isDoubleActivation(rightHits.current.ts, t)) {
+      rightHits.current = { count: 0, ts: null };
+      onPass("Liked, and on to the next. That's the double.");
+      return true;
+    }
+    rightHits.current = { count: 1, ts: t };
+    return false;
+  };
+
+  const onSwipeEnd = () => {
+    const d = drag;
+    setDrag(null);
+    if (!d) return;
+    const action = classifySwipe(d.dx, d.dy);
+    if (kind === "like" && action === "like") onPass("That's a like.");
+    else if (kind === "skip" && action === "skip") onPass("Skipped. Well done.");
+    else if (kind === "likeNext" && action === "like") registerRight();
+  };
+
+  const onKey = (e: React.KeyboardEvent) => {
+    if (kind === "like" && e.key === "ArrowRight") {
+      e.preventDefault();
+      onPass("That's a like.");
+    } else if (kind === "skip" && e.key === "ArrowLeft") {
+      e.preventDefault();
+      onPass("Skipped. Well done.");
+    } else if (kind === "likeNext" && e.key === "ArrowRight") {
+      e.preventDefault();
+      if (e.shiftKey) onPass("Liked, and on to the next.");
+      else registerRight();
+    }
+  };
+
+  // ---- record: press-and-hold or tap ----
+  const onRecordDown = () => {
+    holdFired.current = false;
+    holdTimer.current = window.setTimeout(() => {
+      holdFired.current = true;
+      onPass("You held to record. Let go when you're done.");
+    }, 220);
+  };
+  const onRecordUp = () => {
+    if (holdTimer.current !== null) {
+      clearTimeout(holdTimer.current);
+      holdTimer.current = null;
+    }
+  };
+  const onRecordClick = () => {
+    if (!holdFired.current) onPass("A tap works too — that starts and stops recording.");
+  };
+
+  if (kind === "record") {
+    return (
+      <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border p-5">
+        <Button
+          type="button"
+          size="icon"
+          variant={done ? "default" : "destructive"}
+          className="size-16 touch-none select-none rounded-full"
+          aria-label="Practice record button. Press and hold, or tap."
+          onClick={onRecordClick}
+          onPointerDown={onRecordDown}
+          onPointerUp={onRecordUp}
+          onPointerCancel={onRecordUp}
+          onContextMenu={(e) => e.preventDefault()}
+        >
+          <Mic className="size-7" aria-hidden="true" />
+        </Button>
+      </div>
+    );
+  }
+
+  // like / skip / likeNext practice card
+  const dx = drag?.dx ?? 0;
+  const buttonFor: Record<string, { label: string; icon: React.ReactNode; onClick: () => void }> = {
+    like: {
+      label: "Like",
+      icon: <Heart className="size-5" aria-hidden="true" />,
+      onClick: () => onPass("That's a like."),
+    },
+    skip: {
+      label: "Skip",
+      icon: <ThumbsDown className="size-5" aria-hidden="true" />,
+      onClick: () => onPass("Skipped. Well done."),
+    },
+    likeNext: {
+      label: "Like & next",
+      icon: <SkipForward className="size-5" aria-hidden="true" />,
+      onClick: () => onPass("Liked, and on to the next."),
+    },
+  };
+  const btn = buttonFor[kind];
+
+  return (
+    <div
+      role="group"
+      aria-label="Practice card. Swipe it, use the button, or use the arrow keys."
+      tabIndex={0}
+      onKeyDown={onKey}
+      className="flex flex-col items-center gap-3 rounded-2xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+    >
+      <div
+        className="flex min-h-24 w-full select-none items-center justify-center rounded-2xl border border-border bg-background p-5 text-sm text-muted-foreground"
+        style={{
+          transform: `translateX(${dx}px) rotate(${dx * 0.04}deg)`,
+          transition: drag ? "none" : "transform 200ms ease-out",
+          touchAction: "pan-y",
+        }}
+        onPointerDown={(e) => {
+          start.current = { x: e.clientX, y: e.clientY, id: e.pointerId };
+          setDrag({ dx: 0, dy: 0 });
+        }}
+        onPointerMove={(e) => {
+          if (!start.current || start.current.id !== e.pointerId) return;
+          setDrag({ dx: e.clientX - start.current.x, dy: e.clientY - start.current.y });
+        }}
+        onPointerUp={onSwipeEnd}
+        onPointerCancel={onSwipeEnd}
+      >
+        {done ? "✓ Practice memo" : "Practice memo"}
+      </div>
+      {btn && (
+        <Button type="button" variant="outline" className="h-11 px-4" onClick={btn.onClick}>
+          <span className="me-2">{btn.icon}</span>
+          {btn.label}
+        </Button>
+      )}
+    </div>
+  );
+}

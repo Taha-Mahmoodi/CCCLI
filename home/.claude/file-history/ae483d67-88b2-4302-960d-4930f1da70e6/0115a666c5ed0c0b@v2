@@ -1,0 +1,79 @@
+// Magic-link auth (spec §5.5: magic email links, equal-status with passkeys/OTP).
+// The email PROVIDER is the only deferred part — in dev the raw token is returned
+// to the caller; in production it is emailed as a one-time link and never
+// returned. Only hashes of tokens are stored.
+import { createHash, randomBytes } from "node:crypto";
+import type { Db } from "./db";
+
+const LOGIN_TTL_MS = 15 * 60_000; // 15 minutes
+const SESSION_TTL_MS = 30 * 24 * 3600_000; // 30 days
+
+const sha256 = (s: string): string => createHash("sha256").update(s).digest("hex");
+const newToken = (): string => randomBytes(24).toString("base64url");
+const uid = (): string => crypto.randomUUID();
+
+export interface User {
+  id: string;
+  email: string;
+  handle: string | null;
+}
+
+export function findOrCreateUser(db: Db, email: string): User {
+  const existing = db
+    .prepare("SELECT id, email, handle FROM users WHERE email = ?")
+    .get(email) as User | undefined;
+  if (existing) return existing;
+  const user: User = { id: uid(), email, handle: null };
+  db.prepare("INSERT INTO users (id, email, handle, created_at) VALUES (?,?,?,?)").run(
+    user.id,
+    user.email,
+    user.handle,
+    Date.now(),
+  );
+  return user;
+}
+
+/** Create a single-use login token. Returns the RAW token (emailed as a link;
+ *  in dev returned to the caller). Only the hash is stored. */
+export function createLoginToken(db: Db, userId: string): string {
+  const raw = newToken();
+  db.prepare(
+    "INSERT INTO login_tokens (token_hash, user_id, expires_at, used, created_at) VALUES (?,?,?,0,?)",
+  ).run(sha256(raw), userId, Date.now() + LOGIN_TTL_MS, Date.now());
+  return raw;
+}
+
+/** Redeem a login token → a new session token. Null if invalid/expired/used. */
+export function redeemLoginToken(
+  db: Db,
+  raw: string,
+): { sessionToken: string; user: User } | null {
+  const hash = sha256(raw);
+  const row = db
+    .prepare("SELECT user_id, expires_at, used FROM login_tokens WHERE token_hash = ?")
+    .get(hash) as { user_id: string; expires_at: number; used: number } | undefined;
+  if (!row || row.used || row.expires_at < Date.now()) return null;
+  db.prepare("UPDATE login_tokens SET used = 1 WHERE token_hash = ?").run(hash);
+  const user = db.prepare("SELECT id, email, handle FROM users WHERE id = ?").get(row.user_id) as
+    | User
+    | undefined;
+  if (!user) return null;
+  const sessionToken = newToken();
+  db.prepare(
+    "INSERT INTO sessions (token_hash, user_id, expires_at, created_at) VALUES (?,?,?,?)",
+  ).run(sha256(sessionToken), user.id, Date.now() + SESSION_TTL_MS, Date.now());
+  return { sessionToken, user };
+}
+
+/** Resolve a session bearer token → user, or null. */
+export function sessionUser(db: Db, sessionToken: string): User | null {
+  const row = db
+    .prepare("SELECT user_id, expires_at FROM sessions WHERE token_hash = ?")
+    .get(sha256(sessionToken)) as { user_id: string; expires_at: number } | undefined;
+  if (!row || row.expires_at < Date.now()) return null;
+  return (
+    (db.prepare("SELECT id, email, handle FROM users WHERE id = ?").get(row.user_id) as
+      | User
+      | undefined) ?? null
+  );
+}

@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chapters: Design System Preview</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Petrona:ital,wght@0,400;0,500;0,600;0,700;1,500&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --canvas: #F4F1EA;
+    --surface: #FAF7F0;
+    --chrome: #EAE5D8;
+    --ink: #1C1A16;
+    --muted: #6B6558;
+    --human: #BA3B1D;
+    --human-soft: #BA3B1D1a;
+    --machine: #2B6E6B;
+    --machine-soft: #2B6E6B1a;
+    --hairline: #D8D2C2;
+    --success: #3D7A4F;
+    --warning: #B8862E;
+    --error: #BA3B1D;
+    --info: #2B6E6B;
+    --shadow: 0 1px 2px rgba(28,26,22,0.06), 0 2px 8px rgba(28,26,22,0.04);
+  }
+  [data-theme="dark"] {
+    --canvas: #17140F;
+    --surface: #201C15;
+    --chrome: #0F0D0A;
+    --ink: #EDE8DD;
+    --muted: #A39C8C;
+    --human: #E2683F;
+    --human-soft: #E2683F26;
+    --machine: #4FA39F;
+    --machine-soft: #4FA39F26;
+    --hairline: #322C22;
+    --success: #6FBF83;
+    --warning: #D9A94D;
+    --error: #E2683F;
+    --info: #4FA39F;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 4px 16px rgba(0,0,0,0.25);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--canvas);
+    color: var(--ink);
+    font-family: 'Hanken Grotesk', sans-serif;
+    transition: background 0.2s ease, color 0.2s ease;
+    background-image: radial-gradient(circle at 1px 1px, rgba(28,26,22,0.035) 1px, transparent 0);
+    background-size: 3px 3px;
+  }
+  [data-theme="dark"] body {
+    background-image: radial-gradient(circle at 1px 1px, rgba(237,232,221,0.03) 1px, transparent 0);
+    background-size: 3px 3px;
+  }
+  .display { font-family: 'Petrona', serif; }
+  .mono { font-family: 'IBM Plex Mono', monospace; }
+  .eyebrow {
+    font-family: 'Hanken Grotesk', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 32px; }
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--canvas)ee;
+    backdrop-filter: blur(6px);
+    border-bottom: 1px solid var(--hairline);
+    padding: 16px 0;
+  }
+  .topbar-row { display: flex; align-items: center; justify-content: space-between; }
+  .wordmark { font-family: 'Petrona', serif; font-weight: 600; font-size: 20px; letter-spacing: -0.01em; }
+  .toggle-btn {
+    font-family: 'Hanken Grotesk', sans-serif;
+    font-size: 13px; font-weight: 600;
+    background: var(--surface); color: var(--ink);
+    border: 1px solid var(--hairline);
+    border-radius: 8px; padding: 8px 14px; cursor: pointer;
+  }
+  section { padding: 72px 0; border-bottom: 1px solid var(--hairline); }
+  section:last-child { border-bottom: none; }
+  .hero { padding-top: 96px; padding-bottom: 96px; }
+  .hero h1 {
+    font-size: 64px; font-weight: 600; line-height: 1.05; letter-spacing: -0.02em;
+    margin: 20px 0 24px;
+    max-width: 760px;
+  }
+  .hero p.lead { font-size: 19px; color: var(--muted); max-width: 560px; line-height: 1.55; margin: 0 0 32px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: 'Hanken Grotesk', sans-serif; font-weight: 600; font-size: 14px;
+    border-radius: 8px; padding: 11px 20px; cursor: pointer; border: 1px solid transparent;
+    transition: filter 0.15s ease;
+  }
+  .btn:hover { filter: brightness(0.94); }
+  .btn-primary { background: var(--human); color: #FFF7F0; }
+  [data-theme="dark"] .btn-primary { color: #17140F; }
+  .btn-secondary { background: var(--surface); color: var(--ink); border-color: var(--hairline); }
+  .btn-ghost { background: transparent; color: var(--ink); }
+  .btn-ghost:hover { background: var(--chrome); }
+  h2.section-title { font-family: 'Petrona', serif; font-size: 30px; font-weight: 600; margin: 6px 0 8px; letter-spacing: -0.01em; }
+  p.section-sub { color: var(--muted); font-size: 15px; margin: 0 0 40px; max-width: 620px; }
+
+  /* Font specimens */
+  .specimen-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .specimen-card { background: var(--surface); border: 1px solid var(--hairline); border-radius: 12px; padding: 28px; box-shadow: var(--shadow); }
+  .specimen-role { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .specimen-name { font-weight: 600; font-size: 15px; margin-bottom: 18px; }
+  .specimen-display { font-family: 'Petrona', serif; font-size: 34px; font-weight: 600; line-height: 1.15; margin-bottom: 10px; }
+  .specimen-body { font-family: 'Hanken Grotesk', sans-serif; font-size: 15px; line-height: 1.6; color: var(--ink); }
+  .specimen-mono { font-family: 'IBM Plex Mono', monospace; font-size: 13px; line-height: 1.7; background: var(--chrome); border-radius: 6px; padding: 12px 14px; color: var(--ink); white-space: pre; overflow-x: auto; }
+
+  /* Colors */
+  .swatch-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 40px; }
+  .swatch { border-radius: 12px; overflow: hidden; border: 1px solid var(--hairline); }
+  .swatch-color { height: 70px; }
+  .swatch-label { padding: 10px 14px; background: var(--surface); }
+  .swatch-name { font-size: 13px; font-weight: 600; }
+  .swatch-hex { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted); }
+
+  .ui-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; }
+  .ui-card { background: var(--surface); border: 1px solid var(--hairline); border-radius: 12px; padding: 24px; box-shadow: var(--shadow); }
+  .ui-card h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 16px; font-weight: 600; }
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+  .field input, .field select {
+    width: 100%; font-family: 'Hanken Grotesk', sans-serif; font-size: 14px;
+    padding: 9px 12px; border-radius: 8px; border: 1px solid var(--hairline);
+    background: var(--canvas); color: var(--ink);
+  }
+  .alert { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 10px; border: 1px solid transparent; }
+  .alert-success { background: color-mix(in srgb, var(--success) 12%, var(--surface)); border-color: color-mix(in srgb, var(--success) 30%, transparent); }
+  .alert-warning { background: color-mix(in srgb, var(--warning) 12%, var(--surface)); border-color: color-mix(in srgb, var(--warning) 30%, transparent); }
+  .alert-error { background: color-mix(in srgb, var(--error) 12%, var(--surface)); border-color: color-mix(in srgb, var(--error) 30%, transparent); }
+  .alert-info { background: color-mix(in srgb, var(--info) 12%, var(--surface)); border-color: color-mix(in srgb, var(--info) 30%, transparent); }
+
+  /* Editor mockup */
+  .editor-frame {
+    display: grid; grid-template-columns: 220px 1fr 260px;
+    background: var(--surface); border: 1px solid var(--hairline); border-radius: 14px;
+    overflow: hidden; box-shadow: var(--shadow); height: 560px;
+  }
+  .editor-col { padding: 18px; overflow-y: auto; }
+  .editor-sidebar { background: var(--chrome); border-right: 1px solid var(--hairline); }
+  .editor-rail { background: var(--chrome); border-left: 1px solid var(--hairline); }
+  .tree-group { font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin: 16px 0 6px; font-weight: 600; }
+  .tree-group:first-child { margin-top: 0; }
+  .tree-item { font-size: 13.5px; padding: 5px 8px; border-radius: 6px; cursor: pointer; color: var(--ink); }
+  .tree-item.active { background: var(--human-soft); color: var(--human); font-weight: 600; }
+  .tree-item:hover:not(.active) { background: var(--canvas); }
+  .breadcrumb { font-size: 12.5px; color: var(--muted); padding: 14px 28px; border-bottom: 1px solid var(--hairline); }
+  .breadcrumb b { color: var(--ink); }
+  .note-body { padding: 20px 28px 28px; font-size: 15px; line-height: 1.75; }
+  .note-title { font-family: 'Petrona', serif; font-size: 26px; font-weight: 600; margin: 0 0 18px; }
+  .ai-edit { background: var(--machine-soft); padding: 2px 6px; border-radius: 4px; }
+  .rail-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 600; margin-bottom: 12px; }
+  .backlink { padding: 10px 0; border-bottom: 1px solid var(--hairline); font-size: 13px; }
+  .backlink:last-child { border-bottom: none; }
+  .backlink-title { font-weight: 600; margin-bottom: 3px; }
+  .badge-ai { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; background: var(--machine-soft); color: var(--machine); padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
+
+  /* Auth mockup */
+  .auth-frame { max-width: 400px; margin: 0 auto; background: var(--surface); border: 1px solid var(--hairline); border-radius: 14px; padding: 40px 36px; box-shadow: var(--shadow); }
+  .auth-frame .wordmark { display: block; margin-bottom: 6px; }
+  .auth-frame p.sub { color: var(--muted); font-size: 14px; margin: 0 0 28px; }
+
+  /* Settings mockup */
+  .settings-frame { background: var(--surface); border: 1px solid var(--hairline); border-radius: 14px; padding: 32px; box-shadow: var(--shadow); }
+  .settings-row { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid var(--hairline); }
+  .settings-row:last-child { border-bottom: none; }
+  .settings-row-label { font-weight: 600; font-size: 14.5px; }
+  .settings-row-desc { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .switch { width: 40px; height: 22px; border-radius: 12px; background: var(--chrome); border: 1px solid var(--hairline); position: relative; cursor: pointer; flex-shrink: 0; }
+  .switch.on { background: var(--human); border-color: var(--human); }
+  .switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); transition: left 0.15s ease; }
+  .switch.on::after { left: 20px; background: #FFF7F0; }
+
+  @media (max-width: 900px) {
+    .specimen-grid, .swatch-grid { grid-template-columns: repeat(2, 1fr); }
+    .ui-grid { grid-template-columns: 1fr; }
+    .editor-frame { grid-template-columns: 1fr; height: auto; }
+    .editor-sidebar, .editor-rail { display: none; }
+    .hero h1 { font-size: 42px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="wrap topbar-row">
+    <span class="wordmark">Chapters</span>
+    <button class="toggle-btn" onclick="toggleTheme()">Toggle dark mode</button>
+  </div>
+</div>
+
+<section class="hero">
+  <div class="wrap">
+    <div class="eyebrow">Design system preview</div>
+    <h1 class="display">Paper &amp; ink for a knowledge base you actually own.</h1>
+    <p class="lead">An open-source, self-hostable second brain: plain markdown on disk, an AI-navigable graph, and a design system that treats permanence as the whole point.</p>
+    <div class="btn-row">
+      <a class="btn btn-primary">Open a note</a>
+      <a class="btn btn-secondary">View the graph</a>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Typography</div>
+    <h2 class="section-title">Three typefaces, one job each</h2>
+    <p class="section-sub">Display carries personality, body carries legibility at small sizes for hours at a time, mono carries technical honesty.</p>
+    <div class="specimen-grid">
+      <div class="specimen-card">
+        <div class="specimen-role">Display / Headings</div>
+        <div class="specimen-name">Petrona</div>
+        <div class="specimen-display">Q3 Roadmap</div>
+        <div class="specimen-body" style="color:var(--muted)">Serif with real irregularity. Written by someone, not generated by a template.</div>
+      </div>
+      <div class="specimen-card">
+        <div class="specimen-role">Body / UI</div>
+        <div class="specimen-name">Hanken Grotesk</div>
+        <div class="specimen-body" style="font-size:16px; margin-bottom:10px;">The quick knowledge graph links every note, vault, and shared file across your team.</div>
+        <div class="specimen-body" style="color:var(--muted)">Warm geometric-humanist, legible at small UI sizes without going cold.</div>
+      </div>
+      <div class="specimen-card">
+        <div class="specimen-role">Code / Metadata</div>
+        <div class="specimen-name">IBM Plex Mono</div>
+        <div class="specimen-mono">---
+type: project
+tags: [roadmap, q3]
+---
+[[Engineering/Q3 Roadmap]]</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Color</div>
+    <h2 class="section-title">Dual-accent, scoped to authorship</h2>
+    <p class="section-sub">Vermillion is you. Teal is the AI. Every other color is neutral paper and ink, kept rare so it means something specific when it appears.</p>
+    <div class="swatch-grid">
+      <div class="swatch"><div class="swatch-color" style="background:var(--canvas)"></div><div class="swatch-label"><div class="swatch-name">Canvas</div><div class="swatch-hex">#F4F1EA</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:var(--surface)"></div><div class="swatch-label"><div class="swatch-name">Surface</div><div class="swatch-hex">#FAF7F0</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:var(--chrome)"></div><div class="swatch-label"><div class="swatch-name">Recessed chrome</div><div class="swatch-hex">#EAE5D8</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:var(--ink)"></div><div class="swatch-label"><div class="swatch-name">Primary text</div><div class="swatch-hex">#1C1A16</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:var(--human)"></div><div class="swatch-label"><div class="swatch-name">Human accent</div><div class="swatch-hex">#BA3B1D</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:var(--machine)"></div><div class="swatch-label"><div class="swatch-name">AI / machine accent</div><div class="swatch-hex">#2B6E6B</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:var(--success)"></div><div class="swatch-label"><div class="swatch-name">Success</div><div class="swatch-hex">semantic</div></div></div>
+      <div class="swatch"><div class="swatch-color" style="background:var(--warning)"></div><div class="swatch-label"><div class="swatch-name">Warning</div><div class="swatch-hex">semantic</div></div></div>
+    </div>
+
+    <div class="ui-grid">
+      <div class="ui-card">
+        <h3>Components</h3>
+        <div class="btn-row">
+          <a class="btn btn-primary">Primary</a>
+          <a class="btn btn-secondary">Secondary</a>
+          <a class="btn btn-ghost">Ghost</a>
+        </div>
+        <div class="field">
+          <label>Vault name</label>
+          <input type="text" value="Engineering Notes" readonly>
+        </div>
+        <div class="field">
+          <label>Default permission</label>
+          <select><option>Read</option><option>Edit</option></select>
+        </div>
+      </div>
+      <div class="ui-card">
+        <h3>Alerts</h3>
+        <div class="alert alert-success">✓ Backup completed: 42 notes, 3 vaults.</div>
+        <div class="alert alert-warning">⚠ This share expires in 2 days.</div>
+        <div class="alert alert-error">✕ Sync failed: credential expired.</div>
+        <div class="alert alert-info">ⓘ An AI assistant is viewing this vault (read-only).</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Editor</div>
+    <h2 class="section-title">The workhorse page</h2>
+    <p class="section-sub">File tree, breadcrumb, live-preview body, linked mentions. The teal badge marks what the AI touched.</p>
+    <div class="editor-frame">
+      <div class="editor-col editor-sidebar">
+        <div class="tree-group">Projects</div>
+        <div class="tree-item active">Q3 Roadmap</div>
+        <div class="tree-item">Migration Plan</div>
+        <div class="tree-item">Design Review</div>
+        <div class="tree-group">Meetings</div>
+        <div class="tree-item">Standup Notes</div>
+        <div class="tree-item">1:1 (Sept)</div>
+        <div class="tree-group">Notes</div>
+        <div class="tree-item">Ideas Inbox</div>
+      </div>
+      <div class="editor-col" style="padding:0;">
+        <div class="breadcrumb">Engineering / Roadmap / <b>Q3 Roadmap</b></div>
+        <div class="note-body">
+          <div class="note-title">Q3 Roadmap</div>
+          <p>This quarter we're prioritizing the codebase-mapping integration and closing the backup/restore gap identified in the last audit.</p>
+          <p>Search should feel instant even at <span class="ai-edit">10,000+ notes, since the hybrid keyword and semantic ranking keeps p95 under 500ms</span> across a merged vault and repository view.</p>
+          <p>Next: finalize the UI design system, then start on the Editor page.</p>
+        </div>
+      </div>
+      <div class="editor-col editor-rail">
+        <div class="rail-title">Linked mentions</div>
+        <div class="backlink"><div class="backlink-title">Migration Plan</div>references this roadmap's Q3 milestone</div>
+        <div class="backlink"><div class="backlink-title">Design Review<span class="badge-ai">AI</span></div>summary generated from 3 linked notes</div>
+        <div class="backlink"><div class="backlink-title">Standup Notes</div>mentions "roadmap" 4 times this week</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Auth &amp; Settings</div>
+    <h2 class="section-title">Plain, fast, out of the way</h2>
+    <p class="section-sub">Deliberately quiet pages, per the existing UI spec: "the show begins after login."</p>
+    <div class="ui-grid">
+      <div>
+        <div class="auth-frame">
+          <span class="wordmark">Chapters</span>
+          <p class="sub">Sign in to your instance</p>
+          <div class="field"><label>Email</label><input type="text" value="taha@piiix.org" readonly></div>
+          <div class="field"><label>Password</label><input type="password" value="••••••••••"></div>
+          <a class="btn btn-primary" style="width:100%; justify-content:center; margin-top:8px;">Sign in</a>
+        </div>
+      </div>
+      <div class="settings-frame">
+        <h3 style="font-size:13px; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); margin:0 0 4px; font-weight:600;">Account settings</h3>
+        <div class="settings-row">
+          <div><div class="settings-row-label">Two-factor authentication</div><div class="settings-row-desc">Require a TOTP code at login</div></div>
+          <div class="switch on"></div>
+        </div>
+        <div class="settings-row">
+          <div><div class="settings-row-label">Email notifications</div><div class="settings-row-desc">Vault shares, mentions, revocations</div></div>
+          <div class="switch on"></div>
+        </div>
+        <div class="settings-row">
+          <div><div class="settings-row-label">Allow MCP connections</div><div class="settings-row-desc">Let AI assistants connect to your account</div></div>
+          <div class="switch"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  function toggleTheme() {
+    const root = document.documentElement;
+    const isDark = root.getAttribute('data-theme') === 'dark';
+    root.setAttribute('data-theme', isDark ? 'light' : 'dark');
+  }
+  if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    // Default to light per the design direction even if the system is dark.
+    // This system is deliberately light-first, not system-following.
+  }
+</script>
+
+</body>
+</html>

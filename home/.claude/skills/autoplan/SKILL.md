@@ -1,0 +1,1 @@
+/Users/taha/.claude/skills/gstack/autoplan/SKILL.md

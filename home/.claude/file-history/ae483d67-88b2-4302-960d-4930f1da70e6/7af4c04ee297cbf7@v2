@@ -1,0 +1,13 @@
+"use client";
+
+// Loads persisted memos from IndexedDB into the store, once, on the client.
+
+import { useEffect } from "react";
+import { usePlayer } from "@/stores/player";
+
+export function PlayerHydrator() {
+  useEffect(() => {
+    void usePlayer.getState().hydrate();
+  }, []);
+  return null;
+}

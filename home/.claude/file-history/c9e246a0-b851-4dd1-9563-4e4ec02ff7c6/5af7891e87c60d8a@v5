@@ -1,0 +1,105 @@
+import Link from "next/link";
+import { requireUser } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { PostComposer } from "@/components/app/post-composer";
+import { PostCard, type FeedPost } from "@/components/app/post-card";
+
+export const metadata = { title: "Community" };
+
+const TABS = [
+  { key: "everyone", label: "Everyone", href: "/app" },
+  { key: "following", label: "Following", href: "/app?feed=following" },
+] as const;
+
+export default async function CommunityHome({
+  searchParams,
+}: {
+  searchParams: Promise<{ feed?: string }>;
+}) {
+  const { feed: feedParam } = await searchParams;
+  const onFollowing = feedParam === "following";
+  const user = await requireUser();
+
+  let where: { authorId?: { in: string[] } } | undefined;
+  if (onFollowing) {
+    const follows = await prisma.follow.findMany({
+      where: { followerId: user.id },
+      select: { followingId: true },
+    });
+    where = { authorId: { in: follows.map((f) => f.followingId) } };
+  }
+
+  const posts = await prisma.post.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    include: {
+      author: { select: { id: true, profile: { select: { displayName: true } } } },
+      _count: { select: { likes: true, comments: true } },
+      likes: { where: { userId: user.id }, select: { id: true } },
+    },
+  });
+
+  const feed: FeedPost[] = posts.map((p) => ({
+    id: p.id,
+    body: p.body,
+    createdAt: p.createdAt,
+    author: {
+      id: p.authorId,
+      displayName: p.author.profile?.displayName ?? "Member",
+    },
+    likeCount: p._count.likes,
+    commentCount: p._count.comments,
+    liked: p.likes.length > 0,
+  }));
+
+  return (
+    <div className="mx-auto max-w-2xl px-5 py-10">
+      <h1 className="text-2xl font-semibold tracking-tight">Community</h1>
+      <p className="mt-1 text-muted">
+        Travelers, families, clinicians, and engineers, sharing the road.
+      </p>
+
+      <div className="mt-6">
+        <PostComposer />
+      </div>
+
+      <nav aria-label="Feed filter" className="mt-6 flex gap-1 border-b border-border">
+        {TABS.map((t) => {
+          const active =
+            (t.key === "following") === onFollowing;
+          return (
+            <Link
+              key={t.key}
+              href={t.href}
+              aria-current={active ? "page" : undefined}
+              className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+                active
+                  ? "border-accent text-fg"
+                  : "border-transparent text-muted hover:text-fg"
+              }`}
+            >
+              {t.label}
+            </Link>
+          );
+        })}
+      </nav>
+
+      {feed.length === 0 ? (
+        <p className="mt-8 rounded-2xl border border-border bg-surface p-6 text-muted">
+          {onFollowing
+            ? "You are not following anyone yet. Open a member's profile from the Everyone feed and follow them to see their posts here."
+            : "No posts yet. Be the first to share something with the community."}
+        </p>
+      ) : (
+        <ul className="mt-6 flex flex-col gap-4">
+          {feed.map((p) => (
+            <li key={p.id}>
+              <PostCard post={p} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}

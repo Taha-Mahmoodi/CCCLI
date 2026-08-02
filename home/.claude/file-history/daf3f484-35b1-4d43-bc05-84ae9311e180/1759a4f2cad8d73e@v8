@@ -1,0 +1,276 @@
+# Yildizim
+
+Closed-source 3D galaxy visualization and gamification layer
+for knowledge bases. Ships as the differentiator on PIIIX's *hosted*
+version of [Chapters](https://github.com/PIIIX-org/chapters) — an
+open-core relationship:
+
+- **Self-hosted Chapters** (open source, free) — a plain node-graph
+  visualization, in the spirit of Graphify.
+- **PIIIX-hosted Chapters** (paid) — same Chapters backend, plus Yildizim's
+  proprietary galaxy/gamification visualization on top.
+
+**Status: prototyping.** The mechanics design below is settled; the
+visual language is being found through working renders.
+
+![First light — the multi-galaxy sky](docs/screenshots/first-light.png)
+
+![Tier 2 — inside a galaxy, vaults resolved as stars](docs/screenshots/tier2-vault-stars.png)
+
+## Development
+
+```
+npm install
+npm run dev      # Vite dev server
+npm test         # data-model tests (evolution/decay logic)
+npm run build    # type-check + production build
+```
+
+Stack: Vite + TypeScript + Three.js, no framework. Runs entirely on
+deterministic mock data (`src/data.ts`) until the Chapters backend feeds
+it for real.
+
+## Core visual hierarchy
+
+| Chapters concept | Yildizim visual |
+|---|---|
+| Project | Galaxy |
+| Vault (a section of a project) | Star |
+| Note | Planet, orbiting its vault-star |
+| Sub-note / comment | Moon, orbiting its note-planet |
+
+**Size** of any body (star, planet, moon) is driven by two things together:
+how much information it holds, and how much it's actually being used.
+
+## Zoom levels
+
+- Zoomed in: individual planets and moons orbiting a star, visible in
+  detail.
+- Zoomed out: stars pull together into a single spinning galaxy.
+- Zoomed out further: many galaxies visible at once, chained together
+  wherever cross-project relationships exist.
+
+## Opening moment
+
+On open, the camera doesn't land on a static overview — it zooms straight
+into the single biggest galaxy in the graph, as an animated entry.
+
+## Decay & neglect
+
+An untouched note/star/galaxy doesn't just sit there — it dims, then
+fades, then eventually collapses into a cloud of dust. Recovering it back
+into a real galaxy/star again requires active work. Decay is a real,
+reversible mechanic tied to actual neglect, not a cosmetic dimming effect.
+
+## System activity as visuals
+
+- Data flowing between parts of the system = animated space shuttles.
+- An AI performing a search = a visible spaceship moving through the
+  scene.
+
+## Dual view modes (for companies/teams)
+
+1. **By project** — the default hierarchical galaxy view described above.
+2. **By user** — shows each team member's own knowledge base as its own
+   visual shape/size, even when their content isn't connected to the
+   shared knowledge base. Privacy-preserving by design: a teammate can see
+   that someone has a galaxy of a certain size and shape — visible
+   activity, visible scale — but never what's actually inside it. Visual
+   only, never content.
+
+## Gamification
+
+- Finishing/completing a project = "conquering a galaxy."
+- Keeping a project alive, updated, and versioned earns points.
+- Achievements, shareable to social media.
+- Explicit goal: keep users engaged and motivated to build, and push back
+  against procrastination and neglect — especially in a company/startup
+  context, where the by-user view creates social visibility into who's
+  actively building and who isn't.
+- Multiplayer for company/startup use is the long-term intent — this
+  isn't meant to stay a single-player mechanic bolted onto a solo tool —
+  but the actual mechanism (how you see/interact with teammates live in
+  this universe, beyond the by-user privacy-preserving view already
+  designed above) is explicitly **deferred to v2**. V1 ships single-player
+  gamification (evolution, decay, badges) plus the by-user visibility
+  view; live multiplayer interaction is a distinct, later design pass.
+- **Reward system**: the project-evolution ladder below (see "Project
+  evolution") plus the badge system (see "Badge system") together are the
+  core reward loop.
+
+## Project evolution
+
+A project (galaxy) progresses through visual stages driven by real
+activity, grounded in research findings on gamification/decay (see
+[`docs/research-3d-gamification-precedents.md`](docs/research-3d-gamification-precedents.md)):
+
+1. **Nebula** — brand new, minimal content. A soft, undefined gas cloud,
+   no fixed shape yet.
+2. **Red Dwarf** — small but real, consistent activity. Small, dim, warm
+   glow.
+3. **Main Sequence** — steady, active project. Medium size, clear warm
+   white-yellow light. Most healthy projects should live here.
+4. **Blue Giant** — highly active, multiple contributors, frequent
+   updates. Large, intensely bright.
+5. **Supernova** — not a resting stage, a *moment*. Triggered explicitly
+   (someone marks a real milestone — a v1.0 ship, a major release) rather
+   than happening passively. The celebratory, shareable-to-social-media
+   instant.
+6. **Black hole** — the permanent aftermath. Visually compact again, but
+   it bends light and space around it, visibly pulling nearby stars and
+   galaxies toward it. Not bright — *gravitational*. This is what
+   "conquered a galaxy" looks like: the project is now significant enough
+   to warp everything else in the company's sky toward it.
+
+**Progression (stages 1→4)** is automatic, weighted toward sustained
+cadence over time and number of distinct contributors — not raw edit
+count, which would let someone game it by dumping a week of work into one
+sitting.
+
+**The supernova (4→5→6) is a deliberate action**, not automatic — giving
+real agency over a project's biggest achievement moment instead of it
+just quietly happening.
+
+**Decay** reverses the same stages for neglected projects below
+black-hole tier — dims, shrinks — always with a visible countdown ("cools
+from Blue Giant to Main Sequence in 12 days without activity"), never a
+surprise. This is the line the research draws between motivating and
+manipulative (dark-pattern) design.
+
+At black-hole tier specifically, full reversion to nebula would erase
+something genuinely earned, so neglect instead removes the gravitational
+pull and dims it toward a dark remnant — still there, still yours, just
+no longer pulling focus. Resuming work brings the pull back quickly;
+earned status is remembered, not reset from zero.
+
+### What a black hole earns
+
+- **A permanent title/flair** ("Conqueror" or similar) attached to the
+  user's profile, visible wherever they show up in the company's shared
+  sky.
+- **A named, customizable signature** — the owner themes their black
+  hole's visual signature (color/particle style), building the
+  "customizable" requirement in from the start rather than adding it
+  later.
+- **A functional role, not just cosmetic** — black-hole projects get
+  pinned/prioritized in navigation, acting as real landmarks in a large
+  company sky.
+- **An entry in a "Hall of Constellations"** — a persistent record
+  separate from the live galaxy, built specifically to be a clean,
+  shareable artifact (a framed accomplishment reads very differently from
+  a spammy "I earned a badge" post — this is the deliberate answer to the
+  organic-sharing question the research left open).
+- **Stardust** — a currency earned continuously from real activity (not
+  just at black-hole moments), spendable on cosmetic customization
+  unlocks. Gives the point-earning from the original vision a name and a
+  purpose instead of being an abstract number.
+
+## Badge system
+
+250 badges across three tiers:
+
+- **180 Common** — the onboarding/habit layer: first note, first shared
+  vault, first link between two notes, first week of sustained activity,
+  first moon (sub-note) added, first AI search, first time flying into 3D
+  view. Frequent, easy wins — the research is explicit that positive/
+  fixed rewards matter for enjoyment, not just the harder-tier stuff.
+- **50 Unique** — sustained-effort tier: reaching Blue Giant on 5
+  different projects, a project surviving a full year with zero decay,
+  top contributor company-wide for a quarter, first black hole ever for
+  that user, and **"Resurrection"** — recovering a project from
+  near-total dust back to a healthy star. Ties directly to the decay
+  mechanic being reversible; should be one of the best badges in the set.
+- **20 Rare** — deliberately touched by luck/timing, not pure effort:
+  being present for the *first black hole ever achieved on the whole
+  platform*, reaching black hole within an unusually tight window from
+  project creation, surviving multiple full decay-and-recovery cycles, a
+  company where every single member hits a milestone in the same week.
+
+Full enumeration of all 250 is future work — this is the tiering logic
+and representative examples per tier, not the complete list.
+
+## Reward systems beyond badges
+
+- **Constellations** — themed badge collections that unlock a special
+  title/visual when fully completed. A meta-goal above individual badges.
+- **Cosmic events** — periodic limited-time happenings (a meteor shower,
+  an eclipse) that create time-boxed badge opportunities, keeping
+  re-engagement fresh over months instead of the reward system going
+  stale.
+- **Collective company goals** — a shared target the whole team
+  contributes to (e.g. total company "mass" this quarter), separate from
+  individual competition. The research flagged that pure competitive
+  leaderboards can be demotivating for whoever's behind; a cooperative
+  layer alongside the individual one avoids that.
+- **Periodic auto-generated recap** — a "your galaxy this quarter"
+  shareable visual summary, Spotify-Wrapped-style. Not directly supported
+  by the research pass, but a well-established pattern for genuinely
+  organic sharing — included as a judgment call, not a cited finding.
+
+## Zoom transitions
+
+Flying from the full multi-galaxy sky into one project, then into one
+system, the rest of the sky doesn't vanish or stay fully rendered — it
+recedes into a dimmed, soft backdrop. This keeps peripheral awareness of
+the bigger company picture (relevant to the by-user social-visibility
+goal above) while sharpening focus on what's actually being navigated
+into.
+
+## Rendering
+
+Full 3D. Fly through, rotate, navigate freely — not a flat 2D "look up at
+the sky" view.
+
+## V2 / deferred
+
+Tracked explicitly rather than left silently absent:
+
+- **Live multiplayer mechanics** — how you actually see/interact with
+  teammates in this universe in real time, beyond the by-user
+  privacy-preserving visibility view already designed. V1 ships that
+  view plus single-player gamification; live interaction is its own
+  design pass later.
+
+## Open problems
+
+The deep-research pass (see
+[`docs/research-3d-gamification-precedents.md`](docs/research-3d-gamification-precedents.md))
+found solid ground for the gamification/decay mechanics, but came back
+empty on the hardest visual question:
+
+- **Visual clarity at true galaxy scale** (hundreds/thousands of orbiting
+  bodies at once) has no verified precedent anywhere researched, in any
+  tool or game examined. This has to be solved through original design
+  and prototyping, not borrowed from an existing reference.
+
+  **Working hypothesis** (decided 2026-07-17: final solution is deferred
+  to implementation time; this is the starting point, unverified until
+  prototyped):
+  - **Semantic level-of-detail, from cartography** — like a map renders
+    only cities at country zoom, each zoom tier renders only its own
+    semantic level: multi-galaxy view draws one aggregate shape per
+    project (never individual stars); inside a galaxy, stars render but
+    their planets collapse into a soft halo around each star; inside a
+    star system, planets resolve; on a planet, moons. No tier ever draws
+    the full object count.
+  - **Leiden constellations** — inside a busy galaxy (say 200 vaults),
+    reuse Chapters' existing Leiden community detection to sub-cluster
+    stars into 5–15 visually distinct glowing regions by real
+    relatedness, resolved only on zoom-in.
+  - **Evolution brightness IS the hierarchy** — the gamification ladder
+    already makes active/significant things bigger and brighter and
+    neglected things dim; that doubles as the declutter logic for free,
+    no separate importance system needed.
+  - **Depth cues for the 3D-specific problem** — atmospheric perspective
+    (distant objects desaturate toward the base space color), parallax on
+    camera movement, soft depth-of-field outside current focus. Standard
+    film/game techniques, unmentioned in any researched source for this
+    use case.
+
+## Design process note
+
+UI/UX has been called out as the single most important part of this
+project. A deep-research pass (2026-07-15) covered existing 3D
+knowledge-visualization tools, gamification/decay precedents, and
+galaxy-scale-zoom games — see the research doc linked above for what's
+verified vs. still genuinely open.

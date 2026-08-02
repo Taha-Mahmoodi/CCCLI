@@ -1,0 +1,39 @@
+import * as React from "react";
+
+export interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
+  /** Render as a different element (e.g. "section", "article", "li"). */
+  as?: React.ElementType;
+  /** Cards that link/act somewhere lift gently on hover. */
+  interactive?: boolean;
+}
+
+/**
+ * White card on warm paper. v2: elevation only — no border; the soft shadow
+ * alone separates it from the cream page. Reserve cards for elements where
+ * elevation means something (listener cards, form panels, incoming requests);
+ * flat hairline layouts are the default elsewhere (DESIGN_SPEC_V2 §4).
+ */
+export function Card({
+  as: Tag = "div",
+  className = "",
+  interactive,
+  children,
+  ...rest
+}: CardProps) {
+  return (
+    <Tag
+      className={[
+        "rounded-tile bg-surface p-6 shadow-sm",
+        interactive
+          ? "transition-[box-shadow,transform] duration-200 ease-[cubic-bezier(0.33,0.1,0.25,1)] hover:-translate-y-0.5 hover:shadow-lift"
+          : "",
+        className,
+      ]
+        .filter(Boolean)
+        .join(" ")}
+      {...rest}
+    >
+      {children}
+    </Tag>
+  );
+}

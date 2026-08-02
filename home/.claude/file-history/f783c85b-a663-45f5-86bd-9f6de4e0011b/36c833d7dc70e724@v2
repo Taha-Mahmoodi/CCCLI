@@ -1,0 +1,23 @@
+## UI Slice 2b-1 — CodeMirror 6 basic editing + debounced autosave
+
+Replaces `NoteView`'s read-only `<pre>` body (from Slice 2a) with a real, editable **CodeMirror 6** editor that debounce-saves edits back to the backend. First of several increments that finish Slice 2 (Editor).
+
+### What's in
+- **`updateNote` API** (`client/src/api/notes.ts`) — `PUT /vaults/:id/notes/*` with `{ body }`.
+- **`useUpdateNote`** TanStack mutation hook — invalidates the `['note', vaultId, path]` query on success.
+- **`useCodeMirrorEditor`** — a small custom hook (no wrapper library) that creates/destroys a CM6 `EditorView` with hand-assembled extensions: `history` + `defaultKeymap`/`historyKeymap` + `markdown()` syntax highlighting + an `updateListener`.
+- **`NoteView`** now renders an editable CM6 body. Split into a route-param shell and a `key`-remounted `NoteEditor`, so switching notes tears down and rebuilds the editor with fresh content. Edits debounce ~1.2 s then PUT.
+
+### Explicitly out of scope (later 2b/2c increments)
+Live-preview markdown rendering, the frontmatter property panel, note create/rename/delete, the permission-aware read/edit lock, and wikilinks.
+
+### Verification
+- `pnpm typecheck` (client + server), `pnpm lint` (0 findings), **51 client tests**, `pnpm -C client build` — all green.
+- The known CM6-vs-DOM-emulator risk did **not** materialize — happy-dom's `Range` support is sufficient, no polyfill needed (confirmed empirically, not assumed).
+- The debounce-save test is mutation-verified: setting the debounce to 0 fails its "no PUT inside the window" assertion, so it actually locks in the debounce behavior.
+- Whole-branch review (independent) returned **Ready to merge: Yes**; its one worth-fixing finding — keying the editor remount on `path` alone rather than `vaultId/path` (a latent cross-vault corruption guard) — is fixed on-branch (`c97eb2d`).
+
+### Stacking
+Branches off `feat/ui-editor-2a` (**#62**), so this PR targets `feat/ui-editor-2a` as its base. Retarget to `dev` once #62 merges. Reviewing #60 → #62 → this in order gives the cleanest diffs.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)

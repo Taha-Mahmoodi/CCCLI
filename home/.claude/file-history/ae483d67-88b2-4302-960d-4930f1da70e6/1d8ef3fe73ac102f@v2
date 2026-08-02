@@ -1,0 +1,53 @@
+import Foundation
+
+/// A voice memo — mirrors the web `Memo` type. The audio itself lives in
+/// storage; this is the metadata + transcript the UI drives.
+public struct Memo: Identifiable, Equatable, Sendable {
+  public let id: String
+  public let createdAt: Int
+  public let durationMs: Int
+  public let mime: String
+  public var liked: Bool
+  public var channelId: String
+  public var machineTranscript: String
+  public var correctedTranscript: String?
+
+  public init(
+    id: String,
+    createdAt: Int,
+    durationMs: Int,
+    mime: String,
+    liked: Bool = false,
+    channelId: String,
+    machineTranscript: String = "",
+    correctedTranscript: String? = nil
+  ) {
+    self.id = id
+    self.createdAt = createdAt
+    self.durationMs = durationMs
+    self.mime = mime
+    self.liked = liked
+    self.channelId = channelId
+    self.machineTranscript = machineTranscript
+    self.correctedTranscript = correctedTranscript
+  }
+
+  /// The transcript shown to the user: the correction if present, else machine.
+  public var displayTranscript: String {
+    (correctedTranscript ?? machineTranscript).trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+}
+
+/// A station / channel.
+public struct Channel: Identifiable, Equatable, Sendable {
+  public let id: String
+  public let name: String
+  public init(id: String, name: String) {
+    self.id = id
+    self.name = name
+  }
+}
+
+public enum PlayerStatus: String, Sendable {
+  case idle, playing, paused, ended
+}

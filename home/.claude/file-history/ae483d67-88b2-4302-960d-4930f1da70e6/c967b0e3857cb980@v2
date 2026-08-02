@@ -1,0 +1,37 @@
+// Server entry — wires real deps (file-backed SQLite + filesystem storage +
+// stub transcriber) and serves. Run: `pnpm --filter @tew/api start`.
+import { serve } from "@hono/node-server";
+import { mkdirSync } from "node:fs";
+import { createApp } from "./app";
+import { openDb } from "./db";
+import { createStorage } from "./storage";
+import { stubTranscriber } from "./transcribe";
+import { createRateLimiter } from "./ratelimit";
+
+const DATA_DIR = process.env.TEW_DATA_DIR ?? ".data";
+const PORT = Number(process.env.PORT ?? 4000);
+
+// Moderator bearer tokens: "token:moderatorId,token2:moderatorId2".
+function parseModerators(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const pair of (process.env.TEW_MODERATOR_TOKENS ?? "").split(",")) {
+    const [token, id] = pair.split(":");
+    if (token?.trim() && id?.trim()) out[token.trim()] = id.trim();
+  }
+  if (Object.keys(out).length === 0) out["dev-moderator-token"] = "mod-dev"; // local dev
+  return out;
+}
+
+mkdirSync(`${DATA_DIR}/audio`, { recursive: true });
+
+const app = createApp({
+  db: openDb(`${DATA_DIR}/tew.sqlite`),
+  storage: createStorage(`${DATA_DIR}/audio`),
+  transcribe: stubTranscriber,
+  rateLimit: createRateLimiter({ capacity: 60, refillPerSec: 1 }),
+  moderators: parseModerators(),
+});
+
+serve({ fetch: app.fetch, port: PORT }, (info) => {
+  console.log(`@tew/api listening on http://localhost:${info.port}`);
+});

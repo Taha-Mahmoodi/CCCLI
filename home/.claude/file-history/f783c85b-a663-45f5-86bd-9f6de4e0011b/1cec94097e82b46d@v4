@@ -1,0 +1,13 @@
+packages:
+  - server
+  - shared
+  - client
+allowBuilds:
+  esbuild: true
+  onnxruntime-node: true
+  protobufjs: true
+  sharp: true
+  tree-sitter-go: false
+  tree-sitter-javascript: false
+  tree-sitter-python: false
+  tree-sitter-typescript: false

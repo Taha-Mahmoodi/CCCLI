@@ -1,0 +1,595 @@
+<title>Turkish CE Master's Programs — Application Tracker</title>
+<style>
+  :root {
+    --paper: #edeee6;
+    --paper-raised: #f6f6f0;
+    --ink: #1b2321;
+    --ink-soft: #4a5049;
+    --muted: #7a7d6f;
+    --line: #d3d2c4;
+    --accent: #2b6e62;
+    --accent-soft: #dde8e3;
+    --warm: #a8452f;
+    --warm-soft: #f1ddd4;
+    --closed: #86847a;
+    --closed-soft: #e4e3d8;
+    --focus: #1c5c86;
+  }
+
+  :root[data-theme="dark"] {
+    --paper: #14181a;
+    --paper-raised: #1b2124;
+    --ink: #e9ebe4;
+    --ink-soft: #b7bcae;
+    --muted: #82887a;
+    --line: #2c332f;
+    --accent: #6bbfa8;
+    --accent-soft: #1c2e29;
+    --warm: #e08361;
+    --warm-soft: #33231b;
+    --closed: #8b9086;
+    --closed-soft: #22261f;
+    --focus: #7fb8e0;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #14181a;
+      --paper-raised: #1b2124;
+      --ink: #e9ebe4;
+      --ink-soft: #b7bcae;
+      --muted: #82887a;
+      --line: #2c332f;
+      --accent: #6bbfa8;
+      --accent-soft: #1c2e29;
+      --warm: #e08361;
+      --warm-soft: #33231b;
+      --closed: #8b9086;
+      --closed-soft: #22261f;
+      --focus: #7fb8e0;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 56px 28px 96px;
+  }
+
+  header.masthead {
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 22px;
+    margin-bottom: 8px;
+  }
+
+  .eyebrow {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 10px;
+  }
+
+  h1 {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", "Times New Roman", serif;
+    font-size: clamp(30px, 4.2vw, 42px);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0 0 12px;
+    text-wrap: balance;
+  }
+
+  .dek {
+    max-width: 62ch;
+    color: var(--ink-soft);
+    font-size: 16px;
+    margin: 0 0 4px;
+  }
+
+  .meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 22px;
+    margin-top: 18px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px;
+    color: var(--muted);
+  }
+
+  .meta-row b { color: var(--ink-soft); font-weight: 600; }
+
+  section.tier {
+    margin-top: 44px;
+  }
+
+  .tier-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 4px;
+  }
+
+  .tier-head h2 {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    font-size: 21px;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .tier-count {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .tier-note {
+    color: var(--ink-soft);
+    font-size: 14.5px;
+    max-width: 68ch;
+    margin: 6px 0 20px;
+  }
+
+  .cards {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .card {
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 16px 20px;
+    display: grid;
+    grid-template-columns: 1.6fr 1fr auto;
+    gap: 16px;
+    align-items: start;
+  }
+
+  .card .who h3 {
+    font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+    font-size: 17px;
+    font-weight: 600;
+    margin: 0 0 3px;
+  }
+
+  .card .who .program {
+    font-size: 13.5px;
+    color: var(--ink-soft);
+  }
+
+  .card .who .location {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 3px;
+  }
+
+  .tags {
+    display: flex;
+    gap: 6px;
+    margin: 7px 0 6px;
+  }
+
+  .tag {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 10.5px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 3px;
+    border: 1px solid var(--line);
+  }
+
+  .tag.state { color: var(--ink-soft); background: transparent; }
+  .tag.private { color: var(--ink-soft); background: transparent; border-style: dashed; }
+  .tag.lang-en { color: var(--focus); background: color-mix(in srgb, var(--focus) 12%, transparent); border-color: transparent; }
+  .tag.lang-tr { color: var(--warm); background: var(--warm-soft); border-color: transparent; }
+
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 20px;
+    width: fit-content;
+    margin-bottom: 8px;
+  }
+
+  .status::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .status.open { background: var(--accent-soft); color: var(--accent); }
+  .status.urgent { background: var(--warm-soft); color: var(--warm); }
+  .status.closed { background: var(--closed-soft); color: var(--closed); }
+
+  .dates {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    line-height: 1.55;
+  }
+
+  .dates .label {
+    color: var(--muted);
+    display: inline-block;
+    min-width: 62px;
+  }
+
+  .links {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    align-items: flex-end;
+    text-align: right;
+    min-width: 118px;
+  }
+
+  .links a {
+    font-size: 12.5px;
+    color: var(--focus);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    white-space: nowrap;
+  }
+
+  .links a:hover,
+  .links a:focus-visible {
+    border-bottom-color: var(--focus);
+  }
+
+  .links a:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  .links a::after {
+    content: " ↗";
+  }
+
+  .verify {
+    grid-column: 1 / -1;
+    font-size: 12px;
+    color: var(--warm);
+    background: var(--warm-soft);
+    border-radius: 2px;
+    padding: 6px 10px;
+    margin-top: 2px;
+  }
+
+  footer.notes {
+    margin-top: 52px;
+    padding-top: 22px;
+    border-top: 1px solid var(--line);
+    font-size: 13px;
+    color: var(--muted);
+    max-width: 68ch;
+  }
+
+  footer.notes h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    margin: 0 0 8px;
+  }
+
+  footer.notes ul {
+    margin: 0;
+    padding-left: 18px;
+  }
+
+  footer.notes li { margin-bottom: 6px; }
+
+  @media (max-width: 720px) {
+    .card {
+      grid-template-columns: 1fr;
+    }
+    .links {
+      align-items: flex-start;
+      text-align: left;
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+  }
+</style>
+
+<div class="page">
+
+  <header class="masthead">
+    <p class="eyebrow">Graduate Admissions Tracker</p>
+    <h1>Turkish universities offering an MS in Computer Engineering to international students</h1>
+    <p class="dek">Verified against each institute's own admissions pages via Firecrawl. Split into programs accepting applications right now, and strong programs whose current cycle just closed but reopen within the coming year. Each entry is also tagged by funding type and language of instruction.</p>
+    <div class="meta-row">
+      <span><b>Checked</b> 6 Jul 2026</span>
+      <span><b>Programs found</b> 13</span>
+      <span><b>Open now</b> 5</span>
+      <span><b>Reopening soon</b> 8</span>
+      <span><b>State</b> 7</span>
+      <span><b>Private</b> 6</span>
+      <span><b>English-medium</b> 9</span>
+      <span><b>Turkish-medium</b> 4</span>
+    </div>
+  </header>
+
+  <section class="tier">
+    <div class="tier-head">
+      <h2>Open now</h2>
+      <span class="tier-count">accepting applications as of 6 Jul 2026</span>
+    </div>
+    <p class="tier-note">Ranked by how much runway is left before the deadline — the top two close within days.</p>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="who">
+          <h3>Yıldız Technical University</h3>
+          <div class="program">MS, Computer Engineering — Institute of Natural Sciences</div>
+          <div class="tags"><span class="tag state">State</span><span class="tag lang-tr">Turkish</span></div>
+          <div class="location">Istanbul</div>
+        </div>
+        <div class="dates">
+          <span class="status urgent">closes tomorrow</span><br>
+          <span class="label">Window</span>1 Jun – 7 Jul 2026
+        </div>
+        <div class="links">
+          <a href="https://fbe.yildiz.edu.tr/node/27576">Program &amp; apply</a>
+        </div>
+        <div class="verify">Only one day of runway left at time of check — confirm the exact closing hour on the institute page before relying on it.</div>
+      </div>
+
+      <div class="card">
+        <div class="who">
+          <h3>İstanbul Sabahattin Zaim University</h3>
+          <div class="program">MA, Computer Science &amp; Engineering</div>
+          <div class="tags"><span class="tag private">Private</span><span class="tag lang-en">English</span></div>
+          <div class="location">Istanbul · US$9,000 total</div>
+        </div>
+        <div class="dates">
+          <span class="status urgent">closes in 9 days</span><br>
+          <span class="label">Deadline</span>15 Jul 2026, 15:00 TRT
+        </div>
+        <div class="links">
+          <a href="https://apply.izu.edu.tr/en_GB/courses/course/458-ma-computer-science-and-engineering-30-english">Program page</a>
+          <a href="https://apply.izu.edu.tr/">Apply</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="who">
+          <h3>Sinop University</h3>
+          <div class="program">MS, Computer Engineering</div>
+          <div class="tags"><span class="tag state">State</span><span class="tag lang-tr">Turkish</span></div>
+          <div class="location">Sinop</div>
+        </div>
+        <div class="dates">
+          <span class="status open">open</span><br>
+          <span class="label">Window</span>1 – 30 Jul 2026
+        </div>
+        <div class="links">
+          <a href="https://iro.sinop.edu.tr/international-students/">International office</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="who">
+          <h3>Sabancı University</h3>
+          <div class="program">MSc, Computer Science &amp; Engineering — FENS</div>
+          <div class="tags"><span class="tag private">Private</span><span class="tag lang-en">English</span></div>
+          <div class="location">Istanbul</div>
+        </div>
+        <div class="dates">
+          <span class="status open">open, wide window</span><br>
+          <span class="label">Window</span>15 Dec 2025 – 28 Aug 2026
+        </div>
+        <div class="links">
+          <a href="https://fens.sabanciuniv.edu/en/graduate-application">Program page</a>
+          <a href="https://apply.sabanciuniv.edu/">Apply</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="who">
+          <h3>Kocaeli University</h3>
+          <div class="program">MS, Computer Engineering</div>
+          <div class="tags"><span class="tag state">State</span><span class="tag lang-tr">Turkish</span></div>
+          <div class="location">Kocaeli</div>
+        </div>
+        <div class="dates">
+          <span class="status open">open, exact close unconfirmed</span><br>
+          <span class="label">Status</span>2026–27 Fall round "has started"
+        </div>
+        <div class="links">
+          <a href="https://yos.kocaeli.edu.tr">Calendar</a>
+          <a href="https://isas.kocaeli.edu.tr/account/sign-up">Apply</a>
+        </div>
+        <div class="verify">Announcement confirms the round is live but not its closing date — check the calendar link before submitting anything late.</div>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="tier">
+    <div class="tier-head">
+      <h2>Reopening soon</h2>
+      <span class="tier-count">this cycle just closed — next round expected within the year</span>
+    </div>
+    <p class="tier-note">These are the strongest CE research programs in the country. Their 2026–27 Fall window already closed, but each runs a predictable annual cycle — worth calendaring for the next one.</p>
+
+    <div class="cards">
+
+      <div class="card">
+        <div class="who">
+          <h3>Özyeğin University</h3>
+          <div class="program">Graduate, Computer Science</div>
+          <div class="tags"><span class="tag private">Private</span><span class="tag lang-en">English</span></div>
+          <div class="location">Istanbul</div>
+        </div>
+        <div class="dates">
+          <span class="status closed">closed yesterday</span><br>
+          <span class="label">Late window</span>ended 5 Jul 2026
+        </div>
+        <div class="links">
+          <a href="https://www.ozyegin.edu.tr/en/graduate-school-engineering-and-science/application-and-admission">Program page</a>
+        </div>
+        <div class="verify">Missed by one day — this one is worth watching most closely for the next cycle.</div>
+      </div>
+
+      <div class="card">
+        <div class="who">
+          <h3>Koç University</h3>
+          <div class="program">MS, Computer Science &amp; Engineering — GSSE</div>
+          <div class="tags"><span class="tag private">Private</span><span class="tag lang-en">English</span></div>
+          <div class="location">Istanbul</div>
+        </div>
+        <div class="dates">
+          <span class="status closed">closed</span><br>
+          <span class="label">Was</span>regular deadline 15 May 2026<br>
+          <span class="label">Next</span>early round ~mid-Feb 2027
+        </div>
+        <div class="links">
+          <a href="https://gsse.ku.edu.tr/en/application/application-deadlines/">Program page</a>
+          <a href="https://apply.ku.edu.tr/">Apply portal</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="who">
+          <h3>Boğaziçi University</h3>
+          <div class="program">MS, Computer Engineering</div>
+          <div class="tags"><span class="tag state">State</span><span class="tag lang-en">English</span></div>
+          <div class="location">Istanbul</div>
+        </div>
+        <div class="dates">
+          <span class="status closed">closed</span><br>
+          <span class="label">Was</span>15 Apr – 11 Jun 2026<br>
+          <span class="label">Next</span>~Apr 2027
+        </div>
+        <div class="links">
+          <a href="https://adaylar.bogazici.edu.tr/en-EN/Page/Admissions/Graduate/computer_Engineering">Program page</a>
+          <a href="https://registration.bogazici.edu.tr/BUIS/BUISAPPS/GradApplication.aspx">Apply portal</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="who">
+          <h3>Istanbul Technical University (İTÜ)</h3>
+          <div class="program">MSc, Computer Engineering</div>
+          <div class="tags"><span class="tag state">State</span><span class="tag lang-en">English</span></div>
+          <div class="location">Istanbul</div>
+        </div>
+        <div class="dates">
+          <span class="status closed">closed</span><br>
+          <span class="label">Was</span>24 Apr – 26 Jun 2026<br>
+          <span class="label">Next</span>~Apr 2027
+        </div>
+        <div class="links">
+          <a href="https://www.sis.itu.edu.tr/onkayitlar/lisansustu/basvuru/program-kontenjan-sartlar_bilgileri-EN.php?program=BLG_BG_YL&uygulama_kodu=LU">Program page</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="who">
+          <h3>Middle East Technical University (METU)</h3>
+          <div class="program">MS, Computer Engineering</div>
+          <div class="tags"><span class="tag state">State</span><span class="tag lang-en">English</span></div>
+          <div class="location">Ankara</div>
+        </div>
+        <div class="dates">
+          <span class="status closed">closed for 2026–27</span><br>
+          <span class="label">Next</span>~Apr–Jun 2027
+        </div>
+        <div class="links">
+          <a href="https://fbe.metu.edu.tr/en/application-criteria">Program page</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="who">
+          <h3>Bilkent University</h3>
+          <div class="program">MS / PhD, Computer Engineering</div>
+          <div class="tags"><span class="tag private">Private</span><span class="tag lang-en">English</span></div>
+          <div class="location">Ankara</div>
+        </div>
+        <div class="dates">
+          <span class="status closed">closed</span><br>
+          <span class="label">Was</span>through 1 Jul 2026 (late)<br>
+          <span class="label">Next</span>system reopens ~10 Feb 2027
+        </div>
+        <div class="links">
+          <a href="https://mfbe.bilkent.edu.tr/?page_id=17">Program page</a>
+          <a href="https://stars.bilkent.edu.tr/gradapp/">Apply portal</a>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="who">
+          <h3>Hacettepe University</h3>
+          <div class="program">MS, Computer Engineering</div>
+          <div class="tags"><span class="tag state">State</span><span class="tag lang-tr">Turkish</span></div>
+          <div class="location">Ankara</div>
+        </div>
+        <div class="dates">
+          <span class="status closed">status unclear</span><br>
+          <span class="label">Signal</span>social post says open for "2027"
+        </div>
+        <div class="links">
+          <a href="https://fenbilimleri.hacettepe.edu.tr/en/menu/application_and_registration-66">Program page</a>
+          <a href="https://internationalstudent.hacettepe.edu.tr/">Int'l office</a>
+        </div>
+        <div class="verify">Institute page defers dates to an academic calendar it doesn't show — the international office's own post is the only signal it may be open. Confirm directly before counting on it.</div>
+      </div>
+
+      <div class="card">
+        <div class="who">
+          <h3>Kadir Has University</h3>
+          <div class="program">MS, Computer Engineering</div>
+          <div class="tags"><span class="tag private">Private</span><span class="tag lang-en">English</span></div>
+          <div class="location">Istanbul</div>
+        </div>
+        <div class="dates">
+          <span class="status closed">last known round closed</span><br>
+          <span class="label">Was</span>10 Jan – 20 Feb 2026
+        </div>
+        <div class="links">
+          <a href="https://www.khas.edu.tr/en/international/">Int'l office</a>
+        </div>
+        <div class="verify">Only one 2026 round was found in search results — a second round may exist. Check directly rather than assuming it's closed for the year.</div>
+      </div>
+
+    </div>
+  </section>
+
+  <footer class="notes">
+    <h2>Method &amp; caveats</h2>
+    <ul>
+      <li>Every date above was pulled live from the university's own admissions or institute page (via Firecrawl), not from aggregator sites or social posts, except where marked "status unclear."</li>
+      <li>Turkish universities generally run one Fall-intake cycle per year, roughly February–August; a program closed today is not dead for the year — it reopens on roughly the same schedule.</li>
+      <li>Tuition/program details shift often. Treat every deadline here as a starting point for verification, not a final answer — re-check the linked page before relying on a date to plan around.</li>
+      <li>"Turkish" tags mean Turkish is the primary language of instruction — several (Kocaeli, YTÜ) still require some English coursework or proficiency at admission. Only Hacettepe's Turkish tag comes from an explicit department statement; YTÜ, Sinop, and Kocaeli are inferred from each university's general graduate-language pattern and are worth a direct confirmation if language is a dealbreaker.</li>
+    </ul>
+  </footer>
+
+</div>

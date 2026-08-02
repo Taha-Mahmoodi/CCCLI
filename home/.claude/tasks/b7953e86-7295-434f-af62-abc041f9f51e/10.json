@@ -1,0 +1,8 @@
+{
+  "id": "10",
+  "subject": "Empty search-results state",
+  "description": "The absence-states checklist is repeated verbatim in 4 places and never got \"no results for X\" added after search was built. Add it in all 4.",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

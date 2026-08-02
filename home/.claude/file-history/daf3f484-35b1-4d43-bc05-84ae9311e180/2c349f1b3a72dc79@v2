@@ -1,0 +1,115 @@
+import * as THREE from "three";
+import { mulberry32 } from "./data";
+import type { GalaxyNode } from "./galaxy";
+
+// In-fall streams: thin arcs of particles drifting from a black hole's
+// nearest neighbors into it — the "visibly pulling nearby galaxies toward
+// it" from the vision. Particles animate along the curve in-shader
+// (aT attribute + uTime), accelerating as they approach the hole.
+
+const VERT = /* glsl */ `
+  attribute float aT;
+  attribute float aJitter;
+  varying float vT;
+  uniform float uTime;
+  uniform vec3 uFrom;
+  uniform vec3 uCtrl;
+  uniform vec3 uTo;
+  void main() {
+    // ease-in along the curve: slow far away, fast at the hole
+    float t = fract(aT + uTime * 0.045 * (1.0 + aJitter * 0.5));
+    float e = t * t;
+    vT = e;
+    vec3 a = mix(uFrom, uCtrl, e);
+    vec3 b = mix(uCtrl, uTo, e);
+    vec3 p = mix(a, b, e) ;
+    // slight lateral shimmer so the stream reads as matter, not a line
+    p += vec3(sin(aJitter * 40.0 + uTime), cos(aJitter * 30.0), sin(aJitter * 50.0 - uTime)) * 0.6 * (1.0 - e);
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
+    gl_PointSize = (1.4 + 2.2 * e) * (240.0 / -mv.z);
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+
+const FRAG = /* glsl */ `
+  varying float vT;
+  uniform vec3 uColor;
+  void main() {
+    float d = length(gl_PointCoord - 0.5);
+    float alpha = smoothstep(0.5, 0.0, d);
+    // brighten as matter falls in, vanish right at the hole
+    float glow = mix(0.25, 1.0, vT) * (1.0 - smoothstep(0.92, 1.0, vT));
+    gl_FragColor = vec4(uColor * glow, alpha * glow);
+  }
+`;
+
+export interface Stream {
+  points: THREE.Points;
+  mat: THREE.ShaderMaterial;
+}
+
+export function buildInfallStreams(nodes: GalaxyNode[], seed = 23): Stream[] {
+  const holes = nodes.filter((n) => n.project.milestoneMarked);
+  const others = nodes.filter((n) => !n.project.milestoneMarked);
+  const rnd = mulberry32(seed);
+  const streams: Stream[] = [];
+
+  for (const hole of holes) {
+    const neighbors = [...others]
+      .sort(
+        (a, b) =>
+          a.group.position.distanceToSquared(hole.group.position) -
+          b.group.position.distanceToSquared(hole.group.position),
+      )
+      .slice(0, 2);
+
+    for (const from of neighbors) {
+      const COUNT = 260;
+      const aT = new Float32Array(COUNT);
+      const aJitter = new Float32Array(COUNT);
+      for (let i = 0; i < COUNT; i++) {
+        aT[i] = rnd();
+        aJitter[i] = rnd();
+      }
+      // geometry positions are unused (computed in-shader) but required
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(COUNT * 3), 3));
+      geo.setAttribute("aT", new THREE.BufferAttribute(aT, 1));
+      geo.setAttribute("aJitter", new THREE.BufferAttribute(aJitter, 1));
+      // the shader moves points far from the origin; disable culling
+      geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1e6);
+
+      const start = from.group.position
+        .clone()
+        .add(new THREE.Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).multiplyScalar(from.radius));
+      const mid = start
+        .clone()
+        .lerp(hole.group.position, 0.5)
+        .add(new THREE.Vector3(0, 18 + rnd() * 14, 0));
+
+      const mat = new THREE.ShaderMaterial({
+        vertexShader: VERT,
+        fragmentShader: FRAG,
+        uniforms: {
+          uTime: { value: 0 },
+          uFrom: { value: start },
+          uCtrl: { value: mid },
+          uTo: { value: hole.group.position.clone() },
+          uColor: { value: new THREE.Color(0xffb583) },
+        },
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      });
+
+      const points = new THREE.Points(geo, mat);
+      points.frustumCulled = false;
+      streams.push({ points, mat });
+    }
+  }
+  return streams;
+}
+
+export function tickStreams(streams: Stream[], time: number): void {
+  for (const s of streams) s.mat.uniforms.uTime.value = time;
+}

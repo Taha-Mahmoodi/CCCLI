@@ -1,0 +1,1232 @@
+# Goals Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Per-rep goals (VISIT_COUNT / TASK_COUNT / SALES_VALUE, manual entry) with a target-vs-achievement report endpoint — PLAN.md 5.1.
+
+**Architecture:** New `app/goals/` package, anatomy mirrors `app/tasks/`. `metric_type` drives how "achieved" is computed: `VISIT_COUNT`/`TASK_COUNT` are derived by counting rows in `app.visits.models.Visit`/`app.tasks.models.Task` within the goal's period (`goals` is a new leaf package depending on both — no cycle, since neither visits nor tasks depends on goals); `SALES_VALUE` has no live source (per `docs/design.md`: "no live Sales connection exists here") so it's a manually-logged running value the rep updates directly on the goal row.
+
+**Scope cut:** `docs/design.md`'s `goals` row says "rep or team" — no `teams` table or team concept exists anywhere in this codebase (checked: zones, tasks, visits are all rep-only). Building team goals now means inventing a whole team/membership model nothing else needs yet. Scoped to per-rep goals only for v1; team goals deferred to whenever a real team concept exists elsewhere in the product.
+
+**Tech Stack:** Same as prior phases — Python 3.12, FastAPI, SQLAlchemy 2.0 async, Alembic, Pydantic v2, pytest.
+
+## Global Constraints
+
+- `tenant_id` on every table via `TenantScopedMixin` — per `docs/design.md` Core data model.
+- **`metric_type` is a plain `String`, no DB CHECK/Enum** — same established precedent as `User.role`/`Task.status`/`Task.priority`, validated at the Pydantic layer via `Literal["VISIT_COUNT", "TASK_COUNT", "SALES_VALUE"]`.
+- **Period is two `Date` columns (`period_start`, `period_end`), calendar dates with no time-of-day** — same type as `Task.due_date`. Achievement computation must compare these against `Visit.checked_in_at`/`Task.completed_at`, which are tz-aware `DateTime`. **This exact date-vs-datetime boundary conversion is the novel risk this feature introduces** — three prior phases each hit a *different* timezone-related bug (missing `timezone=True` on a migration column, twice; `(lng,lat)` vs `(lat,lng)` swap, twice); this feature's analogous risk is an off-by-one-day or inclusive/exclusive boundary error when turning a `Date` range into a `DateTime` range for a query. The one correct way to do it: `start_dt = datetime.combine(period_start, time.min, tzinfo=timezone.utc)`, `end_dt_exclusive = datetime.combine(period_end + timedelta(days=1), time.min, tzinfo=timezone.utc)`, then `col >= start_dt AND col < end_dt_exclusive` (half-open range, so `period_end`'s calendar day is fully included with no double-counting at midnight). Get this right in Task 3 the first time — write an asymmetric test (a visit exactly at `period_end`'s 23:59:59 UTC, and one exactly at `period_end + 1 day`'s 00:00:00 UTC, one included one excluded) the same way Phase 2/4a's coordinate-order lesson called for an asymmetric test to actually discriminate the bug class, not a symmetric one that can't.
+- **`log_value` is rep-only and only valid on `SALES_VALUE` goals** — calling it on a `VISIT_COUNT`/`TASK_COUNT` goal raises `MetricNotManualError`. Mirrors `complete_task`'s rep-owns-this-resource shape (manager creates/assigns, rep acts on their own).
+- **Achievement computation relies on the ambient tenancy filter**, same as `get_task`/`list_visits` — no explicit `tenant_id` param threaded into the count queries, since they run inside a request context where `current_tenant_id` is already set. This matches established convention, not a new gap.
+- Pagination on `list_goals` from the first commit: `limit`/`offset`, default 50, max 200, `ORDER BY created_at DESC, id DESC`.
+- Service layer owns business rules; routers thin; models logic-free.
+- Cross-tenant and cross-rep access reported as "not found," never a distinct error.
+- `created_at` uses `DateTime(timezone=True)`.
+
+---
+
+## File Structure
+
+```
+backend/
+  app/
+    goals/
+      __init__.py                 # NEW
+      models.py                    # NEW: Goal
+      schemas.py                     # NEW: GoalCreate, GoalOut, GoalLogValue, GoalProgress
+      service.py                     # NEW: create_goal, get_goal, list_goals, log_value, get_goal_progress
+      router.py                       # NEW: POST, GET, GET/{id}, GET/{id}/progress, POST/{id}/log-value
+    main.py                     # MODIFY: mount goals_router
+  alembic/versions/
+    <new migration>              # NEW: create goals table
+  tests/
+    goals/
+      __init__.py                  # NEW
+      test_models.py                # NEW
+      test_service.py                # NEW
+      test_router.py                  # NEW
+```
+
+**Interfaces summary (for cross-task consistency):**
+- `app.goals.models.Goal` — `id: Mapped[uuid.UUID]` (PK), `tenant_id` (via mixin), `rep_id: Mapped[uuid.UUID]` (FK → `users.id`, indexed), `metric_type: Mapped[str]`, `target: Mapped[float]`, `period_start: Mapped[date]`, `period_end: Mapped[date]`, `manual_value: Mapped[float | None]` (nullable, only meaningfully set for `SALES_VALUE` goals), `created_at: Mapped[datetime]` (`DateTime(timezone=True)`, server default). Composite index `(tenant_id, rep_id)` for list filtering.
+- `app.goals.service.create_goal(db, tenant_id, rep_id, metric_type, target, period_start, period_end) -> Goal`
+- `app.goals.service.get_goal(db, current_user, goal_id) -> Goal | None`
+- `app.goals.service.list_goals(db, current_user, limit=50, offset=0) -> list[Goal]`
+- `app.goals.service.log_value(db, tenant_id, rep_id, goal_id, value) -> Goal`
+- `app.goals.service.get_goal_progress(db, current_user, goal_id) -> dict | None` — `{"goal_id", "rep_id", "metric_type", "target", "achieved", "period_start", "period_end"}`
+- Exceptions (new, in `app.goals.service`): `GoalNotFoundError`, `MetricNotManualError`. Reused (from `app.zones.service`): `RepNotFoundError`.
+- `app.goals.schemas.GoalCreate` (`rep_id: uuid.UUID`, `metric_type: Literal[...]`, `target: float`, `period_start: date`, `period_end: date`), `GoalLogValue` (`value: float`), `GoalOut` (`id`, `rep_id`, `metric_type`, `target`, `period_start`, `period_end`, `manual_value`, `created_at`), `GoalProgress` (`goal_id`, `rep_id`, `metric_type`, `target`, `achieved`, `period_start`, `period_end`).
+
+---
+
+### Task 1: Goal model + migration
+
+**Files:**
+- Create: `backend/app/goals/__init__.py`
+- Create: `backend/app/goals/models.py`
+- Create: `backend/tests/goals/__init__.py` (empty)
+- Create: `backend/tests/goals/test_models.py`
+
+**Interfaces:**
+- Consumes: `app.db.Base`, `app.core.tenancy.TenantScopedMixin`, `app.auth.models.User`.
+- Produces: `Goal` (columns per the plan header's Interfaces summary).
+
+- [ ] **Step 1: Write `backend/app/goals/__init__.py`** (empty)
+
+```python
+# backend/app/goals/__init__.py
+```
+
+- [ ] **Step 2: Write `backend/tests/goals/__init__.py`** (empty)
+
+```python
+# backend/tests/goals/__init__.py
+```
+
+- [ ] **Step 3: Write the failing test**
+
+```python
+# backend/tests/goals/test_models.py
+import uuid
+from datetime import date, datetime
+
+import pytest
+from sqlalchemy import select
+
+from app.auth.models import User
+from app.goals.models import Goal
+
+pytestmark = pytest.mark.asyncio
+
+
+async def _make_rep(db_session, tenant_id):
+    rep = User(
+        id=uuid.uuid4(), tenant_id=tenant_id, email=f"{uuid.uuid4()}@example.com",
+        hashed_password="irrelevant", role="rep",
+    )
+    db_session.add(rep)
+    await db_session.flush()
+    return rep
+
+
+async def test_create_and_fetch_goal(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+
+    goal = Goal(
+        id=uuid.uuid4(), tenant_id=tenant_id, rep_id=rep.id, metric_type="VISIT_COUNT",
+        target=20.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+    )
+    db_session.add(goal)
+    await db_session.commit()
+
+    result = await db_session.execute(select(Goal).where(Goal.rep_id == rep.id))
+    fetched = result.scalar_one()
+
+    assert fetched.metric_type == "VISIT_COUNT"
+    assert fetched.target == 20.0
+    assert fetched.period_start == date(2026, 8, 1)
+    assert fetched.period_end == date(2026, 8, 31)
+    assert fetched.manual_value is None
+    assert isinstance(fetched.created_at, datetime)
+    assert fetched.created_at.tzinfo is not None
+
+
+async def test_goal_manual_value_settable(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_rep(db_session, tenant_id)
+
+    goal = Goal(
+        id=uuid.uuid4(), tenant_id=tenant_id, rep_id=rep.id, metric_type="SALES_VALUE",
+        target=5000.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+    )
+    db_session.add(goal)
+    await db_session.commit()
+
+    goal.manual_value = 1250.5
+    await db_session.commit()
+
+    result = await db_session.execute(select(Goal).where(Goal.rep_id == rep.id))
+    fetched = result.scalar_one()
+
+    assert fetched.manual_value == 1250.5
+```
+
+- [ ] **Step 4: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/goals/test_models.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'app.goals.models'`
+
+- [ ] **Step 5: Write `app/goals/models.py`**
+
+```python
+# backend/app/goals/models.py
+import uuid
+from datetime import date, datetime, timezone
+
+from sqlalchemy import Date, DateTime, Float, ForeignKey, Index, String
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.core.tenancy import TenantScopedMixin
+from app.db import Base
+
+
+class Goal(Base, TenantScopedMixin):
+    __tablename__ = "goals"
+    __table_args__ = (
+        Index("ix_goals_tenant_rep_id", "tenant_id", "rep_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    rep_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    metric_type: Mapped[str] = mapped_column(String, nullable=False)
+    target: Mapped[float] = mapped_column(Float, nullable=False)
+    period_start: Mapped[date] = mapped_column(Date, nullable=False)
+    period_end: Mapped[date] = mapped_column(Date, nullable=False)
+    manual_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+```
+
+- [ ] **Step 6: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/goals/test_models.py -v`
+Expected: both tests `PASSED`.
+
+- [ ] **Step 7: Register the model with Alembic**
+
+Edit `backend/alembic/env.py` — add a new import line directly below the existing `from app.tasks.models import Task  # noqa: E402, F401` line:
+
+```python
+from app.goals.models import Goal  # noqa: E402, F401
+```
+
+- [ ] **Step 8: Generate the migration**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/backend
+uv run alembic revision --autogenerate -m "create goals table"
+```
+
+Expected: a new file under `alembic/versions/` with `op.create_table("goals", ...)` using `sa.Uuid()` for `id`/`tenant_id`/`rep_id`, `sa.String()` for `metric_type`, `sa.Float()` for `target`/`manual_value`, `sa.Date()` for `period_start`/`period_end`, `sa.DateTime(timezone=True)` for `created_at`, a FK to `users.id`, and the `ix_goals_tenant_rep_id` composite index plus the standalone `rep_id` index. If autogenerate omits `timezone=True` on `created_at`, fix it manually.
+
+- [ ] **Step 9: Verify the migration applies cleanly**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce/backend
+DATABASE_URL="sqlite+aiosqlite:///./alembic_check.db" uv run alembic upgrade head
+rm -f alembic_check.db
+```
+
+Expected: no errors.
+
+- [ ] **Step 10: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/
+git commit -m "feat(backend): Goal model, Alembic migration
+
+Refs PLAN 5.1"
+```
+
+---
+
+### Task 2: `create_goal`, `get_goal`, `list_goals` services
+
+**Files:**
+- Create: `backend/app/goals/schemas.py`
+- Create: `backend/app/goals/service.py`
+- Test: `backend/tests/goals/test_service.py`
+
+**Interfaces:**
+- Consumes: `app.goals.models.Goal` (Task 1), `app.auth.models.User`, `app.zones.service.RepNotFoundError` (reused).
+- Produces: `create_goal(...)`, `get_goal(...)`, `list_goals(...)` (signatures per the plan header's Interfaces summary). `app.goals.schemas.GoalCreate`, `GoalLogValue`, `GoalOut`.
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# backend/tests/goals/test_service.py
+import uuid
+from datetime import date
+
+import pytest
+
+from app.auth.models import User
+from app.zones.service import RepNotFoundError
+from app.goals.service import create_goal, get_goal, list_goals
+
+pytestmark = pytest.mark.asyncio
+
+
+async def _make_user(db_session, tenant_id, role):
+    user = User(
+        id=uuid.uuid4(), tenant_id=tenant_id, email=f"{uuid.uuid4()}@example.com",
+        hashed_password="irrelevant", role=role,
+    )
+    db_session.add(user)
+    await db_session.flush()
+    return user
+
+
+async def test_create_goal_assigns_to_rep(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+
+    goal = await create_goal(
+        db_session, tenant_id=tenant_id, rep_id=rep.id, metric_type="VISIT_COUNT",
+        target=20.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+    )
+
+    assert goal.rep_id == rep.id
+    assert goal.metric_type == "VISIT_COUNT"
+    assert goal.target == 20.0
+    assert goal.manual_value is None
+
+
+async def test_create_goal_for_unknown_rep_raises(db_session):
+    tenant_id = uuid.uuid4()
+
+    with pytest.raises(RepNotFoundError):
+        await create_goal(
+            db_session, tenant_id=tenant_id, rep_id=uuid.uuid4(), metric_type="TASK_COUNT",
+            target=10.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+        )
+
+
+async def test_create_goal_for_manager_assignee_raises(db_session):
+    tenant_id = uuid.uuid4()
+    manager = await _make_user(db_session, tenant_id, "manager")
+
+    with pytest.raises(RepNotFoundError):
+        await create_goal(
+            db_session, tenant_id=tenant_id, rep_id=manager.id, metric_type="TASK_COUNT",
+            target=10.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+        )
+
+
+async def test_create_goal_for_rep_in_different_tenant_raises(db_session):
+    tenant_a = uuid.uuid4()
+    tenant_b = uuid.uuid4()
+    rep_b = await _make_user(db_session, tenant_b, "rep")
+
+    with pytest.raises(RepNotFoundError):
+        await create_goal(
+            db_session, tenant_id=tenant_a, rep_id=rep_b.id, metric_type="TASK_COUNT",
+            target=10.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+        )
+
+
+async def test_get_goal_for_assigned_rep_returns_it(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+    goal = await create_goal(
+        db_session, tenant_id=tenant_id, rep_id=rep.id, metric_type="TASK_COUNT",
+        target=10.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+    )
+
+    fetched = await get_goal(db_session, current_user=rep, goal_id=goal.id)
+
+    assert fetched is not None
+    assert fetched.id == goal.id
+
+
+async def test_get_goal_for_other_rep_returns_none(db_session):
+    tenant_id = uuid.uuid4()
+    rep_a = await _make_user(db_session, tenant_id, "rep")
+    rep_b = await _make_user(db_session, tenant_id, "rep")
+    goal = await create_goal(
+        db_session, tenant_id=tenant_id, rep_id=rep_a.id, metric_type="TASK_COUNT",
+        target=10.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+    )
+
+    fetched = await get_goal(db_session, current_user=rep_b, goal_id=goal.id)
+
+    assert fetched is None
+
+
+async def test_get_goal_for_manager_returns_any_tenant_goal(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+    manager = await _make_user(db_session, tenant_id, "manager")
+    goal = await create_goal(
+        db_session, tenant_id=tenant_id, rep_id=rep.id, metric_type="TASK_COUNT",
+        target=10.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+    )
+
+    fetched = await get_goal(db_session, current_user=manager, goal_id=goal.id)
+
+    assert fetched is not None
+    assert fetched.id == goal.id
+
+
+async def test_list_goals_for_rep_returns_only_own_goals(db_session):
+    tenant_id = uuid.uuid4()
+    rep_a = await _make_user(db_session, tenant_id, "rep")
+    rep_b = await _make_user(db_session, tenant_id, "rep")
+    await create_goal(
+        db_session, tenant_id=tenant_id, rep_id=rep_a.id, metric_type="TASK_COUNT",
+        target=10.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+    )
+    await create_goal(
+        db_session, tenant_id=tenant_id, rep_id=rep_b.id, metric_type="TASK_COUNT",
+        target=10.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+    )
+
+    goals = await list_goals(db_session, current_user=rep_a)
+
+    assert len(goals) == 1
+    assert goals[0].rep_id == rep_a.id
+
+
+async def test_list_goals_for_manager_returns_all_tenant_goals(db_session):
+    tenant_id = uuid.uuid4()
+    rep_a = await _make_user(db_session, tenant_id, "rep")
+    rep_b = await _make_user(db_session, tenant_id, "rep")
+    manager = await _make_user(db_session, tenant_id, "manager")
+    await create_goal(
+        db_session, tenant_id=tenant_id, rep_id=rep_a.id, metric_type="TASK_COUNT",
+        target=10.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+    )
+    await create_goal(
+        db_session, tenant_id=tenant_id, rep_id=rep_b.id, metric_type="TASK_COUNT",
+        target=10.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+    )
+
+    goals = await list_goals(db_session, current_user=manager)
+
+    assert len(goals) == 2
+
+
+async def test_list_goals_paginates_with_limit_and_offset(db_session):
+    tenant_id = uuid.uuid4()
+    manager = await _make_user(db_session, tenant_id, "manager")
+    rep = await _make_user(db_session, tenant_id, "rep")
+    g1 = await create_goal(
+        db_session, tenant_id=tenant_id, rep_id=rep.id, metric_type="TASK_COUNT",
+        target=1.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+    )
+    g2 = await create_goal(
+        db_session, tenant_id=tenant_id, rep_id=rep.id, metric_type="TASK_COUNT",
+        target=2.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+    )
+    g3 = await create_goal(
+        db_session, tenant_id=tenant_id, rep_id=rep.id, metric_type="TASK_COUNT",
+        target=3.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+    )
+
+    page1 = await list_goals(db_session, current_user=manager, limit=2, offset=0)
+    page2 = await list_goals(db_session, current_user=manager, limit=2, offset=2)
+
+    assert [g.id for g in page1] == [g3.id, g2.id]
+    assert [g.id for g in page2] == [g1.id]
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/goals/test_service.py -v`
+Expected: FAIL — `ModuleNotFoundError: No module named 'app.goals.service'`
+
+- [ ] **Step 3: Write `app/goals/schemas.py`**
+
+```python
+# backend/app/goals/schemas.py
+import uuid
+from datetime import date, datetime
+from typing import Literal
+
+from pydantic import BaseModel
+
+MetricType = Literal["VISIT_COUNT", "TASK_COUNT", "SALES_VALUE"]
+
+
+class GoalCreate(BaseModel):
+    rep_id: uuid.UUID
+    metric_type: MetricType
+    target: float
+    period_start: date
+    period_end: date
+
+
+class GoalLogValue(BaseModel):
+    value: float
+
+
+class GoalOut(BaseModel):
+    id: uuid.UUID
+    rep_id: uuid.UUID
+    metric_type: str
+    target: float
+    period_start: date
+    period_end: date
+    manual_value: float | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class GoalProgress(BaseModel):
+    goal_id: uuid.UUID
+    rep_id: uuid.UUID
+    metric_type: str
+    target: float
+    achieved: float
+    period_start: date
+    period_end: date
+```
+
+- [ ] **Step 4: Write `app/goals/service.py`**
+
+```python
+# backend/app/goals/service.py
+import uuid
+from datetime import date
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth.models import User
+from app.goals.models import Goal
+from app.zones.service import RepNotFoundError
+
+
+async def create_goal(
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    rep_id: uuid.UUID,
+    metric_type: str,
+    target: float,
+    period_start: date,
+    period_end: date,
+) -> Goal:
+    rep_result = await db.execute(
+        select(User).where(User.id == rep_id, User.role == "rep", User.tenant_id == tenant_id)
+    )
+    if rep_result.scalar_one_or_none() is None:
+        raise RepNotFoundError(rep_id)
+
+    goal = Goal(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        rep_id=rep_id,
+        metric_type=metric_type,
+        target=target,
+        period_start=period_start,
+        period_end=period_end,
+    )
+    db.add(goal)
+    await db.commit()
+    await db.refresh(goal)
+    return goal
+
+
+async def get_goal(db: AsyncSession, current_user: User, goal_id: uuid.UUID) -> Goal | None:
+    query = select(Goal).where(Goal.id == goal_id)
+    if current_user.role != "manager":
+        query = query.where(Goal.rep_id == current_user.id)
+    result = await db.execute(query)
+    return result.scalar_one_or_none()
+
+
+async def list_goals(
+    db: AsyncSession, current_user: User, limit: int = 50, offset: int = 0
+) -> list[Goal]:
+    query = (
+        select(Goal)
+        .order_by(Goal.created_at.desc(), Goal.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    if current_user.role != "manager":
+        query = query.where(Goal.rep_id == current_user.id)
+    result = await db.execute(query)
+    return list(result.scalars().all())
+```
+
+Note: `create_goal`'s rep-lookup query includes an explicit `User.tenant_id == tenant_id` clause, same defense-in-depth reasoning as `tasks.service.create_task` and `zones.service.assign_rep_to_zone` — the caller (a manager) has a trusted `tenant_id`, and the assignee must be proven to belong to that same tenant before a goal can reference them.
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/goals/test_service.py -v`
+Expected: all 10 tests `PASSED`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/goals/schemas.py backend/app/goals/service.py backend/tests/goals/test_service.py
+git commit -m "feat(backend): goal create/get/list services with pagination and rep/manager visibility split
+
+Refs PLAN 5.1"
+```
+
+---
+
+### Task 3: `log_value`, `get_goal_progress` services (achievement computation)
+
+**Files:**
+- Modify: `backend/app/goals/service.py` (append)
+- Modify: `backend/tests/goals/test_service.py` (append — do not replace)
+
+**Interfaces:**
+- Consumes: `app.goals.models.Goal`, `create_goal`/`get_goal` (Task 2), `app.visits.models.Visit`, `app.tasks.models.Task` (new cross-package dependency — `goals` depends on both).
+- Produces: `log_value(db, tenant_id, rep_id, goal_id, value) -> Goal`, `get_goal_progress(db, current_user, goal_id) -> dict | None`, `GoalNotFoundError`, `MetricNotManualError`.
+
+- [ ] **Step 1: Append the failing tests to `backend/tests/goals/test_service.py`**
+
+Add to the existing imports at the top (merge, don't duplicate):
+
+```python
+from app.goals.service import GoalNotFoundError, MetricNotManualError, get_goal_progress, log_value
+from app.tasks.service import complete_task, create_task
+from app.visits.service import check_in
+```
+
+Append these test functions:
+
+```python
+async def test_log_value_updates_manual_value(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+    goal = await create_goal(
+        db_session, tenant_id=tenant_id, rep_id=rep.id, metric_type="SALES_VALUE",
+        target=5000.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+    )
+
+    updated = await log_value(db_session, tenant_id=tenant_id, rep_id=rep.id, goal_id=goal.id, value=1250.5)
+
+    assert updated.manual_value == 1250.5
+
+
+async def test_log_value_on_non_sales_value_goal_raises(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+    goal = await create_goal(
+        db_session, tenant_id=tenant_id, rep_id=rep.id, metric_type="VISIT_COUNT",
+        target=20.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+    )
+
+    with pytest.raises(MetricNotManualError):
+        await log_value(db_session, tenant_id=tenant_id, rep_id=rep.id, goal_id=goal.id, value=5.0)
+
+
+async def test_log_value_on_unknown_goal_raises(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+
+    with pytest.raises(GoalNotFoundError):
+        await log_value(db_session, tenant_id=tenant_id, rep_id=rep.id, goal_id=uuid.uuid4(), value=5.0)
+
+
+async def test_log_value_on_other_reps_goal_raises_not_found(db_session):
+    tenant_id = uuid.uuid4()
+    rep_a = await _make_user(db_session, tenant_id, "rep")
+    rep_b = await _make_user(db_session, tenant_id, "rep")
+    goal = await create_goal(
+        db_session, tenant_id=tenant_id, rep_id=rep_a.id, metric_type="SALES_VALUE",
+        target=5000.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+    )
+
+    with pytest.raises(GoalNotFoundError):
+        await log_value(db_session, tenant_id=tenant_id, rep_id=rep_b.id, goal_id=goal.id, value=5.0)
+
+
+async def test_progress_sales_value_returns_manual_value(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+    goal = await create_goal(
+        db_session, tenant_id=tenant_id, rep_id=rep.id, metric_type="SALES_VALUE",
+        target=5000.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+    )
+    await log_value(db_session, tenant_id=tenant_id, rep_id=rep.id, goal_id=goal.id, value=1250.5)
+
+    progress = await get_goal_progress(db_session, current_user=rep, goal_id=goal.id)
+
+    assert progress["achieved"] == 1250.5
+    assert progress["target"] == 5000.0
+    assert progress["metric_type"] == "SALES_VALUE"
+
+
+async def test_progress_visit_count_counts_visits_in_period(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+    goal = await create_goal(
+        db_session, tenant_id=tenant_id, rep_id=rep.id, metric_type="VISIT_COUNT",
+        target=2.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+    )
+    await check_in(db_session, tenant_id=tenant_id, rep_id=rep.id, latitude=1.0, longitude=1.0)
+    await check_in(db_session, tenant_id=tenant_id, rep_id=rep.id, latitude=1.0, longitude=1.0)
+
+    progress = await get_goal_progress(db_session, current_user=rep, goal_id=goal.id)
+
+    assert progress["achieved"] == 2.0
+
+
+async def test_progress_task_count_counts_completed_tasks_in_period(db_session):
+    tenant_id = uuid.uuid4()
+    manager = await _make_user(db_session, tenant_id, "manager")
+    rep = await _make_user(db_session, tenant_id, "rep")
+    goal = await create_goal(
+        db_session, tenant_id=tenant_id, rep_id=rep.id, metric_type="TASK_COUNT",
+        target=2.0, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+    )
+    t1 = await create_task(db_session, tenant_id=tenant_id, assigned_to=rep.id, title="A")
+    await create_task(db_session, tenant_id=tenant_id, assigned_to=rep.id, title="B")
+    await complete_task(db_session, tenant_id=tenant_id, rep_id=rep.id, task_id=t1.id)
+
+    progress = await get_goal_progress(db_session, current_user=rep, goal_id=goal.id)
+
+    assert progress["achieved"] == 1.0
+
+
+async def test_progress_for_unknown_goal_returns_none(db_session):
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+
+    progress = await get_goal_progress(db_session, current_user=rep, goal_id=uuid.uuid4())
+
+    assert progress is None
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/goals/test_service.py -v`
+Expected: FAIL — `ImportError: cannot import name 'log_value'`
+
+- [ ] **Step 3: Append to `app/goals/service.py`**
+
+Add these imports to the top of the file (merge with existing imports):
+
+```python
+from datetime import datetime, time, timedelta, timezone
+
+from sqlalchemy import func
+
+from app.tasks.models import Task
+from app.visits.models import Visit
+```
+
+Append to the end of the file:
+
+```python
+class GoalNotFoundError(Exception):
+    pass
+
+
+class MetricNotManualError(Exception):
+    pass
+
+
+async def log_value(
+    db: AsyncSession, tenant_id: uuid.UUID, rep_id: uuid.UUID, goal_id: uuid.UUID, value: float
+) -> Goal:
+    result = await db.execute(select(Goal).where(Goal.id == goal_id, Goal.rep_id == rep_id))
+    goal = result.scalar_one_or_none()
+    if goal is None or goal.tenant_id != tenant_id:
+        raise GoalNotFoundError(goal_id)
+
+    if goal.metric_type != "SALES_VALUE":
+        raise MetricNotManualError(goal_id)
+
+    goal.manual_value = value
+    await db.commit()
+    await db.refresh(goal)
+    return goal
+
+
+def _period_bounds(period_start: date, period_end: date) -> tuple[datetime, datetime]:
+    # Half-open range: [start of period_start, start of the day after period_end).
+    # period_end's whole calendar day is included with no double-counting at midnight.
+    start_dt = datetime.combine(period_start, time.min, tzinfo=timezone.utc)
+    end_dt_exclusive = datetime.combine(period_end + timedelta(days=1), time.min, tzinfo=timezone.utc)
+    return start_dt, end_dt_exclusive
+
+
+async def _compute_achieved(db: AsyncSession, goal: Goal) -> float:
+    if goal.metric_type == "SALES_VALUE":
+        return goal.manual_value or 0.0
+
+    start_dt, end_dt_exclusive = _period_bounds(goal.period_start, goal.period_end)
+
+    if goal.metric_type == "VISIT_COUNT":
+        result = await db.execute(
+            select(func.count()).select_from(Visit).where(
+                Visit.rep_id == goal.rep_id,
+                Visit.checked_in_at >= start_dt,
+                Visit.checked_in_at < end_dt_exclusive,
+            )
+        )
+        return float(result.scalar_one())
+
+    result = await db.execute(
+        select(func.count()).select_from(Task).where(
+            Task.assigned_to == goal.rep_id,
+            Task.status == "COMPLETED",
+            Task.completed_at >= start_dt,
+            Task.completed_at < end_dt_exclusive,
+        )
+    )
+    return float(result.scalar_one())
+
+
+async def get_goal_progress(db: AsyncSession, current_user: User, goal_id: uuid.UUID) -> dict | None:
+    goal = await get_goal(db, current_user, goal_id)
+    if goal is None:
+        return None
+
+    achieved = await _compute_achieved(db, goal)
+    return {
+        "goal_id": goal.id,
+        "rep_id": goal.rep_id,
+        "metric_type": goal.metric_type,
+        "target": goal.target,
+        "achieved": achieved,
+        "period_start": goal.period_start,
+        "period_end": goal.period_end,
+    }
+```
+
+Note on `log_value`'s tenant/ownership check: query filters by `id` AND `rep_id` together (a rep can only log their own goal's value — this is a rep-only endpoint, mirrors `complete_task`'s `Task.assigned_to == rep_id` shape), then an explicit `goal.tenant_id != tenant_id` post-fetch check for cross-tenant defense-in-depth, same pattern as every mutation in this codebase that fetches by id.
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/goals/test_service.py -v`
+Expected: all 18 tests (10 from Task 2 + 8 new) `PASSED`.
+
+- [ ] **Step 5: Add the boundary-precision test that discriminates the date/datetime conversion**
+
+This is the asymmetric test called for in Global Constraints — append to `backend/tests/goals/test_service.py`:
+
+```python
+async def test_progress_visit_count_excludes_visit_the_day_after_period_end(db_session):
+    from datetime import date as date_cls, datetime as dt_cls, timezone as tz
+
+    from app.visits.models import Visit
+
+    tenant_id = uuid.uuid4()
+    rep = await _make_user(db_session, tenant_id, "rep")
+    goal = await create_goal(
+        db_session, tenant_id=tenant_id, rep_id=rep.id, metric_type="VISIT_COUNT",
+        target=1.0, period_start=date_cls(2026, 8, 1), period_end=date_cls(2026, 8, 31),
+    )
+    # Included: last instant of period_end's calendar day.
+    included = Visit(
+        id=uuid.uuid4(), tenant_id=tenant_id, rep_id=rep.id,
+        checked_in_at=dt_cls(2026, 8, 31, 23, 59, 59, tzinfo=tz.utc),
+        latitude=1.0, longitude=1.0, geofence_verified=False,
+    )
+    # Excluded: first instant of the day after period_end.
+    excluded = Visit(
+        id=uuid.uuid4(), tenant_id=tenant_id, rep_id=rep.id,
+        checked_in_at=dt_cls(2026, 9, 1, 0, 0, 0, tzinfo=tz.utc),
+        latitude=1.0, longitude=1.0, geofence_verified=False,
+    )
+    db_session.add_all([included, excluded])
+    await db_session.commit()
+
+    progress = await get_goal_progress(db_session, current_user=rep, goal_id=goal.id)
+
+    assert progress["achieved"] == 1.0
+```
+
+Run: `cd backend && uv run pytest tests/goals/test_service.py -v`
+Expected: 19 passed. If this fails, the `_period_bounds` boundary math is wrong — fix `_compute_achieved`, not the test (the test's expected value, `1.0`, is correct: exactly one of the two visits falls inside `[period_start, period_end]` inclusive on the calendar-day level).
+
+- [ ] **Step 6: Run the full suite**
+
+Run: `cd backend && uv run pytest -v`
+Expected: no regressions.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/goals/service.py backend/tests/goals/test_service.py
+git commit -m "feat(backend): goal log-value and progress (achievement) services
+
+Refs PLAN 5.1"
+```
+
+---
+
+### Task 4: Goal router
+
+**Files:**
+- Create: `backend/app/goals/router.py`
+- Modify: `backend/app/main.py` (mount the router)
+- Test: `backend/tests/goals/test_router.py`
+
+**Interfaces:**
+- Consumes: `app.goals.service.*`, `app.goals.schemas.*` (Tasks 2-3), `app.auth.deps.require_manager`, `require_rep`, `get_current_user`.
+- Produces: `POST /api/v1/goals` → 201 `GoalOut` (manager only), `GET /api/v1/goals` → 200 `list[GoalOut]` (rep or manager, filtered+paginated), `GET /api/v1/goals/{goal_id}` → 200 `GoalOut` | 404 (rep or manager, filtered), `GET /api/v1/goals/{goal_id}/progress` → 200 `GoalProgress` | 404 (rep or manager, filtered), `POST /api/v1/goals/{goal_id}/log-value` → 200 `GoalOut` | 404 | 409 (rep only, own goal).
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+# backend/tests/goals/test_router.py
+import uuid
+
+import pytest
+
+pytestmark = pytest.mark.asyncio
+
+TENANT_HEADER = "X-Tenant-Id"
+
+
+async def _register(client, tenant_id, email, role):
+    response = await client.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": "hunter2pass", "role": role},
+        headers={TENANT_HEADER: tenant_id},
+    )
+    return response.json()["access_token"]
+
+
+async def _me(client, token):
+    response = await client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+    return response.json()
+
+
+async def test_manager_can_create_goal(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    rep_token = await _register(client, tenant_id, "rep@example.com", "rep")
+    rep_id = (await _me(client, rep_token))["id"]
+
+    response = await client.post(
+        "/api/v1/goals",
+        json={
+            "rep_id": rep_id, "metric_type": "VISIT_COUNT", "target": 20.0,
+            "period_start": "2026-08-01", "period_end": "2026-08-31",
+        },
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["metric_type"] == "VISIT_COUNT"
+    assert response.json()["manual_value"] is None
+
+
+async def test_rep_cannot_create_goal(client):
+    tenant_id = str(uuid.uuid4())
+    token = await _register(client, tenant_id, "rep@example.com", "rep")
+
+    response = await client.post(
+        "/api/v1/goals",
+        json={
+            "rep_id": str(uuid.uuid4()), "metric_type": "VISIT_COUNT", "target": 20.0,
+            "period_start": "2026-08-01", "period_end": "2026-08-31",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 403
+
+
+async def test_create_goal_for_unknown_rep_returns_404(client):
+    tenant_id = str(uuid.uuid4())
+    token = await _register(client, tenant_id, "mgr@example.com", "manager")
+
+    response = await client.post(
+        "/api/v1/goals",
+        json={
+            "rep_id": str(uuid.uuid4()), "metric_type": "VISIT_COUNT", "target": 20.0,
+            "period_start": "2026-08-01", "period_end": "2026-08-31",
+        },
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+
+
+async def test_rep_can_log_value_on_own_sales_value_goal(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    rep_token = await _register(client, tenant_id, "rep@example.com", "rep")
+    rep_id = (await _me(client, rep_token))["id"]
+    create_response = await client.post(
+        "/api/v1/goals",
+        json={
+            "rep_id": rep_id, "metric_type": "SALES_VALUE", "target": 5000.0,
+            "period_start": "2026-08-01", "period_end": "2026-08-31",
+        },
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+    goal_id = create_response.json()["id"]
+
+    response = await client.post(
+        f"/api/v1/goals/{goal_id}/log-value", json={"value": 1250.5},
+        headers={"Authorization": f"Bearer {rep_token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["manual_value"] == 1250.5
+
+
+async def test_log_value_on_visit_count_goal_returns_409(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    rep_token = await _register(client, tenant_id, "rep@example.com", "rep")
+    rep_id = (await _me(client, rep_token))["id"]
+    create_response = await client.post(
+        "/api/v1/goals",
+        json={
+            "rep_id": rep_id, "metric_type": "VISIT_COUNT", "target": 20.0,
+            "period_start": "2026-08-01", "period_end": "2026-08-31",
+        },
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+    goal_id = create_response.json()["id"]
+
+    response = await client.post(
+        f"/api/v1/goals/{goal_id}/log-value", json={"value": 5.0},
+        headers={"Authorization": f"Bearer {rep_token}"},
+    )
+
+    assert response.status_code == 409
+
+
+async def test_manager_cannot_log_value(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    rep_token = await _register(client, tenant_id, "rep@example.com", "rep")
+    rep_id = (await _me(client, rep_token))["id"]
+    create_response = await client.post(
+        "/api/v1/goals",
+        json={
+            "rep_id": rep_id, "metric_type": "SALES_VALUE", "target": 5000.0,
+            "period_start": "2026-08-01", "period_end": "2026-08-31",
+        },
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+    goal_id = create_response.json()["id"]
+
+    response = await client.post(
+        f"/api/v1/goals/{goal_id}/log-value", json={"value": 5.0},
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+
+    assert response.status_code == 403
+
+
+async def test_get_goal_progress(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    rep_token = await _register(client, tenant_id, "rep@example.com", "rep")
+    rep_id = (await _me(client, rep_token))["id"]
+    create_response = await client.post(
+        "/api/v1/goals",
+        json={
+            "rep_id": rep_id, "metric_type": "SALES_VALUE", "target": 5000.0,
+            "period_start": "2026-08-01", "period_end": "2026-08-31",
+        },
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+    goal_id = create_response.json()["id"]
+    await client.post(
+        f"/api/v1/goals/{goal_id}/log-value", json={"value": 1250.5},
+        headers={"Authorization": f"Bearer {rep_token}"},
+    )
+
+    response = await client.get(
+        f"/api/v1/goals/{goal_id}/progress", headers={"Authorization": f"Bearer {rep_token}"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["achieved"] == 1250.5
+    assert response.json()["target"] == 5000.0
+
+
+async def test_rep_lists_only_own_goals(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    rep_a_token = await _register(client, tenant_id, "rep-a@example.com", "rep")
+    rep_b_token = await _register(client, tenant_id, "rep-b@example.com", "rep")
+    rep_a_id = (await _me(client, rep_a_token))["id"]
+    rep_b_id = (await _me(client, rep_b_token))["id"]
+    await client.post(
+        "/api/v1/goals",
+        json={
+            "rep_id": rep_a_id, "metric_type": "TASK_COUNT", "target": 5.0,
+            "period_start": "2026-08-01", "period_end": "2026-08-31",
+        },
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+    await client.post(
+        "/api/v1/goals",
+        json={
+            "rep_id": rep_b_id, "metric_type": "TASK_COUNT", "target": 5.0,
+            "period_start": "2026-08-01", "period_end": "2026-08-31",
+        },
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+
+    response = await client.get("/api/v1/goals", headers={"Authorization": f"Bearer {rep_a_token}"})
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+
+async def test_get_goal_belonging_to_other_rep_returns_404(client):
+    tenant_id = str(uuid.uuid4())
+    mgr_token = await _register(client, tenant_id, "mgr@example.com", "manager")
+    rep_a_token = await _register(client, tenant_id, "rep-a@example.com", "rep")
+    rep_b_token = await _register(client, tenant_id, "rep-b@example.com", "rep")
+    rep_a_id = (await _me(client, rep_a_token))["id"]
+    create_response = await client.post(
+        "/api/v1/goals",
+        json={
+            "rep_id": rep_a_id, "metric_type": "TASK_COUNT", "target": 5.0,
+            "period_start": "2026-08-01", "period_end": "2026-08-31",
+        },
+        headers={"Authorization": f"Bearer {mgr_token}"},
+    )
+    goal_id = create_response.json()["id"]
+
+    response = await client.get(f"/api/v1/goals/{goal_id}", headers={"Authorization": f"Bearer {rep_b_token}"})
+
+    assert response.status_code == 404
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd backend && uv run pytest tests/goals/test_router.py -v`
+Expected: FAIL — `404` on `/api/v1/goals` (router not mounted) or `ModuleNotFoundError` for `app.goals.router`.
+
+- [ ] **Step 3: Write `app/goals/router.py`**
+
+```python
+# backend/app/goals/router.py
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.auth.deps import get_current_user, require_manager, require_rep
+from app.auth.models import User
+from app.db import get_db
+from app.goals.schemas import GoalCreate, GoalLogValue, GoalOut, GoalProgress
+from app.goals.service import (
+    GoalNotFoundError,
+    MetricNotManualError,
+    create_goal,
+    get_goal,
+    get_goal_progress,
+    list_goals,
+    log_value,
+)
+from app.zones.service import RepNotFoundError
+
+router = APIRouter(prefix="/api/v1/goals", tags=["goals"])
+
+
+@router.post("", response_model=GoalOut, status_code=status.HTTP_201_CREATED)
+async def create_goal_endpoint(
+    body: GoalCreate,
+    current_user: User = Depends(require_manager),
+    db: AsyncSession = Depends(get_db),
+) -> GoalOut:
+    try:
+        return await create_goal(
+            db,
+            tenant_id=current_user.tenant_id,
+            rep_id=body.rep_id,
+            metric_type=body.metric_type,
+            target=body.target,
+            period_start=body.period_start,
+            period_end=body.period_end,
+        )
+    except RepNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="rep not found") from exc
+
+
+@router.get("", response_model=list[GoalOut])
+async def list_goals_endpoint(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> list[GoalOut]:
+    return await list_goals(db, current_user, limit=limit, offset=offset)
+
+
+@router.get("/{goal_id}", response_model=GoalOut)
+async def get_goal_endpoint(
+    goal_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> GoalOut:
+    goal = await get_goal(db, current_user, goal_id)
+    if goal is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="goal not found")
+    return goal
+
+
+@router.get("/{goal_id}/progress", response_model=GoalProgress)
+async def get_goal_progress_endpoint(
+    goal_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> GoalProgress:
+    progress = await get_goal_progress(db, current_user, goal_id)
+    if progress is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="goal not found")
+    return progress
+
+
+@router.post("/{goal_id}/log-value", response_model=GoalOut)
+async def log_value_endpoint(
+    goal_id: uuid.UUID,
+    body: GoalLogValue,
+    current_user: User = Depends(require_rep),
+    db: AsyncSession = Depends(get_db),
+) -> GoalOut:
+    try:
+        return await log_value(
+            db, tenant_id=current_user.tenant_id, rep_id=current_user.id, goal_id=goal_id, value=body.value
+        )
+    except GoalNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="goal not found") from exc
+    except MetricNotManualError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="goal metric is not manually logged"
+        ) from exc
+```
+
+- [ ] **Step 4: Mount the router in `app/main.py`**
+
+Read the current `backend/app/main.py` in full first (it mounts `auth_router`, `zones_router`, `pings_router`, `tasks_router`, `visits_router`, calls `install_tenancy_filter()`, and has the `lifespan` handler — all of that must stay). Add, following the exact existing pattern:
+
+```python
+from app.goals.router import router as goals_router
+```
+
+```python
+app.include_router(goals_router)
+```
+
+- [ ] **Step 5: Run test to verify it passes**
+
+Run: `cd backend && uv run pytest tests/goals/test_router.py -v`
+Expected: all 9 tests `PASSED`.
+
+- [ ] **Step 6: Run the full suite and ruff**
+
+Run: `cd backend && uv run pytest -v && uv run ruff check .`
+Expected: all tests pass, ruff clean.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/app/goals/router.py backend/app/main.py backend/tests/goals/test_router.py
+git commit -m "feat(backend): goal router (create/list/get/progress/log-value)
+
+Refs PLAN 5.1"
+```
+
+---
+
+## After this plan
+
+Update `PROGRESS.md` with a new entry (append, don't replace) summarizing goals: per-rep VISIT_COUNT/TASK_COUNT/SALES_VALUE goals, achievement computed by counting visits/tasks in a half-open date-derived range for the two automatic metrics, manually logged for SALES_VALUE, target-vs-achievement report endpoint. Note the scope cut (team goals deferred, no team concept exists yet). Tick PLAN.md 5.1. Then a final whole-branch review before merge, then plan Phase 6 (violations & alerts) fresh against the actual code.

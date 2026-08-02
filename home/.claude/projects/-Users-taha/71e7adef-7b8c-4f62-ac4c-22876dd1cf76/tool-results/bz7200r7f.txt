@@ -1,0 +1,650 @@
+=== service/billing.py ===
+     1	"""Sales-billing create / cancel + reads (PLAN 7.4, D-046): create a DRAFT billing against a sales
+     2	order, cancel a DRAFT, and the list/point reads. The POST path (the heart) + its helpers live in
+     3	``billing_post.py`` (split at the 400-line cap, STRUCTURE §8.4); the package ``__init__`` re-exports
+     4	both as one ``service`` surface.
+     5	
+     6	A billing records the decision to invoice DELIVERED goods — the AR mirror of the procurement invoice
+     7	match. ``create_billing`` writes a DRAFT (validates the order is at least partially delivered, each
+     8	billed quantity ≤ the order line's delivered-not-yet-invoiced quantity → over-billing 422
+     9	``sales.over_billing``) and claims the BIL number at creation (D-040). No journal yet — that is POST
+    10	(``billing_post.post_billing``).
+    11	
+    12	Cross-module rule (STRUCTURE §5 / D-046): sales NEVER calls finance's service — the AR effect goes
+    13	through the event bus (POST publishes ``BillingInvoiced``; finance's handler creates + posts the AR
+    14	customer invoice). Sales reads only finance/queries (the AR control + revenue accounts, resolved at
+    15	POST). The ``bill_all_delivered`` convenience path bills every delivered-not-invoiced order line.
+    16	"""
+    17	
+    18	from __future__ import annotations
+    19	
+    20	import uuid
+    21	from dataclasses import dataclass
+    22	from datetime import date
+    23	from decimal import Decimal
+    24	
+    25	from sqlalchemy.ext.asyncio import AsyncSession
+    26	
+    27	from app.core import docflow
+    28	from app.core.exceptions import ConflictError, ValidationFailedError
+    29	from app.modules.sales.constants import (
+    30	    BILLING_DOC_TYPE,
+    31	    BILLING_NUMBER_PADDING,
+    32	    BILLING_NUMBER_PREFIX,
+    33	    BILLING_SEQUENCE_NAME,
+    34	    DELIVERY_INVOICED_BY_BILLING_LINK,
+    35	    BillingStatus,
+    36	    SalesOrderStatus,
+    37	)
+    38	from app.modules.sales.models import (
+    39	    SalesBilling,
+    40	    SalesBillingLine,
+    41	    SalesOrder,
+    42	    SalesOrderLine,
+    43	)
+    44	from app.modules.sales.schemas import BillingCreate
+    45	from app.modules.sales.service._shared import claim_document_number, compute_line_amount
+    46	from app.modules.sales.service.billing_reads import get_billing
+    47	from app.modules.sales.service.orders import get_sales_order_lines
+    48	
+    49	# An order is billable once at least partially delivered (you invoice what shipped). DRAFT /
+    50	# CONFIRMED-but-undelivered / CREDIT_BLOCKED / CANCELLED start no billing; INVOICED/CLOSED are done.
+    51	_BILLABLE_ORDER_STATUSES = frozenset(
+    52	    {
+    53	        SalesOrderStatus.PARTIALLY_DELIVERED,
+    54	        SalesOrderStatus.DELIVERED,
+    55	        # INVOICED is reachable when an earlier billing fully invoiced the delivered qty but a later
+    56	        # delivery added more open-to-invoice quantity — a follow-up billing completes it.
+    57	        SalesOrderStatus.INVOICED,
+    58	    }
+    59	)
+    60	
+    61	
+    62	@dataclass(frozen=True)
+    63	class _BillingLineInput:
+    64	    """One validated billing line: the order line billed, the snapshot item/price/discount/tax from
+    65	    it, the optional source delivery line, the billed quantity, and the computed net line amount."""
+    66	
+    67	    sales_order_line_id: uuid.UUID
+    68	    delivery_line_id: uuid.UUID | None
+    69	    item_id: uuid.UUID
+    70	    quantity: Decimal
+    71	    unit_price: Decimal
+    72	    discount_type: str | None
+    73	    discount_value: Decimal | None
+    74	    line_amount: Decimal
+    75	    tax_code_id: uuid.UUID | None
+    76	
+    77	
+    78	async def _require_billable_order(
+    79	    session: AsyncSession, tenant_id: uuid.UUID, order_id: uuid.UUID
+    80	) -> SalesOrder:
+    81	    order = await session.get(SalesOrder, order_id)
+    82	    if order is None or order.tenant_id != tenant_id:
+    83	        raise ValidationFailedError(
+    84	            message="Referenced sales order does not exist",
+    85	            code="sales.order_not_found",
+    86	            details={"sales_order_id": str(order_id)},
+    87	        )
+    88	    if SalesOrderStatus(order.status) not in _BILLABLE_ORDER_STATUSES:
+    89	        raise ValidationFailedError(
+    90	            message=f"A {order.status} sales order has nothing delivered to bill",
+    91	            code="sales.order_not_delivered",
+    92	            details={"sales_order_id": str(order_id), "status": order.status},
+    93	        )
+    94	    return order
+    95	
+    96	
+    97	def _validate_quantity(quantity: Decimal) -> Decimal:
+    98	    qty = Decimal(str(quantity))
+    99	    if qty <= 0:
+   100	        raise ValidationFailedError(
+   101	            message="A billing line quantity must be greater than zero",
+   102	            code="sales.line_quantity_invalid",
+   103	            details={"quantity": str(qty)},
+   104	        )
+   105	    return qty
+   106	
+   107	
+   108	def _build_billing_line(
+   109	    order_line: SalesOrderLine,
+   110	    *,
+   111	    delivery_line_id: uuid.UUID | None,
+   112	    qty: Decimal,
+   113	    currency_code: str,
+   114	) -> _BillingLineInput:
+   115	    """Snapshot the priced fields from the order line and compute the net line amount for a billed
+   116	    quantity (the order-line discount applies pro-rata via the shared ``compute_line_amount``)."""
+   117	    line_amount = compute_line_amount(
+   118	        qty,
+   119	        Decimal(str(order_line.unit_price)),
+   120	        order_line.discount_type,
+   121	        Decimal(str(order_line.discount_value))
+   122	        if order_line.discount_value is not None
+   123	        else None,
+   124	        currency_code,
+   125	    )
+   126	    return _BillingLineInput(
+   127	        sales_order_line_id=order_line.id,
+   128	        delivery_line_id=delivery_line_id,
+   129	        item_id=order_line.item_id,
+   130	        quantity=qty,
+   131	        unit_price=Decimal(str(order_line.unit_price)),
+   132	        discount_type=order_line.discount_type,
+   133	        discount_value=Decimal(str(order_line.discount_value))
+   134	        if order_line.discount_value is not None
+   135	        else None,
+   136	        line_amount=line_amount,
+   137	        tax_code_id=order_line.tax_code_id,
+   138	    )
+   139	
+   140	
+   141	def _validate_billing_line(
+   142	    order_id: uuid.UUID,
+   143	    order_lines: dict[uuid.UUID, SalesOrderLine],
+   144	    payload_line: object,
+   145	    currency_code: str,
+   146	) -> _BillingLineInput:
+   147	    """Validate one billing line against its order line: the line belongs to the order, the qty is
+   148	    > 0 and within the still-open-to-invoice quantity = delivered − invoiced (over-billing REJECTED
+   149	    422 ``sales.over_billing`` — you cannot invoice beyond what shipped)."""
+   150	    order_line = order_lines.get(payload_line.sales_order_line_id)  # type: ignore[attr-defined]
+   151	    if order_line is None:
+   152	        raise ValidationFailedError(
+   153	            message="The billing line does not belong to this sales order",
+   154	            code="sales.billing_line_not_on_order",
+   155	            details={
+   156	                "sales_order_id": str(order_id),
+   157	                "sales_order_line_id": str(
+   158	                    payload_line.sales_order_line_id  # type: ignore[attr-defined]
+   159	                ),
+   160	            },
+   161	        )
+   162	    qty = _validate_quantity(payload_line.quantity)  # type: ignore[attr-defined]
+   163	    open_qty = Decimal(str(order_line.delivered_quantity)) - Decimal(
+   164	        str(order_line.invoiced_quantity)
+   165	    )
+   166	    if qty > open_qty:
+   167	        raise ValidationFailedError(
+   168	            message="The billed quantity exceeds the delivered-not-yet-invoiced quantity",
+   169	            code="sales.over_billing",
+   170	            details={
+   171	                "sales_order_line_id": str(order_line.id),
+   172	                "open_quantity": str(open_qty),
+   173	                "quantity": str(qty),
+   174	            },
+   175	        )
+   176	    return _build_billing_line(
+   177	        order_line,
+   178	        delivery_line_id=payload_line.delivery_line_id,  # type: ignore[attr-defined]
+   179	        qty=qty,
+   180	        currency_code=currency_code,
+   181	    )
+   182	
+   183	
+   184	def _build_all_delivered_lines(
+   185	    order_lines: dict[uuid.UUID, SalesOrderLine], currency_code: str
+   186	) -> list[_BillingLineInput]:
+   187	    """The convenience path: bill every order line's full delivered-not-yet-invoiced quantity (lines
+   188	    with nothing open are skipped). No delivery line is named (the chain is order → billing)."""
+   189	    built: list[_BillingLineInput] = []
+   190	    for order_line in order_lines.values():
+   191	        open_qty = Decimal(str(order_line.delivered_quantity)) - Decimal(
+   192	            str(order_line.invoiced_quantity)
+   193	        )
+   194	        if open_qty <= 0:
+   195	            continue
+   196	        built.append(
+   197	            _build_billing_line(
+   198	                order_line, delivery_line_id=None, qty=open_qty, currency_code=currency_code
+   199	            )
+   200	        )
+   201	    return built
+   202	
+   203	
+   204	async def create_billing(
+   205	    session: AsyncSession, tenant_id: uuid.UUID, payload: BillingCreate
+   206	) -> SalesBilling:
+   207	    """Create a DRAFT billing against a sales order (PLAN 7.4). Validates the order is at least
+   208	    partially delivered (else 422 ``sales.order_not_delivered``), each line belongs to it and does
+   209	    not over-bill its delivered-not-invoiced quantity (over-billing → 422 ``sales.over_billing``).
+   210	    Snapshots the customer + payment terms from the order and the priced fields per line from the
+   211	    order line, claims the BIL number (D-040), and links each named delivery → billing. No journal
+   212	    yet — that is POST. ``bill_all_delivered`` bills every delivered-not-invoiced line."""
+   213	    order = await _require_billable_order(session, tenant_id, payload.sales_order_id)
+   214	    order_lines = {
+   215	        line.id: line for line in await get_sales_order_lines(session, tenant_id, order.id)
+   216	    }
+   217	    billing_date = payload.billing_date or date.today()
+   218	
+   219	    if payload.bill_all_delivered:
+   220	        validated = _build_all_delivered_lines(order_lines, order.currency_code)
+   221	    else:
+   222	        if not payload.lines:
+   223	            raise ValidationFailedError(
+   224	                message="A billing needs at least one line (or bill_all_delivered)",
+   225	                code="sales.billing_no_lines",
+   226	            )
+   227	        validated = [
+   228	            _validate_billing_line(order.id, order_lines, line, order.currency_code)
+   229	            for line in payload.lines
+   230	        ]
+   231	    if not validated:
+   232	        raise ValidationFailedError(
+   233	            message="The order has no delivered-not-yet-invoiced quantity to bill",
+   234	            code="sales.nothing_to_bill",
+   235	            details={"sales_order_id": str(order.id)},
+   236	        )
+   237	
+   238	    total = sum((line.line_amount for line in validated), Decimal(0))
+   239	    billing_id = uuid.uuid4()
+   240	    document = await docflow.register_document(
+   241	        session,
+   242	        tenant_id,
+   243	        BILLING_DOC_TYPE,
+   244	        billing_id,
+   245	        doc_number=None,
+   246	        status=BillingStatus.DRAFT.value,
+   247	    )
+   248	    number = await claim_document_number(
+   249	        session,
+   250	        tenant_id,
+   251	        sequence_name=BILLING_SEQUENCE_NAME,
+   252	        prefix=BILLING_NUMBER_PREFIX,
+   253	        padding=BILLING_NUMBER_PADDING,
+   254	        on_date=billing_date,
+   255	    )
+   256	    billing = SalesBilling(
+   257	        id=billing_id,
+   258	        tenant_id=tenant_id,
+   259	        document_id=document.id,
+   260	        billing_number=number,
+   261	        status=BillingStatus.DRAFT.value,
+   262	        sales_order_id=order.id,
+   263	        customer_id=order.customer_id,
+   264	        currency_code=order.currency_code,
+   265	        billing_date=billing_date,
+   266	        payment_terms_days=order.payment_terms_days,
+   267	        total_amount=total,
+   268	        notes=payload.notes,
+   269	    )
+   270	    session.add(billing)
+   271	    for index, line in enumerate(validated, start=1):
+   272	        session.add(
+   273	            SalesBillingLine(
+   274	                tenant_id=tenant_id,
+   275	                billing_id=billing_id,
+   276	                line_number=index,
+   277	                sales_order_line_id=line.sales_order_line_id,
+   278	                delivery_line_id=line.delivery_line_id,
+   279	                item_id=line.item_id,
+   280	                quantity=line.quantity,
+   281	                unit_price=line.unit_price,
+   282	                discount_type=line.discount_type,
+   283	                discount_value=line.discount_value,
+   284	                line_amount=line.line_amount,
+   285	                tax_code_id=line.tax_code_id,
+   286	            )
+   287	        )
+   288	    await session.flush()
+   289	    await docflow.set_document_status(
+   290	        session, tenant_id, document.id, doc_number=number, status=BillingStatus.DRAFT.value
+   291	    )
+   292	    await _link_delivery_predecessors(session, tenant_id, billing_id, validated)
+   293	    return billing
+   294	
+   295	
+   296	async def _link_delivery_predecessors(
+   297	    session: AsyncSession,
+   298	    tenant_id: uuid.UUID,
+   299	    billing_id: uuid.UUID,
+   300	    lines: list[_BillingLineInput],
+   301	) -> None:
+   302	    """Link each distinct source delivery → billing ('invoiced_by') for the docflow chain (PLAN
+   303	    7.4). A billing line may name no delivery (the convenience path / a bill without a named
+   304	    shipment) — those are skipped; the order → billing edge is written at POST."""
+   305	    from app.modules.sales.models import DeliveryLine
+   306	
+   307	    linked: set[uuid.UUID] = set()
+   308	    billing = await session.get(SalesBilling, billing_id)
+   309	    for line in lines:
+   310	        if line.delivery_line_id is None:
+   311	            continue
+   312	        dl = await session.get(DeliveryLine, line.delivery_line_id)
+   313	        if dl is None or dl.tenant_id != tenant_id or dl.delivery_id in linked:
+   314	            continue
+   315	        from app.modules.sales.models import Delivery
+   316	
+   317	        delivery = await session.get(Delivery, dl.delivery_id)
+   318	        if delivery is not None and billing is not None:
+   319	            await docflow.link_documents(
+   320	                session,
+   321	                tenant_id,
+   322	                predecessor=delivery.document_id,
+   323	                successor=billing.document_id,
+   324	                link_type=DELIVERY_INVOICED_BY_BILLING_LINK,
+   325	            )
+   326	            linked.add(dl.delivery_id)
+   327	
+   328	
+   329	async def cancel_billing(
+   330	    session: AsyncSession, tenant_id: uuid.UUID, billing_id: uuid.UUID
+   331	) -> SalesBilling:
+   332	    """Cancel a DRAFT billing (PLAN 7.4). A POSTED billing is TERMINAL — it triggered an AR invoice
+   333	    (recognized revenue + AR), so it is corrected by a return / credit note (7.4), never cancelled.
+   334	    Cancelling a DRAFT raises no invoice and changes no invoiced_quantity."""
+   335	    billing = await get_billing(session, tenant_id, billing_id)
+   336	    if BillingStatus(billing.status) != BillingStatus.DRAFT:
+   337	        raise ConflictError(
+   338	            message=f"A {billing.status} billing cannot be cancelled",
+   339	            code="sales.billing_not_cancellable",
+   340	            details={"billing_id": str(billing_id), "status": billing.status},
+   341	        )
+   342	    billing.status = BillingStatus.CANCELLED.value
+   343	    await session.flush()
+   344	    await docflow.set_document_status(
+   345	        session, tenant_id, billing.document_id, status=BillingStatus.CANCELLED.value
+   346	    )
+   347	    return billing
+=== service/billing_post.py ===
+     1	"""Sales-billing POST (PLAN 7.4, D-046) — the heart — split from ``billing.py`` at the 400-line cap
+     2	(STRUCTURE §8.4, the delivery_post precedent). The DRAFT create + helpers + ``cancel_billing`` stay
+     3	in ``billing.py``; the reads in ``billing_reads.py``; the post path + its post-only helpers live
+     4	here. ``__init__`` re-exports all three as one ``service`` surface (``service.post_billing``).
+     5	
+     6	``post_billing`` is the heart: in ONE transaction it PUBLISHES ``BillingInvoiced`` — finance's
+     7	handler
+     8	creates + posts the AR customer invoice (Dr AR control / Cr sales-revenue + Cr output tax) — raises
+     9	each order line's invoiced_quantity, advances the order status (INVOICED / CLOSED), links docflow
+    10	order → billing, and sets the billing POSTED. A closed billing period trips the AR invoice's journal
+    11	trigger and rolls the WHOLE post back.
+    12	
+    13	The MIRROR of procurement's ``post_invoice_match``: sales resolves the AR control + sales-revenue
+    14	accounts (+ the customer's payment terms snapshot for the due date) from finance/queries UP FRONT
+    15	(downward reads — a missing posting default fails the post before any state change, D-046), then
+    16	publishes the event with those accounts so finance's handler is a thin builder. Sales never imports
+    17	finance/service (STRUCTURE §5).
+    18	"""
+    19	
+    20	from __future__ import annotations
+    21	
+    22	import uuid
+    23	from datetime import datetime, timedelta
+    24	from decimal import Decimal
+    25	
+    26	from sqlalchemy.ext.asyncio import AsyncSession
+    27	
+    28	from app.core import docflow
+    29	from app.core.events import publish
+    30	from app.core.exceptions import ConflictError, ValidationFailedError
+    31	from app.modules.finance import queries as finance_queries
+    32	from app.modules.sales import queries as sales_queries
+    33	from app.modules.sales.constants import (
+    34	    ORDER_BILLED_BY_BILLING_LINK,
+    35	    BillingStatus,
+    36	    SalesOrderStatus,
+    37	)
+    38	from app.modules.sales.events import BillingInvoiced, BillingInvoiceLine
+    39	from app.modules.sales.models import SalesBilling, SalesBillingLine, SalesOrder, SalesOrderLine
+    40	from app.modules.sales.service.billing_reads import get_billing, get_billing_lines
+    41	from app.modules.sales.service.orders import get_sales_order, get_sales_order_lines
+    42	
+    43	
+    44	def _require_postable(billing: SalesBilling, billing_id: uuid.UUID) -> None:
+    45	    status = BillingStatus(billing.status)
+    46	    if status == BillingStatus.POSTED:
+    47	        raise ConflictError(
+    48	            message="The billing is already posted",
+    49	            code="sales.billing_already_posted",
+    50	            details={"billing_id": str(billing_id)},
+    51	        )
+    52	    if status != BillingStatus.DRAFT:
+    53	        raise ConflictError(
+    54	            message=f"A {billing.status} billing cannot be posted",
+    55	            code="sales.billing_not_postable",
+    56	            details={"billing_id": str(billing_id), "status": billing.status},
+    57	        )
+    58	
+    59	
+    60	async def post_billing(
+    61	    session: AsyncSession, tenant_id: uuid.UUID, billing_id: uuid.UUID
+    62	) -> SalesBilling:
+    63	    """Post a DRAFT billing (PLAN 7.4, D-046) — the heart. In ONE transaction: PUBLISH
+    64	    ``BillingInvoiced`` so finance's handler creates + posts the AR customer invoice (Dr AR control
+    65	    /
+    66	    Cr sales-revenue + Cr output tax, partner_id = customer id, due = billing_date + terms); raise
+    67	    each order line's invoiced_quantity; advance the order (INVOICED when fully invoiced, CLOSED
+    68	    when
+    69	    fully delivered AND invoiced); link docflow order → billing; set the billing POSTED. A closed
+    70	    billing period trips the AR invoice's journal trigger and rolls it ALL back.
+    71	
+    72	    Only a DRAFT billing posts; a POSTED one is idempotent-rejected (terminal). The caller commits
+    73	    via
+    74	    uow; the published event drains in the same uow."""
+    75	    billing = await get_billing(session, tenant_id, billing_id)
+    76	    _require_postable(billing, billing_id)
+    77	
+    78	    # Resolve the AR control + revenue accounts UP FRONT (downward reads) — a missing posting
+    79	    # default
+    80	    # raises 422 here, so the post fails before any state change (the match-post precedent, D-046).
+    81	    ar_account_id = await finance_queries.ar_control_account(session, tenant_id)
+    82	    revenue_account_id = await finance_queries.sales_revenue_account(session, tenant_id)
+    83	
+    84	    lines = await get_billing_lines(session, tenant_id, billing_id)
+    85	    order_lines = {
+    86	        line.id: line
+    87	        for line in await get_sales_order_lines(session, tenant_id, billing.sales_order_id)
+    88	    }
+    89	    invoice_lines = _raise_invoiced_and_build_invoice_lines(lines, order_lines)
+    90	    await _advance_order_status(
+    91	        session, tenant_id, billing.sales_order_id, order_lines.values()
+    92	    )
+    93	
+    94	    customer = await sales_queries.get_customer(session, tenant_id, billing.customer_id)
+    95	    partner_name = customer.name if customer is not None else ""
+    96	    due_date = billing.billing_date + timedelta(days=billing.payment_terms_days)
+    97	
+    98	    billing.status = BillingStatus.POSTED.value
+    99	    billing.posted_at = datetime.now()
+   100	    await session.flush()
+   101	    await docflow.set_document_status(
+   102	        session, tenant_id, billing.document_id, status=BillingStatus.POSTED.value
+   103	    )
+   104	    order = await session.get(SalesOrder, billing.sales_order_id)
+   105	    if order is not None:
+   106	        await docflow.link_documents(
+   107	            session,
+   108	            tenant_id,
+   109	            predecessor=order.document_id,
+   110	            successor=billing.document_id,
+   111	            link_type=ORDER_BILLED_BY_BILLING_LINK,
+   112	        )
+   113	
+   114	    # Publish AFTER sales' own writes settle: finance's handler creates + posts the AR customer
+   115	    # invoice, drained in this same uow (D-011/D-046).
+   116	    publish(
+   117	        session,
+   118	        BillingInvoiced(
+   119	            tenant_id=tenant_id,
+   120	            billing_id=billing.id,
+   121	            billing_number=billing.billing_number,
+   122	            document_id=billing.document_id,
+   123	            partner_id=billing.customer_id,
+   124	            partner_name=partner_name,
+   125	            billing_date=billing.billing_date,
+   126	            due_date=due_date,
+   127	            currency_code=billing.currency_code,
+   128	            ar_account_id=ar_account_id,
+   129	            revenue_account_id=revenue_account_id,
+   130	            lines=tuple(invoice_lines),
+   131	        ),
+   132	    )
+   133	    return billing
+   134	
+   135	
+   136	def _raise_invoiced_and_build_invoice_lines(
+   137	    lines: list[SalesBillingLine],
+   138	    order_lines: dict[uuid.UUID, SalesOrderLine],
+   139	) -> list[BillingInvoiceLine]:
+   140	    """Raise each order line's invoiced_quantity by its billed quantity and build the per-line AR
+   141	    invoice payload finance's handler posts (net + tax code, the item as the dimension). The order
+   142	    lines are mutated in-session."""
+   143	    invoice_lines: list[BillingInvoiceLine] = []
+   144	    for line in lines:
+   145	        order_line = order_lines[line.sales_order_line_id]
+   146	        new_invoiced = Decimal(str(order_line.invoiced_quantity)) + Decimal(
+   147	            str(line.quantity)
+   148	        )
+   149	        # #75: the create-path check reads the persisted column, which another document may
+   150	        # have raised since this DRAFT was created — re-check the cap at post time.
+   151	        if new_invoiced > Decimal(str(order_line.delivered_quantity)):
+   152	            raise ValidationFailedError(
+   153	                message="Posting this billing would exceed the order line's delivered quantity",
+   154	                code="sales.over_billing",
+   155	                details={
+   156	                    "sales_order_line_id": str(order_line.id),
+   157	                    "delivered_quantity": str(order_line.delivered_quantity),
+   158	                    "invoiced_quantity": str(order_line.invoiced_quantity),
+   159	                    "quantity": str(line.quantity),
+   160	                },
+   161	            )
+   162	        order_line.invoiced_quantity = new_invoiced
+   163	        invoice_lines.append(
+   164	            BillingInvoiceLine(
+   165	                item_id=line.item_id,
+   166	                net_amount=Decimal(str(line.line_amount)),
+   167	                tax_code_id=line.tax_code_id,
+   168	            )
+   169	        )
+   170	    return invoice_lines
+   171	
+   172	
+   173	async def _advance_order_status(
+   174	    session: AsyncSession,
+   175	    tenant_id: uuid.UUID,
+   176	    order_id: uuid.UUID,
+   177	    order_lines,
+   178	) -> None:
+   179	    """Advance the order after a billing raised the lines' invoiced_quantity (PLAN 7.4): CLOSED when
+   180	    every line is fully delivered AND fully invoiced (the O2C end state), else INVOICED when every
+   181	    line is fully invoiced (but not yet fully delivered — more to ship), else leave the
+   182	    delivery-driven status (PARTIALLY_DELIVERED / DELIVERED) untouched (more to invoice). The order
+   183	    +
+   184	    lines are already loaded/mutated in this session."""
+   185	    fully_invoiced = all(
+   186	        Decimal(str(line.invoiced_quantity)) >= Decimal(str(line.ordered_quantity))
+   187	        for line in order_lines
+   188	    )
+   189	    fully_delivered = all(
+   190	        Decimal(str(line.delivered_quantity)) >= Decimal(str(line.ordered_quantity))
+   191	        for line in order_lines
+   192	    )
+   193	    if not fully_invoiced:
+   194	        return
+   195	    new_status = (
+   196	        SalesOrderStatus.CLOSED if fully_delivered else SalesOrderStatus.INVOICED
+   197	    )
+   198	    order = await get_sales_order(session, tenant_id, order_id)
+   199	    if order is None:
+   200	        return
+   201	    order.status = new_status.value
+   202	    await session.flush()
+   203	    await docflow.set_document_status(
+   204	        session, tenant_id, order.document_id, status=new_status.value
+   205	    )
+=== service/billing_reads.py ===
+     1	"""Billing read paths (PLAN 7.4), split from the write engine (billing.py) at the 400-line cap
+     2	(STRUCTURE §8.4, the delivery_reads.py precedent). The service package + router import these via the
+     3	package surface.
+     4	
+     5	Keyset-paginated list (filter by order / status / billing-date range) + header/line point reads +
+     6	the per-order billing history. The list folds its filters into the cursor fingerprint so a cursor
+     7	cannot cross filtered views (D-014).
+     8	"""
+     9	
+    10	from __future__ import annotations
+    11	
+    12	import uuid
+    13	from datetime import date
+    14	
+    15	from sqlalchemy import select
+    16	from sqlalchemy.ext.asyncio import AsyncSession
+    17	
+    18	from app.core.exceptions import NotFoundError
+    19	from app.core.pagination import (
+    20	    DEFAULT_LIMIT,
+    21	    OrderKey,
+    22	    SortDirection,
+    23	    filter_fingerprint,
+    24	    paginate,
+    25	)
+    26	from app.core.schemas import Page
+    27	from app.modules.sales.constants import BillingStatus
+    28	from app.modules.sales.models import SalesBilling, SalesBillingLine
+    29	
+    30	
+    31	async def get_billing(
+    32	    session: AsyncSession, tenant_id: uuid.UUID, billing_id: uuid.UUID
+    33	) -> SalesBilling:
+    34	    billing = await session.get(SalesBilling, billing_id)
+    35	    if billing is None or billing.tenant_id != tenant_id:
+    36	        raise NotFoundError(message="Billing not found", code="sales.billing_not_found")
+    37	    return billing
+    38	
+    39	
+    40	async def get_billing_lines(
+    41	    session: AsyncSession, tenant_id: uuid.UUID, billing_id: uuid.UUID
+    42	) -> list[SalesBillingLine]:
+    43	    stmt = (
+    44	        select(SalesBillingLine)
+    45	        .where(SalesBillingLine.tenant_id == tenant_id, SalesBillingLine.billing_id == billing_id)
+    46	        .order_by(SalesBillingLine.line_number)
+    47	    )
+    48	    return list((await session.execute(stmt)).scalars().all())
+    49	
+    50	
+    51	async def list_billings(
+    52	    session: AsyncSession,
+    53	    tenant_id: uuid.UUID,
+    54	    *,
+    55	    sales_order_id: uuid.UUID | None = None,
+    56	    status: BillingStatus | None = None,
+    57	    date_from: date | None = None,
+    58	    date_to: date | None = None,
+    59	    cursor: str | None = None,
+    60	    limit: int = DEFAULT_LIMIT,
+    61	) -> Page[SalesBilling]:
+    62	    """Keyset-paginated billing list, newest first (D-014). Filters fold into the cursor
+    63	    fingerprint; the (tenant, status) / (tenant, sales_order_id) indexes serve it (PERFORMANCE
+    64	    §1)."""
+    65	    stmt = select(SalesBilling).where(SalesBilling.tenant_id == tenant_id)
+    66	    if sales_order_id is not None:
+    67	        stmt = stmt.where(SalesBilling.sales_order_id == sales_order_id)
+    68	    if status is not None:
+    69	        stmt = stmt.where(SalesBilling.status == BillingStatus(status).value)
+    70	    if date_from is not None:
+    71	        stmt = stmt.where(SalesBilling.billing_date >= date_from)
+    72	    if date_to is not None:
+    73	        stmt = stmt.where(SalesBilling.billing_date <= date_to)
+    74	    return await paginate(
+    75	        session,
+    76	        stmt,
+    77	        order_by=[OrderKey(SalesBilling.created_at, SortDirection.DESC)],
+    78	        pk=SalesBilling.id,
+    79	        cursor=cursor,
+    80	        limit=limit,
+    81	        filters=filter_fingerprint(sales_order_id, status, date_from, date_to),
+    82	    )
+    83	
+    84	
+    85	async def billings_for_order(
+    86	    session: AsyncSession, tenant_id: uuid.UUID, order_id: uuid.UUID
+    87	) -> list[SalesBilling]:
+    88	    """Every billing raised against a sales order (PLAN 7.4), newest first — the per-order billing
+    89	    history. Index-served by (tenant, sales_order_id)."""
+    90	    stmt = (
+    91	        select(SalesBilling)
+    92	        .where(SalesBilling.tenant_id == tenant_id, SalesBilling.sales_order_id == order_id)
+    93	        .order_by(SalesBilling.created_at.desc())
+    94	    )
+    95	    return list((await session.execute(stmt)).scalars().all())

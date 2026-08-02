@@ -1,0 +1,41 @@
+package com.thirdeyeworld.core
+
+import kotlin.math.abs
+
+// Pure gesture rules for the v1 card deck — the Kotlin twin of the web's
+// lib/gestures.ts and iOS's Gestures.swift, so every platform decides
+// identically on what counts as a like, a skip, and a "twice fast" double.
+//
+// v1 reverses spec principles 5 & 6 (recorded with its dissent in spec §4.1):
+// the deck is gesture-led. This file is only the CLASSIFIER. Every action it
+// names is ALSO wired, in the UI, to a visible labelled button and to a
+// TalkBack custom action — because TalkBack consumes left/right swipes for its
+// own navigation before the app ever sees them, so for a screen-reader user the
+// custom action, not the swipe, is the route that actually works.
+
+enum class SwipeAction { LIKE, SKIP }
+
+/** A horizontal drag past this many pixels is a decision. */
+const val SWIPE_THRESHOLD_PX = 96f
+
+fun classifySwipe(dx: Float, dy: Float, threshold: Float = SWIPE_THRESHOLD_PX): SwipeAction? {
+    if (abs(dx) < threshold) return null // not far enough to be a decision
+    if (abs(dx) <= abs(dy)) return null // mostly vertical → leave it for scrolling
+    return if (dx > 0) SwipeAction.LIKE else SwipeAction.SKIP
+}
+
+/** "Swipe right twice fast" → like AND advance. A non-timed route to the same
+ *  result always exists (the "Like & next" button / custom action), so nobody is
+ *  gated on hitting a time window — principle 6's real constraint. */
+const val DOUBLE_ACTIVATION_MS = 400L
+
+fun isDoubleActivation(previous: Long?, now: Long, window: Long = DOUBLE_ACTIVATION_MS): Boolean {
+    if (previous == null) return false
+    val gap = now - previous
+    return gap in 0..window
+}
+
+/** Press held longer than this records-while-held; shorter is a tap, which
+ *  toggles instead. The tap twin is mandatory: a user with nerve damage who
+ *  cannot sustain a press must never be excluded. */
+const val HOLD_TO_RECORD_MS = 220L

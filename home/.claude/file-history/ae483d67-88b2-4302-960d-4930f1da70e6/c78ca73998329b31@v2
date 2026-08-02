@@ -1,0 +1,92 @@
+package com.thirdeyeworld.core
+
+// Assert-based self-check (mirrors the web + iOS tests). Compile with kotlinc,
+// run on the JVM; exits non-zero on any failure. No Android SDK needed.
+
+private var passed = 0
+
+private fun check(cond: Boolean, msg: String) {
+    if (!cond) {
+        System.err.println("✗ FAILED: $msg")
+        kotlin.system.exitProcess(1)
+    }
+    passed++
+}
+
+private fun memo(id: String, channel: String = "main", transcript: String = "") =
+    Memo(id = id, createdAt = 0, durationMs = 1000, mime = "audio/webm", channelId = channel, machineTranscript = transcript)
+
+fun main() {
+    // add + queue
+    run {
+        val e = RadioEngine()
+        e.addMemo(memo("a")); e.addMemo(memo("b"))
+        check(e.memos.size == 2, "adds memos")
+        check(e.queue.size == 2, "all-channel queue holds both")
+    }
+    // next advances, then the stream ends
+    run {
+        val e = RadioEngine()
+        e.addMemo(memo("a")); e.addMemo(memo("b"))
+        e.play(); e.next()
+        check(e.currentIndex == 1, "next advances")
+        e.next()
+        check(e.status == PlayerStatus.ENDED && !e.isPlaying, "the stream ends past the last memo")
+    }
+    // previous clears ended, clamps
+    run {
+        val e = RadioEngine()
+        e.addMemo(memo("a")); e.addMemo(memo("b"))
+        e.play(); e.next(); e.next()
+        e.previous()
+        check(e.currentIndex == 0 && e.status == PlayerStatus.PAUSED, "previous steps back + clears ended")
+        e.previous()
+        check(e.currentIndex == 0, "previous clamps at start")
+    }
+    // channels: posting follows the active station; queue filters; all aggregates
+    run {
+        val e = RadioEngine()
+        e.addMemo(memo("m1"))
+        e.createChannel("Music")
+        e.addMemo(memo("m2"))
+        check(e.channels.any { it.id == "music" }, "createChannel slugs an id")
+        e.setActiveChannel("music")
+        check(e.queue.map { it.id } == listOf("m2"), "queue follows the active station")
+        e.setActiveChannel(ALL_CHANNELS)
+        check(e.queue.size == 2, "'all' aggregates every station")
+    }
+    // shuffle: injected order, then restore
+    run {
+        val e = RadioEngine()
+        e.addMemo(memo("x")); e.addMemo(memo("y")); e.addMemo(memo("z"))
+        e.setShuffleOrder(listOf("z", "x", "y"))
+        check(e.queue.map { it.id } == listOf("z", "x", "y"), "shuffle order applied")
+        e.disableShuffle()
+        check(e.queue.map { it.id } == listOf("x", "y", "z"), "disable shuffle restores chronological")
+    }
+    // playback rate
+    run {
+        val e = RadioEngine()
+        check(e.playbackRate == 1.0, "default rate 1x")
+        e.cyclePlaybackRate(); check(e.playbackRate == 1.25, "rate 1.25x")
+        e.cyclePlaybackRate(); e.cyclePlaybackRate(); check(e.playbackRate == 2.0, "rate 2x")
+        e.cyclePlaybackRate(); check(e.playbackRate == 1.0, "rate wraps")
+    }
+    // transcript correction preserves machine text
+    run {
+        val e = RadioEngine()
+        e.addMemo(memo("d", transcript = "helo ther"))
+        val id = e.memos[0].id
+        e.correctTranscript(id, "  hello there  ")
+        check(e.memos[0].machineTranscript == "helo ther", "machine transcript preserved")
+        check(e.memos[0].displayTranscript == "hello there", "correction shown + trimmed")
+    }
+    // helpers
+    check(slugify("My Cool Station!") == "my-cool-station", "slugify")
+    check(uniqueChannelId("Main", listOf(Channel("main", "Main"))) == "main-2", "unique channel id")
+    check(formatDuration(7_000) == "0:07", "formatDuration seconds pad")
+    check(formatDuration(92_000) == "1:32", "formatDuration minutes")
+    check(formatDuration(-5) == "0:00", "formatDuration clamps negative")
+
+    println("✓ $passed AndroidCore checks passed")
+}

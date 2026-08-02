@@ -1,0 +1,39 @@
+import json
+
+with open("/private/tmp/claude-501/-Users-taha/c3e12dd6-0ab4-45de-b4da-dfe298bc3dd1/scratchpad/leads_data.json") as f:
+    rows = json.load(f)
+
+rows.sort(key=lambda r: r["estimated_fit_score"], reverse=True)
+
+lines = []
+lines.append("# Texas Bars — Test Batch 1 (pipeline validation, sanitized)\n")
+lines.append(
+    "Test run of the [website-pitch-pipeline](../../PIPELINE.md) Loop 1 (research) step, "
+    "used to validate the pipeline end-to-end. **Contact fields (phone / email) are "
+    "intentionally omitted from this committed copy** — the full sheet with contact info "
+    "was reviewed locally for Gate A and is not stored in git.\n"
+)
+lines.append("**Campaign:** texas-bars-batch-1 · **Geography:** Texas, US (statewide) · **Vertical:** bars · **Locale:** en · **Research date:** 2026-07-25\n")
+lines.append("| # | Business | City | Category | Website Status | Why Outdated | Fit Score | Source |")
+lines.append("|---|---|---|---|---|---|---|---|")
+
+for i, r in enumerate(rows, start=1):
+    source = r["maps_directory_url"]
+    lines.append(
+        f"| {i} | {r['business_name']} | {r['city']} | {r['category']} | "
+        f"{r['website_status']} | {r['why_outdated']} | {r['estimated_fit_score']} | [{r['city']} listing]({source}) |"
+    )
+
+lines.append("\n## Strengths / weaknesses detail\n")
+for i, r in enumerate(rows, start=1):
+    lines.append(f"### {i}. {r['business_name']} — {r['city']}, TX")
+    lines.append(f"- **Strengths:** {r['strengths']}")
+    lines.append(f"- **Weaknesses:** {r['weaknesses']}")
+    lines.append(f"- **Source:** {r['maps_directory_url']}")
+    lines.append("")
+
+out_path = "/private/tmp/claude-501/-Users-taha/c3e12dd6-0ab4-45de-b4da-dfe298bc3dd1/scratchpad/wpp-repo/leads/test-1/texas-bars-test-1.md"
+with open(out_path, "w") as f:
+    f.write("\n".join(lines))
+
+print("wrote", out_path)

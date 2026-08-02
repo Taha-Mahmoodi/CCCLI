@@ -1,0 +1,124 @@
+import * as THREE from "three";
+
+// Command-and-control chrome (from flight feedback): the genre's language
+// — thin frame brackets, a mono telemetry readout, a target reticle that
+// locks onto whatever the operator is considering — applied with
+// restraint so the sky stays the hero. Names keep the editorial voice;
+// DATA speaks mono.
+
+export interface Telemetry {
+  scale: string;
+  bodies: number;
+  notes: number;
+  fps: number;
+}
+
+/** One row in the contacts list — a body currently in the pan. */
+export interface Contact {
+  name: string;
+  tag: string;
+  color: string;
+  onClick: () => void;
+}
+
+export class Hud {
+  private telemetryEl: HTMLDivElement;
+  private reticleEl: HTMLDivElement;
+  private contactsEl: HTMLDivElement;
+  private statusEl: HTMLDivElement;
+  private lastStatus = "";
+  private v = new THREE.Vector3();
+
+  constructor() {
+    // viewport corner brackets
+    for (const corner of ["tl", "tr", "bl", "br"]) {
+      const el = document.createElement("div");
+      el.className = `yz-frame yz-frame-${corner}`;
+      document.body.appendChild(el);
+    }
+
+    this.telemetryEl = document.createElement("div");
+    this.telemetryEl.id = "yz-telemetry";
+    document.body.appendChild(this.telemetryEl);
+
+    this.reticleEl = document.createElement("div");
+    this.reticleEl.id = "yz-reticle";
+    this.reticleEl.innerHTML =
+      '<i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i>';
+    document.body.appendChild(this.reticleEl);
+
+    this.contactsEl = document.createElement("div");
+    this.contactsEl.id = "yz-contacts";
+    document.body.appendChild(this.contactsEl);
+
+    this.statusEl = document.createElement("div");
+    this.statusEl.id = "yz-status";
+    document.body.appendChild(this.statusEl);
+  }
+
+  /** Top-center mode readout — where the operator is, in C2 voice. */
+  setStatus(text: string): void {
+    if (text === this.lastStatus) return;
+    this.lastStatus = text;
+    this.statusEl.textContent = text;
+  }
+
+  /** Live list of bodies in the pan, most prominent first; click to fly. */
+  setContacts(items: Contact[]): void {
+    if (!items.length) {
+      this.contactsEl.style.opacity = "0";
+      this.contactsEl.style.pointerEvents = "none";
+      return;
+    }
+    this.contactsEl.style.opacity = "1";
+    this.contactsEl.style.pointerEvents = "auto";
+    this.contactsEl.innerHTML =
+      '<div class="yz-contacts-title">CONTACTS</div>' +
+      items
+        .map(
+          (c, i) => `
+      <div class="yz-contact" data-i="${i}">
+        <span class="yz-contact-dot" style="background:${c.color}"></span>
+        <span class="yz-contact-name">${c.name.toUpperCase()}</span>
+        <span class="yz-contact-tag">${c.tag}</span>
+      </div>`,
+        )
+        .join("");
+    this.contactsEl.querySelectorAll<HTMLElement>(".yz-contact").forEach((el) => {
+      el.onclick = () => items[Number(el.dataset.i)].onClick();
+    });
+  }
+
+  setTelemetry(t: Telemetry): void {
+    this.telemetryEl.textContent =
+      `SCALE ${t.scale.toUpperCase()}  ·  BODIES ${t.bodies}  ·  ` +
+      `NOTES ${t.notes.toLocaleString()}  ·  ${t.fps.toFixed(0)} FPS`;
+  }
+
+  /** Lock the reticle to a world-space sphere (center + radius). */
+  lockTo(center: THREE.Vector3, radius: number, camera: THREE.PerspectiveCamera): void {
+    this.v.copy(center).project(camera);
+    if (this.v.z > 1) {
+      this.release();
+      return;
+    }
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const x = (this.v.x * 0.5 + 0.5) * w;
+    const y = (-this.v.y * 0.5 + 0.5) * h;
+    const dist = camera.position.distanceTo(center);
+    const rPx = Math.min(
+      (radius / (dist * Math.tan((camera.fov * Math.PI) / 360))) * (h / 2) + 14,
+      Math.min(w, h) * 0.42,
+    );
+    this.reticleEl.style.opacity = "1";
+    this.reticleEl.style.transform =
+      `translate(${(x - rPx).toFixed(1)}px, ${(y - rPx).toFixed(1)}px)`;
+    this.reticleEl.style.width = `${(rPx * 2).toFixed(1)}px`;
+    this.reticleEl.style.height = `${(rPx * 2).toFixed(1)}px`;
+  }
+
+  release(): void {
+    this.reticleEl.style.opacity = "0";
+  }
+}

@@ -1,0 +1,37 @@
+import * as React from "react";
+
+const TONE = {
+  page: "bg-bg",
+  surface: "bg-surface",
+  tint: "bg-primary-tint",
+} as const;
+
+/**
+ * Full-width page section with a background tone and consistent vertical rhythm.
+ * Put a <Container> inside for the centred column.
+ */
+export function Section({
+  children,
+  className = "",
+  tone = "page",
+  id,
+  label,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  tone?: keyof typeof TONE;
+  id?: string;
+  label?: string;
+}) {
+  return (
+    <section
+      id={id}
+      aria-label={label}
+      className={["w-full py-20 max-md:py-14", TONE[tone], className]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {children}
+    </section>
+  );
+}

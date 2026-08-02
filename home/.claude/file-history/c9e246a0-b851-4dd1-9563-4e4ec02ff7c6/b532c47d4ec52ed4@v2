@@ -1,0 +1,30 @@
+## Description
+Slice 1 of the Third Eye World build: the Next.js 16 foundation, tooling, CI, and a health route. Every later slice builds on this. No product features yet.
+
+## Changes
+- Next.js 16 (App Router / RSC) + React 19 + TypeScript strict (`noUncheckedIndexedAccess`)
+- Tailwind CSS 4 + base design tokens + accessibility primitives (skip link, `.sr-only`, global reduced-motion reset)
+- ESLint (next config) + Prettier; Vitest (unit) + Playwright (e2e) wired
+- `/api/health` liveness route
+- GitHub Actions CI: type-check, lint, unit, build, e2e
+- Runtime deps: motion, gsap, next-auth (v5), prisma, @node-rs/argon2, zod
+- Clean, accessible holding page; removed Vercel-branded template assets
+- `turbopack.root` pinned (fixes a stray `~/package-lock.json` workspace-root inference); standalone output gated to Docker builds
+
+## Testing (sandbox)
+- [x] `npm run type-check` — pass
+- [x] `npm run lint` — pass
+- [x] `npm test` (Vitest) — pass
+- [x] `npm run build` — pass (normal + standalone)
+- [x] `npm run test:e2e` (Playwright) — pass (health endpoint)
+- [x] No console errors
+
+## Notes
+- Repo is private under Taha; this PR is opened from Said's account per the workflow. **Please review — no auto-merge.**
+- Design system + grounded content land in the Marketing slice (via the anti-slop design skill).
+
+## Checklist
+- [x] Follows folder/naming conventions in `docs/instructions/handling-protocols.md`
+- [x] Self-reviewed
+- [x] CI configured
+- [x] No breaking changes

@@ -1,0 +1,38 @@
+"use client";
+
+import * as React from "react";
+import { Check } from "lucide-react";
+
+export interface ChipProps {
+  children: React.ReactNode;
+  selected?: boolean;
+  onClick?: () => void;
+  /** Accessible name when the visible text needs more context for SR users. */
+  ariaLabel?: string;
+}
+
+/**
+ * Toggleable chip. Selection is conveyed by the solid teal fill AND a check
+ * icon plus aria-pressed — never by color alone (SPEC §10). v2: filled
+ * states instead of outlines; ≥48px tap target; tactile press.
+ */
+export function Chip({ children, selected, onClick, ariaLabel }: ChipProps) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={!!selected}
+      aria-label={ariaLabel}
+      className={[
+        "inline-flex min-h-12 items-center gap-1.5 rounded-pill px-4 font-body text-sm font-bold",
+        "transition-[background-color,color,transform] duration-200 active:scale-[0.98]",
+        selected
+          ? "bg-primary text-surface hover:bg-primary-dark"
+          : "bg-surface-sunk text-ink hover:bg-primary-tint",
+      ].join(" ")}
+    >
+      {selected ? <Check size={16} strokeWidth={2.5} aria-hidden="true" /> : null}
+      {children}
+    </button>
+  );
+}

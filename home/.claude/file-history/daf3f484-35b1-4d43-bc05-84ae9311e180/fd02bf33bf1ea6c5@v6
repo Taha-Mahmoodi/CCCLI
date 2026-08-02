@@ -1,0 +1,396 @@
+import * as THREE from "three";
+import {
+  CSS2DObject,
+  CSS2DRenderer,
+} from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import { CraftLayer } from "./craft";
+import { effectiveStage, isDust, labelOpacity, mockProjects } from "./data";
+import { buildGalaxy, layoutGalaxies, STAGE_PALETTE, type GalaxyNode } from "./galaxy";
+import { buildNoteSystem, tickNoteSystem, type NoteSystem } from "./notesystem";
+import { hidePanel, showPanel, showVaultPanel } from "./panel";
+import { createStage, softSprite } from "./scene";
+import { createStarfield, tickStarfield } from "./starfield";
+import { buildInfallStreams, tickStreams } from "./streams";
+import { buildVaultStars, type VaultStarLayer } from "./vaultstars";
+
+const NOW = Date.now();
+const stage = createStage();
+const { scene, camera, composer, controls, renderer } = stage;
+
+// CSS2D overlay for proximity-fade labels
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.setSize(window.innerWidth, window.innerHeight);
+labelRenderer.domElement.style.cssText =
+  "position:fixed;top:0;left:0;pointer-events:none;";
+document.body.appendChild(labelRenderer.domElement);
+window.addEventListener("resize", () =>
+  labelRenderer.setSize(window.innerWidth, window.innerHeight),
+);
+
+const stars = createStarfield();
+scene.add(stars);
+
+const sprite = softSprite();
+const nodes: GalaxyNode[] = mockProjects(NOW).map((p) =>
+  buildGalaxy(p, NOW, sprite),
+);
+layoutGalaxies(nodes);
+nodes.forEach((n) => scene.add(n.group));
+
+// black holes visibly pull matter from their nearest neighbors
+const streams = buildInfallStreams(nodes);
+streams.forEach((s) => scene.add(s.points));
+
+// shuttles between active projects + the AI-search vessel
+const craft = new CraftLayer(nodes, sprite);
+scene.add(craft.group);
+const activeNodes = nodes.filter(
+  (n) => !isDust(n.project, NOW) && effectiveStage(n.project, NOW) !== "nebula",
+);
+
+// galaxy name labels, proximity-faded at tier 1
+const galaxyLabels = new Map<string, CSS2DObject>();
+for (const n of nodes) {
+  const el = document.createElement("div");
+  el.className = "yz-label";
+  el.textContent = n.project.name;
+  const label = new CSS2DObject(el);
+  label.position.set(0, n.radius * 0.7 + 4, 0);
+  n.group.add(label);
+  galaxyLabels.set(n.project.id, label);
+}
+
+// --- tier state ---
+type Tier =
+  | { level: 1 }
+  | { level: 2; focus: GalaxyNode }
+  | { level: 3; focus: GalaxyNode; system: NoteSystem };
+let tier: Tier = { level: 1 };
+const vaultLayers = new Map<string, VaultStarLayer>();
+const noteSystems = new Map<string, NoteSystem>();
+const systemOpacity = new Map<string, number>();
+let frozenGalaxyId: string | null = null; // spin pauses while inside a system
+
+function layerFor(node: GalaxyNode): VaultStarLayer {
+  let layer = vaultLayers.get(node.project.id);
+  if (!layer) {
+    layer = buildVaultStars(node.project, NOW, node.radius, sprite);
+    node.group.add(layer.group);
+    vaultLayers.set(node.project.id, layer);
+  }
+  return layer;
+}
+
+// --- camera flights ---
+const easeInOut = (t: number) =>
+  t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+interface Flight {
+  from: THREE.Vector3;
+  to: THREE.Vector3;
+  lookFrom: THREE.Vector3;
+  lookTo: THREE.Vector3;
+  start: number;
+  ms: number;
+}
+let flight: Flight | null = null;
+const look = new THREE.Vector3();
+
+function flyTo(to: THREE.Vector3, lookTo: THREE.Vector3, ms: number): void {
+  flight = {
+    from: camera.position.clone(),
+    to,
+    lookFrom: controls.target.clone(),
+    lookTo,
+    start: performance.now(),
+    ms,
+  };
+  controls.enabled = false;
+}
+
+// --- tier transitions ---
+function enterGalaxy(node: GalaxyNode): void {
+  tier = { level: 2, focus: node };
+  controls.minDistance = 6;
+  layerFor(node).group.visible = true;
+  const p = node.group.position;
+  flyTo(
+    new THREE.Vector3(
+      p.x + node.radius * 1.9,
+      p.y + node.radius * 0.85,
+      p.z + node.radius * 1.9,
+    ),
+    p.clone(),
+    2600,
+  );
+  showPanel(node.project, NOW, "esc to zoom out");
+  renderer.domElement.style.cursor = "default";
+}
+
+function enterVault(node: GalaxyNode, layer: VaultStarLayer, idx: number): void {
+  frozenGalaxyId = node.project.id; // freeze spin so the system holds still
+  node.group.updateMatrixWorld(true);
+
+  const vault = layer.vaults[idx];
+  let system = noteSystems.get(vault.id);
+  if (!system) {
+    const pal = STAGE_PALETTE[effectiveStage(node.project, NOW)];
+    system = buildNoteSystem(vault, NOW, pal.core, sprite);
+    system.group.position.copy(layer.positions[idx]);
+    node.group.add(system.group);
+    systemOpacity.set(vault.id, 0);
+    noteSystems.set(vault.id, system);
+  }
+  system.group.visible = true;
+  tier = { level: 3, focus: node, system };
+
+  const starWorld = node.group.localToWorld(layer.positions[idx].clone());
+  controls.minDistance = 1.2;
+  flyTo(
+    starWorld.clone().add(new THREE.Vector3(4.2, 2.2, 4.2)),
+    starWorld,
+    2400,
+  );
+  showVaultPanel(vault, "esc to zoom out");
+}
+
+function exitOneTier(): void {
+  if (tier.level === 3) {
+    const node = tier.focus;
+    frozenGalaxyId = null;
+    tier = { level: 2, focus: node };
+    controls.minDistance = 6;
+    const p = node.group.position;
+    flyTo(
+      new THREE.Vector3(
+        p.x + node.radius * 1.9,
+        p.y + node.radius * 0.85,
+        p.z + node.radius * 1.9,
+      ),
+      p.clone(),
+      2200,
+    );
+    showPanel(node.project, NOW, "esc to zoom out");
+    return;
+  }
+  if (tier.level === 2) {
+    const from = tier.focus;
+    tier = { level: 1 };
+    hidePanel();
+    controls.minDistance = 18;
+    const p = from.group.position;
+    flyTo(new THREE.Vector3(p.x + 380, p.y + 260, p.z + 380), p.clone(), 2200);
+  }
+}
+
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") exitOneTier();
+});
+
+// --- picking ---
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2(2, 2); // offscreen until first move
+let hovered: GalaxyNode | null = null;
+let hoveredVaultIdx = -1;
+
+window.addEventListener("pointermove", (e) => {
+  pointer.set(
+    (e.clientX / window.innerWidth) * 2 - 1,
+    -(e.clientY / window.innerHeight) * 2 + 1,
+  );
+});
+window.addEventListener("click", () => {
+  if (flight) return;
+  if (tier.level === 1 && hovered) enterGalaxy(hovered);
+  else if (tier.level === 2 && hoveredVaultIdx >= 0)
+    enterVault(tier.focus, layerFor(tier.focus), hoveredVaultIdx);
+});
+
+function pick(): void {
+  if (flight || tier.level === 3) {
+    hovered = null;
+    hoveredVaultIdx = -1;
+    return;
+  }
+  raycaster.setFromCamera(pointer, camera);
+
+  if (tier.level === 1) {
+    const hits = raycaster.intersectObjects(
+      nodes.map((n) => n.hitSphere),
+      false,
+    );
+    const id = hits[0]?.object.userData.projectId as string | undefined;
+    const next = id ? nodes.find((n) => n.project.id === id) ?? null : null;
+    if (next !== hovered) {
+      hovered = next;
+      if (hovered) showPanel(hovered.project, NOW, "click to enter");
+      else hidePanel();
+      renderer.domElement.style.cursor = hovered ? "pointer" : "default";
+    }
+    return;
+  }
+
+  // tier 2: pick individual vault stars inside the focus galaxy
+  const layer = layerFor(tier.focus);
+  const hits = raycaster.intersectObjects(layer.hitSpheres, false);
+  const vid = hits[0]?.object.userData.vaultId as string | undefined;
+  const idx = vid ? layer.vaults.findIndex((v) => v.id === vid) : -1;
+  if (idx !== hoveredVaultIdx) {
+    hoveredVaultIdx = idx;
+    if (idx >= 0) showVaultPanel(layer.vaults[idx], "click to enter");
+    else showPanel(tier.focus.project, NOW, "esc to zoom out");
+    renderer.domElement.style.cursor = idx >= 0 ? "pointer" : "default";
+  }
+}
+
+// --- per-frame fades ---
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const wp = new THREE.Vector3();
+
+function updateFades(): void {
+  const level = tier.level;
+  const focusId = level >= 2 ? (tier as { focus: GalaxyNode }).focus.project.id : null;
+  const focusVaultId = level === 3 ? (tier as { system: NoteSystem }).system.vault.id : null;
+
+  for (const n of nodes) {
+    // non-focus galaxies recede to a dim backdrop (spec: never vanish);
+    // inside a system (tier 3) even the focus cloud drops to a whisper
+    const target =
+      focusId === null
+        ? 1
+        : n.project.id === focusId
+          ? level === 3 ? 0.06 : 0.22
+          : level === 3 ? 0.04 : 0.1;
+    n.cloudMat.opacity = lerp(n.cloudMat.opacity, target, 0.06);
+
+    const label = galaxyLabels.get(n.project.id)!;
+    let op = 0;
+    if (focusId === null) {
+      n.group.getWorldPosition(wp);
+      op = labelOpacity(camera.position.distanceTo(wp), 140, 700);
+    }
+    (label.element as HTMLElement).style.opacity = op.toFixed(2);
+  }
+
+  for (const [id, layer] of vaultLayers) {
+    const target = id !== focusId ? 0 : level === 3 ? 0.12 : 1;
+    layer.starMat.opacity = lerp(layer.starMat.opacity, target, 0.07);
+    layer.haloMat.opacity = lerp(layer.haloMat.opacity, target * 0.55, 0.07);
+    if (layer.starMat.opacity < 0.01 && id !== focusId) layer.group.visible = false;
+    for (const label of layer.labels) {
+      let op = 0;
+      if (id === focusId && level === 2) {
+        label.getWorldPosition(wp);
+        op = labelOpacity(camera.position.distanceTo(wp), 26, 90) *
+          layer.starMat.opacity;
+      }
+      (label.element as HTMLElement).style.opacity = op.toFixed(2);
+    }
+  }
+
+  for (const [vid, sys] of noteSystems) {
+    const target = vid === focusVaultId ? 1 : 0;
+    const cur = lerp(systemOpacity.get(vid) ?? 0, target, 0.08);
+    systemOpacity.set(vid, cur);
+    sys.setOpacity(cur);
+    for (const label of sys.labels) {
+      let op = 0;
+      if (vid === focusVaultId) {
+        label.getWorldPosition(wp);
+        op = labelOpacity(camera.position.distanceTo(wp), 3, 16) * cur;
+      }
+      (label.element as HTMLElement).style.opacity = op.toFixed(2);
+    }
+  }
+}
+
+// --- opening flight (spec: zoom into the biggest galaxy) ---
+const biggest = nodes.reduce((a, b) => (a.radius > b.radius ? a : b));
+const bp = biggest.group.position;
+camera.position.set(bp.x + 900, 420, bp.z + 900);
+controls.target.copy(bp);
+flyTo(
+  new THREE.Vector3(
+    bp.x + biggest.radius * 2.6,
+    biggest.radius * 1.1,
+    bp.z + biggest.radius * 2.6,
+  ),
+  bp.clone(),
+  4200,
+);
+
+// debug/verification hook — lets tooling drive tiers deterministically
+declare global {
+  interface Window {
+    __yz: {
+      list: () => object[];
+      enter: (name: string) => void;
+      enterVault: (name: string) => void;
+      exit: () => void;
+      aiSearch: () => void;
+      craftCount: () => number;
+    };
+  }
+}
+window.__yz = {
+  list: () =>
+    nodes.map((n) => ({
+      name: n.project.name,
+      stage: effectiveStage(n.project, NOW),
+      dust: isDust(n.project, NOW),
+      blackHole: n.project.milestoneMarked,
+    })),
+  enter: (name: string) => {
+    const n = nodes.find((x) => x.project.name === name);
+    if (n) enterGalaxy(n);
+  },
+  enterVault: (name: string) => {
+    if (tier.level < 2) return;
+    const node = (tier as { focus: GalaxyNode }).focus;
+    const layer = layerFor(node);
+    const idx = layer.vaults.findIndex((v) => v.name === name);
+    if (idx >= 0) enterVault(node, layer, idx);
+  },
+  exit: exitOneTier,
+  aiSearch: () => craft.startAiSearch(),
+  craftCount: () => craft.craftCount,
+};
+
+let lastFrame = performance.now();
+
+function animate(): void {
+  requestAnimationFrame(animate);
+  const nowMs = performance.now();
+  const dt = Math.min((nowMs - lastFrame) / 1000, 0.05);
+  lastFrame = nowMs;
+
+  if (flight) {
+    const t = Math.min((nowMs - flight.start) / flight.ms, 1);
+    const e = easeInOut(t);
+    camera.position.lerpVectors(flight.from, flight.to, e);
+    look.lerpVectors(flight.lookFrom, flight.lookTo, e);
+    camera.lookAt(look);
+    controls.target.copy(look);
+    if (t >= 1) {
+      flight = null;
+      controls.enabled = true;
+    }
+  }
+
+  tickStarfield(stars, nowMs / 1000);
+  tickStreams(streams, nowMs / 1000);
+  craft.update(dt, activeNodes);
+  for (const n of nodes) {
+    if (n.project.id !== frozenGalaxyId) n.group.rotation.y += n.spinSpeed * 0.016;
+  }
+  if (tier.level === 3) tickNoteSystem(tier.system, dt);
+
+  pick();
+  updateFades();
+
+  if (!flight) controls.update();
+  composer.render();
+  labelRenderer.render(scene, camera);
+}
+
+animate();

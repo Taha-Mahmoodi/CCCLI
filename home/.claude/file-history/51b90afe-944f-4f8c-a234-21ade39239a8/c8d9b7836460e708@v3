@@ -1,0 +1,39 @@
+import random
+
+W, H = 900, 340
+CX, CY = 450, 170
+FONT = 'SFMono-Regular, Menlo, Consolas, monospace'
+ORBITS = [
+    ('Chapters', '#8B7BFF', 150, 46, 18, 7),
+    ('Vectory',  '#3FBFA8', 225, 70, 25, 8),
+    ('Yildizim', '#E6A23C', 300, 94, 34, 9),
+]
+def ell(cx, cy, rx, ry):
+    return f"M {cx-rx},{cy} a {rx},{ry} 0 1,0 {2*rx},0 a {rx},{ry} 0 1,0 {-2*rx},0"
+
+p = [f'<svg width="{W}" height="{H}" viewBox="0 0 {W} {H}" xmlns="http://www.w3.org/2000/svg">']
+p.append('''<defs>
+  <radialGradient id="space" cx="50%" cy="50%" r="72%"><stop offset="0%" stop-color="#171a33"/><stop offset="100%" stop-color="#05060d"/></radialGradient>
+  <radialGradient id="starcore" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="#ffffff"/><stop offset="35%" stop-color="#b9b1ff"/><stop offset="70%" stop-color="#6C63FF"/><stop offset="100%" stop-color="#6C63FF" stop-opacity="0"/></radialGradient>
+  <filter id="glow" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+</defs>''')
+p.append(f'<rect width="{W}" height="{H}" fill="url(#space)"/>')
+rnd = random.Random(11)
+for _ in range(120):
+    x, y = rnd.uniform(0, W), rnd.uniform(0, H)
+    r = rnd.uniform(0.3, 1.0); o = rnd.uniform(0.08, 0.3); d = rnd.uniform(3, 6.5); b = rnd.uniform(0, 5)
+    p.append(f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.2f}" fill="#9fb0d6" opacity="{o:.2f}"><animate attributeName="opacity" values="{o:.2f};{o*0.3:.2f};{o:.2f}" dur="{d:.1f}s" begin="{b:.1f}s" repeatCount="indefinite"/></circle>')
+for _, color, rx, ry, _, _ in ORBITS:
+    p.append(f'<ellipse cx="{CX}" cy="{CY}" rx="{rx}" ry="{ry}" fill="none" stroke="#6C63FF" stroke-width="0.8" opacity="0.16"/>')
+p.append(f'<circle cx="{CX}" cy="{CY}" r="34" fill="url(#starcore)"/>')
+p.append(f'<circle cx="{CX}" cy="{CY}" r="7" fill="#ffffff" filter="url(#glow)"/>')
+for i, (name, color, rx, ry, dur, pr) in enumerate(ORBITS):
+    path = ell(CX, CY, rx, ry); begin = -(dur/3)*i
+    p.append(f'<g><g filter="url(#glow)"><circle cx="0" cy="0" r="{pr}" fill="{color}"/></g>'
+             f'<text x="{pr+6}" y="4" font-family="{FONT}" font-size="12" font-weight="600" fill="#c9d1d9">{name}</text>'
+             f'<animateMotion dur="{dur}s" begin="{begin}s" repeatCount="indefinite" path="{path}" rotate="0"/></g>')
+p.append(f'<text x="34" y="42" font-family="{FONT}" font-size="22" font-weight="700" fill="#ffffff">PIIIX</text>')
+p.append(f'<text x="34" y="63" font-family="{FONT}" font-size="12" fill="#8b8fa3">Planet III of star X &#183; building in the open</text>')
+p.append('</svg>')
+open('/private/tmp/claude-501/-Users-taha/51b90afe-944f-4f8c-a234-21ade39239a8/scratchpad/piiix_orbit.svg','w').write('\n'.join(p))
+print('orbit regenerated')

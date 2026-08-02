@@ -1,0 +1,236 @@
+# Backend Perf Tests — Ping Ingestion at Scale (PLAN 9.1)
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Close the one remaining piece of PLAN.md 9.1 — `docs/design.md`'s Non-functional section explicitly calls for a `tests/perf/` budget on the ping-ingestion path "given the 500+-rep target." "Backend unit/integration tests mirror source" (the other half of 9.1) is already true today — `tests/` already mirrors `app/`'s subpackages 1:1 (`auth`, `core`, `goals`, `pings`, `tasks`, `violations`, `visits`, `zones`) — so this task is purely additive: one new `tests/perf/` directory proving the ping-ingestion hot path (`record_ping`) and the dashboard's live-map read path (`list_latest_pings`) don't degrade as the pings table grows to realistic scale.
+
+**Why query-count equality, not absolute wall-clock timing, is the primary assertion:** design.md's own bar is "List endpoints ≤3 queries... indexed hot paths" — a query-COUNT claim, not a timing claim. Wall-clock assertions are inherently flaky across CI runners with different load; a fixed absolute query count (e.g. "exactly 2 queries") is also fragile, since SQLAlchemy/aiosqlite's exact statement count for a single ORM `commit()` (BEGIN/INSERT/COMMIT framing) is an implementation detail, not a contract this test should pin. The robust, meaningful claim is: **the query count for the same operation is IDENTICAL whether the table has 10 rows or 2000 rows.** That's the actual thing "indexed hot path" means — proven by running the identical operation against a small table and a realistically large one and asserting equal counts, not by hardcoding a number that happens to pass today.
+
+**Tech Stack:** Python 3.12, pytest, SQLAlchemy 2.0 async (same as every backend phase). No new dependencies — query counting uses `sqlalchemy.event.listen` on the async engine's `.sync_engine` (the documented way to instrument an `AsyncEngine` — `before_cursor_execute` fires on the real underlying sync engine even for async sessions), a stdlib/framework-native mechanism, not a new package.
+
+## Global Constraints
+
+- **New file only, no source changes anticipated.** `record_ping` (backend/app/pings/service.py:13-75) and `list_latest_pings` (same file:97-109) already use indexed lookups (`LocationPing` has `UniqueConstraint("tenant_id", "rep_id", "idempotency_key")` and `Index("ix_location_pings_tenant_rep_recorded_at", "tenant_id", "rep_id", "recorded_at")` — backend/app/pings/models.py:14-16) and `list_latest_pings` is structurally a single `select` with a window-function subquery, not N+1. If the perf test reveals these claims are false, that's a real finding to report, not something to plan around in advance — but the expectation going in is that this task is proving already-correct behavior, not fixing a regression.
+- **Seed data via direct bulk `LocationPing` construction (`db_session.add_all(...)` + one `commit()`), not 500+ individual `record_ping()` calls.** The thing under test is the hot-path operation's behavior against a large table, not the seeding process itself — seeding should be fast and not itself be mistaken for the measured operation. 500+ reps (design.md's stated scale target) × a handful of pings each is a reasonable "at scale" proxy (~2000 rows).
+- **No tenancy-filter installation needed for these tests** — they use a single `tenant_id` throughout (no cross-tenant scenario), so the ambient tenancy filter (installed separately in `create_app()`, irrelevant to a single-tenant unit-level service test) doesn't need to be wired in here, consistent with how `tests/pings/test_service.py`'s existing tests already call `record_ping`/`list_latest_pings` directly without installing it.
+- **Follow `tests/pings/test_service.py`'s existing conventions** — `pytestmark = pytest.mark.asyncio`, `db_session` fixture from `tests/conftest.py`, raw `uuid.uuid4()` for `rep_id` (no real `User` row needed — the existing tests already do this, confirming there's no enforced FK constraint blocking it at the SQLite test level).
+- Backend conventions unchanged: service layer owns logic (already true, nothing to add), `uv run pytest` + `uv run ruff check .` gates.
+
+---
+
+## File Structure
+
+```
+backend/
+  tests/
+    perf/
+      __init__.py
+      test_ping_ingestion_perf.py   # NEW
+```
+
+**Interfaces summary:** no new production interfaces — this task only adds tests against `app.pings.service.record_ping` and `app.pings.service.list_latest_pings`, both already fully specified (see `backend/app/pings/service.py`).
+
+---
+
+### Task 1: Ping ingestion and latest-pings perf tests
+
+**Files:**
+- Create: `backend/tests/perf/__init__.py` (empty, matches every other `tests/<subpackage>/__init__.py` in this codebase)
+- Create: `backend/tests/perf/test_ping_ingestion_perf.py`
+
+- [ ] **Step 1: Read the current files in full**
+
+Read `backend/app/pings/service.py`, `backend/app/pings/models.py`, `backend/tests/pings/test_service.py`, and `backend/tests/conftest.py` before writing anything.
+
+- [ ] **Step 2: Write `backend/tests/perf/__init__.py`**
+
+Empty file (matches every other test subpackage's `__init__.py` in this repo — check one, e.g. `backend/tests/pings/__init__.py`, to confirm it's genuinely empty, not boilerplate).
+
+- [ ] **Step 3: Write `backend/tests/perf/test_ping_ingestion_perf.py`**
+
+```python
+# backend/tests/perf/test_ping_ingestion_perf.py
+import uuid
+from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
+
+import pytest
+from sqlalchemy import event
+
+from app.pings.models import LocationPing
+from app.pings.service import list_latest_pings, record_ping
+
+pytestmark = pytest.mark.asyncio
+
+
+@contextmanager
+def count_queries(db_engine):
+    """Counts real SQL statements sent to the DB during the `with` block.
+
+    `before_cursor_execute` is the documented hook point for instrumenting
+    an AsyncEngine -- it fires on the real underlying sync engine
+    (`db_engine.sync_engine`) for every statement dispatched, including ones
+    issued through an async session.
+    """
+    count = 0
+
+    def _before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        nonlocal count
+        count += 1
+
+    event.listen(db_engine.sync_engine, "before_cursor_execute", _before_cursor_execute)
+    try:
+        yield lambda: count
+    finally:
+        event.remove(db_engine.sync_engine, "before_cursor_execute", _before_cursor_execute)
+
+
+async def _seed_pings(db_session, tenant_id: uuid.UUID, rep_ids: list[uuid.UUID], pings_per_rep: int) -> None:
+    now = datetime.now(timezone.utc)
+    pings = [
+        LocationPing(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            rep_id=rep_id,
+            recorded_at=now - timedelta(minutes=offset),
+            latitude=float(offset),
+            longitude=float(offset),
+            accuracy=None,
+            idempotency_key=f"seed-{rep_id}-{offset}",
+        )
+        for rep_id in rep_ids
+        for offset in range(pings_per_rep)
+    ]
+    db_session.add_all(pings)
+    await db_session.commit()
+
+
+async def test_record_ping_query_count_does_not_grow_with_table_size(db_session, db_engine):
+    tenant_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+
+    # Baseline: a near-empty table.
+    await _seed_pings(db_session, tenant_id, rep_ids=[uuid.uuid4() for _ in range(2)], pings_per_rep=1)
+    with count_queries(db_engine) as get_count:
+        await record_ping(
+            db_session, tenant_id=tenant_id, rep_id=uuid.uuid4(), recorded_at=now,
+            latitude=1.0, longitude=1.0, accuracy=None, idempotency_key="hot-path-small-table",
+        )
+    small_table_query_count = get_count()
+
+    # Scale up to the design doc's stated target: 500+ reps' worth of ping
+    # history (~2000 rows) in the SAME tenant/table.
+    await _seed_pings(
+        db_session, tenant_id, rep_ids=[uuid.uuid4() for _ in range(500)], pings_per_rep=4,
+    )
+    with count_queries(db_engine) as get_count:
+        await record_ping(
+            db_session, tenant_id=tenant_id, rep_id=uuid.uuid4(), recorded_at=now,
+            latitude=2.0, longitude=2.0, accuracy=None, idempotency_key="hot-path-large-table",
+        )
+    large_table_query_count = get_count()
+
+    # The whole point of the composite index on (tenant_id, rep_id,
+    # idempotency_key)/(tenant_id, rep_id, recorded_at): the same operation
+    # issues the same number of queries regardless of table size. If this
+    # ever regresses to a table scan, this count would grow with row count.
+    assert large_table_query_count == small_table_query_count
+
+
+async def test_record_ping_idempotent_replay_does_not_touch_more_queries_at_scale(db_session, db_engine):
+    tenant_id = uuid.uuid4()
+    rep_id = uuid.uuid4()
+    now = datetime.now(timezone.utc)
+
+    first, first_created = await record_ping(
+        db_session, tenant_id=tenant_id, rep_id=rep_id, recorded_at=now,
+        latitude=1.0, longitude=1.0, accuracy=None, idempotency_key="replay-key",
+    )
+    assert first_created is True
+
+    with count_queries(db_engine) as get_count:
+        second, second_created = await record_ping(
+            db_session, tenant_id=tenant_id, rep_id=rep_id, recorded_at=now,
+            latitude=1.0, longitude=1.0, accuracy=None, idempotency_key="replay-key",
+        )
+    replay_query_count_small = get_count()
+
+    assert second_created is False
+    assert second.id == first.id
+
+    await _seed_pings(
+        db_session, tenant_id, rep_ids=[uuid.uuid4() for _ in range(500)], pings_per_rep=4,
+    )
+
+    with count_queries(db_engine) as get_count:
+        third, third_created = await record_ping(
+            db_session, tenant_id=tenant_id, rep_id=rep_id, recorded_at=now,
+            latitude=1.0, longitude=1.0, accuracy=None, idempotency_key="replay-key",
+        )
+    replay_query_count_large = get_count()
+
+    assert third_created is False
+    assert third.id == first.id
+    # The idempotent-replay path (found -> return immediately) is a single
+    # SELECT with no insert -- proven to stay a single query at scale too,
+    # not just when the table is empty.
+    assert replay_query_count_large == replay_query_count_small
+
+
+async def test_list_latest_pings_is_a_single_query_and_correct_at_500_reps(db_session, db_engine):
+    tenant_id = uuid.uuid4()
+    rep_ids = [uuid.uuid4() for _ in range(500)]
+    # 4 pings per rep (2000 rows), offsets 0..3 minutes back from "now" --
+    # offset 0 is each rep's most recent ping (see _seed_pings: recorded_at
+    # = now - offset minutes, latitude = offset), so the correctness
+    # assertion below can check the returned row is genuinely the latest
+    # one, not an arbitrary one.
+    await _seed_pings(db_session, tenant_id, rep_ids, pings_per_rep=4)
+
+    with count_queries(db_engine) as get_count:
+        latest = await list_latest_pings(db_session)
+
+    # list_latest_pings is one ROW_NUMBER()-windowed SELECT -- structurally
+    # a single statement regardless of how many reps/rows exist.
+    assert get_count() == 1
+    assert len(latest) == len(rep_ids)
+
+    returned_by_rep = {ping.rep_id: ping for ping in latest}
+    for rep_id in rep_ids:
+        # offset 0 (the most recent seeded ping) has latitude == 0.0 --
+        # confirms the window function actually picked the latest row per
+        # rep, not just returned *a* row per rep.
+        assert returned_by_rep[rep_id].latitude == 0.0
+```
+
+- [ ] **Step 4: Run the new tests**
+
+Run: `cd backend && uv run pytest tests/perf/ -v`
+Expected: all 3 tests pass. Note the wall-clock time pytest reports for this run (it will be visibly slower than other test files due to the ~2000-4000 row inserts across the 3 tests combined) — sanity-check it's still on the order of a few seconds, not tens of seconds; if it's unexpectedly slow, that's worth investigating before moving on (could indicate the bulk insert itself isn't as fast as assumed, which would be a real finding).
+
+- [ ] **Step 5: Run the full suite and ruff**
+
+Run: `cd backend && uv run pytest -q && uv run ruff check .`
+Expected: all tests pass (261/261 — 258 pre-existing + 3 new), ruff clean.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cd /Users/taha/Documents/atlas-fieldforce
+git add backend/tests/perf/
+git commit -m "test(backend): perf budget for ping ingestion at the 500+-rep scale target
+
+Closes the remaining half of PLAN 9.1 (source/test mirroring was
+already true). Proves record_ping and list_latest_pings stay O(1)
+query count as the pings table scales from empty to ~2000 rows,
+matching design.md's 'indexed hot paths' bar via query-count equality
+rather than flaky wall-clock timing.
+
+Refs PLAN 9.1"
+```
+
+---
+
+## After this plan — controller verification (not delegated)
+
+Run `cd backend && uv run pytest -q && uv run ruff check .` one more time from the merged state, tick PLAN.md 9.1, update PROGRESS.md, then proceed directly to Phase 10 (deployability: Dockerfile/compose, README quickstart, the punch list of what needs real customer/infra input) per the standing "move on, don't stop until v1 is tested and deployable" instruction — this is the last item before that phase.

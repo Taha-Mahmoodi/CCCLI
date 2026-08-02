@@ -1,0 +1,9 @@
+{
+  "id": "5",
+  "subject": "Phase 4: Build &amp; smoke app containers",
+  "description": "Build 4 app images (web with correct NEXT_PUBLIC_* build args). Bring up api/web/api-staging/web-staging + Caddy on temp port. Gate: all 4 /api/health/ready ok against restored DB, web renders seeded content.",
+  "activeForm": "Building and smoke-testing app containers",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

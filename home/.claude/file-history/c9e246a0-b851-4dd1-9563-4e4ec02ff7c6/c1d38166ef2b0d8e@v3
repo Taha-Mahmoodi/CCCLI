@@ -1,0 +1,167 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  BLIND_TRAVELER
+  FAMILY
+  CLINICIAN
+  ENGINEER
+  SUPPORTER
+}
+
+enum WaitStatus {
+  PENDING
+  CONTACTED
+  ENROLLED
+}
+
+model User {
+  id              String               @id @default(cuid())
+  email           String               @unique
+  passwordHash    String
+  role            Role
+  emailVerifiedAt DateTime?
+  createdAt       DateTime             @default(now())
+  profile         Profile?
+  reactions       Reaction[]
+  waitlist        WaitlistEntry?
+  contributor     ContributorInterest?
+  updates         Update[]
+  posts           Post[]               @relation("UserPosts")
+  comments        Comment[]            @relation("UserComments")
+  postLikes       PostLike[]           @relation("UserPostLikes")
+  following       Follow[]             @relation("Following")
+  followers       Follow[]             @relation("Followers")
+  notifications   Notification[]       @relation("NotifRecipient")
+  actedNotifs     Notification[]       @relation("NotifActor")
+}
+
+model Profile {
+  userId      String @id
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName String
+  bio         String?
+  region      String?
+  // { reducedMotion: boolean, highContrast: boolean, textScale: number }
+  a11yPrefs   Json   @default("{\"reducedMotion\":false,\"highContrast\":false,\"textScale\":1}")
+}
+
+model Update {
+  id          String     @id @default(cuid())
+  authorId    String?
+  author      User?      @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  title       String
+  body        String
+  publishedAt DateTime   @default(now())
+  reactions   Reaction[]
+}
+
+model Reaction {
+  id       String @id @default(cuid())
+  updateId String
+  update   Update @relation(fields: [updateId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind     String
+
+  @@unique([updateId, userId])
+}
+
+model WaitlistEntry {
+  id            String     @id @default(cuid())
+  userId        String     @unique
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role          Role
+  region        String?
+  deviceContext String?
+  status        WaitStatus @default(PENDING)
+  createdAt     DateTime   @default(now())
+}
+
+model ContributorInterest {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  githubUrl  String?
+  focusAreas String[]
+  note       String?
+  createdAt  DateTime @default(now())
+}
+
+// ---- Social platform ----
+
+enum NotifType {
+  FOLLOW
+  COMMENT
+  LIKE
+}
+
+model Post {
+  id            String         @id @default(cuid())
+  authorId      String
+  author        User           @relation("UserPosts", fields: [authorId], references: [id], onDelete: Cascade)
+  body          String
+  createdAt     DateTime       @default(now())
+  comments      Comment[]
+  likes         PostLike[]
+  notifications Notification[]
+
+  @@index([createdAt])
+  @@index([authorId, createdAt])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation("UserComments", fields: [authorId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+
+  @@index([postId, createdAt])
+}
+
+model PostLike {
+  id     String @id @default(cuid())
+  postId String
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId String
+  user   User   @relation("UserPostLikes", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+}
+
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  follower    User     @relation("Following", fields: [followerId], references: [id], onDelete: Cascade)
+  followingId String
+  following   User     @relation("Followers", fields: [followingId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@unique([followerId, followingId])
+  @@index([followingId])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation("NotifRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actorId   String
+  actor     User      @relation("NotifActor", fields: [actorId], references: [id], onDelete: Cascade)
+  type      NotifType
+  postId    String?
+  post      Post?     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  read      Boolean   @default(false)
+  createdAt DateTime  @default(now())
+
+  @@index([userId, read])
+  @@index([userId, createdAt])
+}

@@ -1,0 +1,8 @@
+{
+  "id": "15",
+  "subject": "Site changelog feature",
+  "description": "loops/09-rerun.md already tracks what changed per re-run internally. Surface it as a small public transparency artifact.",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

@@ -1,0 +1,36 @@
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import async_sessionmaker
+
+import app.seed_demo_data as seed_module
+from app.auth.models import User
+
+
+async def _patch_seed_engine(monkeypatch, db_engine):
+    session_maker = async_sessionmaker(db_engine, expire_on_commit=False)
+    monkeypatch.setattr(seed_module, "async_session_maker", session_maker)
+
+
+async def test_seed_creates_demo_tenant_data(db_session, db_engine, monkeypatch):
+    await _patch_seed_engine(monkeypatch, db_engine)
+
+    await seed_module.seed()
+
+    result = await db_session.execute(
+        select(User).where(User.tenant_id == seed_module.DEMO_TENANT_ID)
+    )
+    users = result.scalars().all()
+    assert len(users) == 4
+    emails = {u.email for u in users}
+    assert seed_module.DEMO_ADMIN_EMAIL in emails
+
+
+async def test_seed_is_idempotent(db_session, db_engine, monkeypatch):
+    await _patch_seed_engine(monkeypatch, db_engine)
+
+    await seed_module.seed()
+    await seed_module.seed()
+
+    result = await db_session.execute(
+        select(User).where(User.tenant_id == seed_module.DEMO_TENANT_ID)
+    )
+    assert len(result.scalars().all()) == 4

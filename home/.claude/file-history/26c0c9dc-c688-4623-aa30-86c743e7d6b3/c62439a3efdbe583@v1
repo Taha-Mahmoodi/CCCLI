@@ -1,0 +1,168 @@
+# Loop 7 — Verify
+
+**Goal:** confirm with your eyes and with a real submission that the live site renders,
+ranks, and converts. Then write down honestly what this run produced.
+
+**Input:** the live URL, `FUNNEL.md`, `redirects.csv`, `SKIPS.md`.
+
+**Output:** `runs/<slug>/REPORT.md` with a confidence grade, and `shots/live/`.
+
+---
+
+## Verify the live URL, never the local build
+
+Local and live differ in ways that matter: absolute paths, MIME types, compression,
+cache headers, TLS, redirects, and whatever the host rewrites. `HTTP 200` is not "it
+renders", and a form that worked locally can post to nowhere in production.
+
+Two agents run in parallel: `site-verifier` for the checklist, `funnel-verifier` for
+the conversion path. The conductor looks at the screenshots afterward, because an
+automated pass and a page that looks wrong are compatible states.
+
+## The checklist — 24 checks
+
+### Renders
+
+1. **360 / 768 / 1440**, every template. Nothing overflows, collapses, or overlaps.
+   Screenshot each into `shots/live/`
+2. **Both color modes.** Both designed. Neither an inversion artifact
+3. **Reduced motion.** Forced on, still a designed page
+4. **Fallback.** Block WebGL and block JS. The page still carries its content
+5. **320px and 200% zoom.** Both `§17` requirements, both break display type
+
+### Accessible (`§17`, hard)
+
+6. **Keyboard.** Tab everything, including the form and any modal. Visible focus, no
+   traps, skip link works, focus returns after a dialog closes
+7. **axe.** Zero violations, not zero criticals
+8. **Contrast.** Body text at 4.5:1 measured on the live render, including over
+   imagery, translucency, and after any grade or grain
+9. **Alt text.** Every image, descriptive, never a filename
+10. **Forms.** Labels associated, errors announced and linked to their field, no
+    color-only signaling
+
+### Fast (`§19`)
+
+11. **Lighthouse mobile.** Record all four scores
+12. **Core Web Vitals** on a throttled mid-range profile: LCP, INP, CLS against the
+    Gate B2 budget
+13. **Shell budget.** Under 100KB, heavy layer deferred and out of the LCP path
+14. **No layout shift after paint**, cookie banner included
+15. **Console.** Zero errors on load and after a full scroll
+
+### Found (`§13`, `SEO.md`)
+
+16. **`robots.txt`** allows what should be crawled, and there is no production
+    `noindex`. Check the live output, not the template
+17. **Sitemap** lists live canonical URLs only, and is referenced from `robots.txt`
+18. **One hostname, one protocol, one trailing-slash rule.** `http` redirects, apex
+    and `www` resolve deliberately, single hop
+19. **Redirects.** Sample the map, and verify **all** of the top-20-by-traffic rows.
+    301, single hop, correct target
+20. **Meta.** Titles and descriptions unique, present, in length. One `h1` per page,
+    heading order intact. Canonicals absolute and self-referential
+21. **Structured data** validates and matches visible content
+
+### Converts (`§18`, hard)
+
+22. **The funnel, end to end.** Run by `funnel-verifier`, and it is the check this
+    loop exists for. See below
+23. **Unfurl.** Paste the URL into a real client and look at the preview. Tags being
+    present is not the preview rendering
+24. **Every link.** Click all of them. Zero 404s, zero dead anchors, outbound links go
+    where they claim
+
+### Concrete starting points
+
+```bash
+mkdir -p runs/<slug>/shots/live
+for w in 360 768 1440; do
+  chrome --headless --window-size=$w,1400 --screenshot=runs/<slug>/shots/live/$w.png "<live-url>"
+done
+npx @axe-core/cli "<live-url>"
+npx lighthouse "<live-url>" --preset=desktop --output=json --output-path=runs/<slug>/lh-desktop.json --quiet
+npx lighthouse "<live-url>" --output=json --output-path=runs/<slug>/lh-mobile.json --quiet
+npx lychee --no-progress "<live-url>"
+curl -sI "https://<domain>" | head -20
+curl -s "https://<domain>/robots.txt"
+```
+
+## The funnel proof (`§18`, hard)
+
+`funnel-verifier` runs all of it, live, per [`MEASURE.md`](../MEASURE.md) §4:
+
+1. Load with consent **rejected**. Confirm no analytics request goes out (`§16`)
+2. Accept. Confirm exactly one `page_view`
+3. Click the primary CTA. Confirm one `cta_click` with the right location property
+4. Focus the form. Confirm one `form_start`
+5. **Submit a real, clearly labeled test lead**
+6. Confirm the success state renders, and `form_submit` fires **once**
+7. Confirm the lead arrives at every destination: CRM record, inbox, channel
+8. Confirm the autoresponder sends, and check it did not land in spam
+9. Confirm the conversion appears in the analytics property, not just the network tab
+10. Repeat on mobile and in the second-most-used browser
+11. Trigger a validation error deliberately; confirm `form_error` fires with a reason
+12. Delete or label the test lead so sales does not call it
+
+**Steps 7 and 8 cannot be completed from a browser.** The agent reports them as
+partial and the conductor confirms the far end with the client. An agent watching a
+success message is not evidence a lead arrived, and claiming otherwise is the exact
+failure `§18` exists to prevent.
+
+Booking flow instead of a form? Book a real slot, confirm it appears on the calendar,
+confirm the confirmation email, then cancel it.
+
+## Then look at the screenshots yourself
+
+The conductor does this, not an agent. Open every shot in `shots/live/` and look.
+Automated checks pass on pages that are visibly wrong: a hero cropped at 768, a nav
+that wraps into two lines, a CTA below the fold on a laptop, a product screenshot too
+small to read.
+
+## Handle failures
+
+Fix what is fixable now, re-verify, and record both states. Log the rest with what it
+would take to fix. **Never report a fix you did not confirm**, and never paper over a
+failure with a caveat. If check 7 found axe violations, that goes on the first page of
+the report, not in a footnote.
+
+Two failures stop everything and get fixed before the run continues:
+
+- A production `noindex` or a `Disallow: /` — the site is invisible and nobody will
+  notice for weeks
+- A form that does not deliver — the site looks fine and every lead is falling on the
+  floor
+
+## The report
+
+`runs/<slug>/REPORT.md` opens with the grade and its reason, then the failures, then
+everything else.
+
+| Grade | Means |
+|---|---|
+| **A** | Full pipeline. Claims substantiated, positioning derived from real market and customer evidence, design validated at both gates, funnel proven live, instrumented and measurable |
+| **B** | Core intact, some validation skipped. Strategy or design review thinner than ideal. Everything hard still held |
+| **C** | Substance skipped — no VOC, no competitor work, or no real copy pass. A good-looking site making the client's own claims in the client's own words |
+| **D** | Multiple substance skips, or shipped without measurement. A redesign whose effect nobody will ever know. Say exactly that |
+
+Read `SKIPS.md` and grade against it. A **D** stated plainly is more useful than an
+**A** claimed falsely.
+
+Then: the live URL, all 24 checks with results, the screenshots, the Lighthouse and
+CWV numbers, the funnel proof with the two partial steps flagged, the redirect
+verification, what was skipped and what it cost, the rollback command, every claim you
+flagged that the client overruled (`COMPLIANCE.md §8`), the baseline for Loop 8, and
+what would move the grade up.
+
+## Schedule Loop 8
+
+Before closing this loop, agree the date. Two weeks minimum for a directional read,
+four to six for anything actionable, longer on a low-traffic B2B site. Put it in the
+report. A launch with no scheduled read is a launch nobody learns from.
+
+## Skip cost
+
+Skipping verification means the first person to find the broken form is a customer, and
+the first person to notice the `noindex` is whoever wonders why traffic went to zero.
+
+Skipping the funnel proof is not available (`§18`).

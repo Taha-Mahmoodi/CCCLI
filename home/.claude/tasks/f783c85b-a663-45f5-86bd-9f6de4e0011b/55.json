@@ -1,0 +1,8 @@
+{
+  "id": "55",
+  "subject": "PR #67 (Slice 2b-3) awaiting owner review",
+  "description": "PR #67 from sadqi, base feat/ui-editor-2b2, CI monitoring. Awaiting Taha's review. Note: filed backend issue #66 (updateNote lost-update race) as tracked follow-up.",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}

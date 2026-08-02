@@ -1,0 +1,60 @@
+import { auth } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { ReactionButton } from "@/components/app/reaction-button";
+
+export const metadata = { title: "Updates" };
+
+export default async function FeedPage() {
+  const session = await auth();
+  const userId = session!.user.id;
+
+  const updates = await prisma.update.findMany({
+    orderBy: { publishedAt: "desc" },
+    include: {
+      _count: { select: { reactions: true } },
+      reactions: { where: { userId }, select: { id: true } },
+    },
+  });
+
+  return (
+    <div className="mx-auto max-w-2xl px-5 py-12">
+      <h1 className="text-2xl font-semibold tracking-tight">Updates</h1>
+      <p className="mt-2 text-muted">Honest notes from the build.</p>
+
+      {updates.length === 0 ? (
+        <p className="mt-10 rounded-xl border border-border bg-surface p-6 text-muted">
+          No updates yet. Check back soon.
+        </p>
+      ) : (
+        <ul className="mt-8 flex flex-col gap-6">
+          {updates.map((u) => (
+            <li
+              key={u.id}
+              className="rounded-2xl border border-border bg-surface p-6"
+            >
+              <h2 className="text-lg font-semibold text-fg">{u.title}</h2>
+              <time
+                dateTime={u.publishedAt.toISOString()}
+                className="mt-1 block text-xs text-muted"
+              >
+                {u.publishedAt.toLocaleDateString("en-US", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+              </time>
+              <p className="mt-3 leading-relaxed text-muted">{u.body}</p>
+              <div className="mt-4">
+                <ReactionButton
+                  updateId={u.id}
+                  initialCount={u._count.reactions}
+                  initialReacted={u.reactions.length > 0}
+                />
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}

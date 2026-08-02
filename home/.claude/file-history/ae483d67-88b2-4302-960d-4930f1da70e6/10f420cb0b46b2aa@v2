@@ -1,0 +1,48 @@
+# STATE — live progress ledger
+
+> **Read this first on any resume** (after an outage, a new session, or context loss). It is the single source of live truth. If it disagrees with `git status`, trust the tree and correct this file. See `docs/handling-protocols.md` §2–3.
+
+_Last updated: 2026-07-19_
+
+## Where we are
+
+- **Repo:** `~/Documents/third-eye-world-mono` (durable clone — never work from the scratchpad).
+- **Branches:** `dev` (default, integration) · `prod` (production). Feature branches off `dev`.
+- **Current phase:** Governance foundation → Slice 0 scaffold.
+- **Current branch:** `docs/governance-foundation`.
+
+## Next action
+
+1. ~~Set up `dev`/`prod` branch model~~ ✅
+2. ~~Write governance docs (`docs/brief.md`, `implementation.md`, `handling-protocols.md`, `github-workflow.md`) + this ledger~~ ✅
+3. **→ PR the governance docs into `dev`, review, merge, promote to `prod`.**
+4. Scaffold `apps/web` (Next.js PWA + Tailwind + shadcn/ui + gsap + anime.js), add `.github/workflows/ci.yml`. This installs the item-5 tooling.
+5. Build **Slice 0** — record → radio timeline → 3-route controls, screen-reader-correct.
+
+## Slice progress
+
+| Slice | Scope | Status |
+|---|---|---|
+| — | Governance docs + branch model | 🟡 in progress (docs written, not yet merged) |
+| 0 | Web walking skeleton: record → radio → 3-route controls | ⬜ not started |
+| 1 | Transcripts + channels + search | ⬜ |
+| 2 | Auth + accessible moderator console | ⬜ |
+| 3 | Backend + Whisper (LID→ASR) + Piper | ⬜ |
+| 4 | Native iOS (SwiftUI) | ⬜ |
+| 5 | Native Android (Compose) | ⬜ |
+| 6 | E2EE DMs (libsignal) | ⬜ |
+| 7 | IVR dial-in + data-saver | ⬜ |
+
+## In-flight / at-risk work
+
+_None. Tree is compile-clean; all work is committed._
+
+## Open issues / blockers
+
+_None yet._
+
+## Decisions log (why, not what)
+
+- **Branch model:** renamed original `main` → `prod`, created `dev` as default. Exactly two long-lived branches per the workflow spec. (2026-07-19)
+- **Docs in `docs/`, ledger at root** — ledger is root-level for maximum discoverability on resume.
+- **Identity:** commits authored as **Taha-Mahmoodi** (this is Taha's repo). The "commit credited to Said" pattern applies **only** to the paper repo, never here.

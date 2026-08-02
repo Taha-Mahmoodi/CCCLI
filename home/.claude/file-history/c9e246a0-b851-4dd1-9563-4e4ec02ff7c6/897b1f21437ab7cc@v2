@@ -1,0 +1,49 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { UserPlus, UserMinus } from "@phosphor-icons/react";
+import { toggleFollow } from "@/actions/follow";
+
+export function FollowButton({
+  targetId,
+  initialFollowing,
+}: {
+  targetId: string;
+  initialFollowing: boolean;
+}) {
+  const [following, setFollowing] = useState(initialFollowing);
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
+
+  const onClick = () =>
+    startTransition(async () => {
+      const res = await toggleFollow(targetId);
+      if ("following" in res) {
+        setFollowing(res.following);
+        // Refresh server-rendered follower/following counts.
+        router.refresh();
+      }
+    });
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={pending}
+      aria-pressed={following}
+      className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-medium transition-colors disabled:opacity-60 ${
+        following
+          ? "border border-border text-fg hover:border-accent"
+          : "bg-accent text-accent-fg"
+      }`}
+    >
+      {following ? (
+        <UserMinus size={16} aria-hidden />
+      ) : (
+        <UserPlus size={16} aria-hidden />
+      )}
+      {following ? "Following" : "Follow"}
+    </button>
+  );
+}

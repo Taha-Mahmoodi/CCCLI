@@ -1,0 +1,8 @@
+{
+  "id": "63",
+  "subject": "Next: Slice 3 Search",
+  "description": "Search overlay (⌘K-style, not a page). Backend has hybrid keyword+semantic search — read 2026-07-11-search-design.md + server search routes first. Then Slices 4-7 (Team/Vault-settings/Admin/Settings + ⌘K).",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}

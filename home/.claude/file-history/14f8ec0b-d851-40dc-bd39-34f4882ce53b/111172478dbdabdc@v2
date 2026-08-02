@@ -1,0 +1,269 @@
+# Third Eye Kit — Technical Specification
+
+Complete engineering documentation for the Third Eye Kit project.
+
+> **This document is the authoritative spec.** Every claim here is tagged with implementation status: [IMPLEMENTED], [IN DEV], or [PLANNED]. Treat only [IMPLEMENTED] features as shipped; everything else is roadmap.
+
+---
+
+## Table of Contents
+
+1. [Project Identity & Core Mission](#1-project-identity--core-mission)
+2. [System Architecture & Decentralization Logic](#2-system-architecture--decentralization-logic)
+3. [Safety-Critical Specifications & Fault Management](#3-safety-critical-specifications--fault-management)
+4. [The Validation Debt Ledger](#4-the-validation-debt-ledger)
+
+---
+
+## 1. Project Identity & Core Mission
+
+### What Is Third Eye Kit?
+
+Third Eye Kit is a body-distributed sensing system that gives a blind or low-vision wearer **real-time, non-visual awareness** of obstacles above and below their line of travel, and gives their family a way to locate them — over cellular infrastructure that may be as thin as a single bar of 2G signal.
+
+It is not a laboratory demonstrator. It was designed, built, and field-tested against a specific adversary that most assistive-technology roadmaps quietly assume away: **the Infrastructure Gradient**.
+
+### The Infrastructure Gradient
+
+The "Infrastructure Gradient" is the compounding set of environmental deficits that make first-world assistive hardware inapplicable in the environments that need it most. Third Eye Kit treats the gradient as a **first-class design constraint**, not an edge case:
+
+#### Intermittent Power
+- No assumption of nightly charging or stable grid supply
+- The system must degrade predictably as voltage sags rather than behave erratically
+- Power budget: designed to run 4–6 hours on commodity alkaline cells per node
+
+#### Unmapped Terrain
+- No dependence on pre-surveyed maps, indoor positioning beacons, or curated navigation data
+- Ranging is done live and locally via ultrasonic time-of-flight
+- No cellular triangulation or assisted-GPS dependency
+
+#### High Ambient Noise
+- Open-air markets and busy streets defeat audio-only feedback
+- Feedback is therefore **redundant across modalities** (haptic + local audio)
+- No single channel is a single point of failure
+
+#### Economic Barriers
+- A refreshable Braille display retails from roughly **$3,500 to $15,000** — that price point is not a product, it is an exclusion
+- Third Eye Kit targets a **$50–100 manufacturing cost** using commodity, regionally-sourceable components
+
+### Design Philosophy
+
+Three principles run through every layer of the system:
+
+#### 1. Frugal Engineering
+Prefer a $5 commodity sensor with a known failure mode over a $500 integrated module with an opaque one. **Buildability and reparability in-region outrank feature count.**
+
+#### 2. Hardware–Software Isolation
+The subsystems with hard real-time deadlines are physically separated from the subsystems with soft, multi-second deadlines. Latency cannot leak across a boundary that does not share a processor.
+
+#### 3. Context-Bounded Design
+The system declares, explicitly and in writing, the envelope it is validated inside — and refuses to imply guarantees outside it.
+
+---
+
+## 2. System Architecture & Decentralization Logic
+
+### 2.1 Node Topology
+
+Third Eye Kit is a **four-node decentralized system**. Each node is an independent microcontroller with its own sensing responsibility, its own feedback actuators, and — critically — its own execution loop.
+
+```
+                         ┌─────────────────────────────────────────────┐
+                         │              THE WEARER (user)               │
+                         └─────────────────────────────────────────────┘
+                                            ▲
+        ┌───────────────────────┬───────────┴──────────┬───────────────────────┐
+        │                       │                      │                       │
+┌───────┴────────┐    ┌─────────┴────────┐   ┌─────────┴────────┐   ┌──────────┴─────────┐
+│  NODE A        │    │  NODE B          │   │  NODE C          │   │  NODE D            │
+│  Upper Ranging │    │  Lower Ranging   │   │  Manual/Tactile  │   │  Location Telemetry│
+│  (Glasses)     │    │  (Shoes, L + R)  │   │  (Gloves)        │   │  (Belt/Pack)       │
+├────────────────┤    ├──────────────────┤   ├──────────────────┤   ├────────────────────┤
+│ Ultrasonic     │    │ Ultrasonic ×2    │   │ Ultrasonic       │   │ GPS  (NEO-6M)      │
+│ Local audio    │    │ Haptic (vib) ×2  │   │ Low-intensity    │   │ GSM  (SIM800-class)│
+│ (headphone)    │    │ LDR + LED        │   │ haptic           │   │ 2G SIM             │
+│                │    │ (passive vis.)   │   │                  │   │                    │
+│ HARD REAL-TIME │    │ HARD REAL-TIME   │   │ HARD REAL-TIME   │   │ SOFT REAL-TIME     │
+│ µs ranging     │    │ µs ranging       │   │ µs ranging       │   │ multi-second TX    │
+└────────────────┘    └──────────────────┘    └──────────────────┘   └────────────────────┘
+   [IMPLEMENTED]         [IMPLEMENTED]           [IN DEV]              [IMPLEMENTED]
+```
+
+### Node Responsibilities
+
+| Node | Role | Detects | Feedback | Status |
+|------|------|---------|----------|--------|
+| **A** | Head/torso-height hazards | Obstacles at/above chest height | Local audio cue + headphone | **[IMPLEMENTED]** |
+| **B** | Ground-plane hazards | Obstacles below the knee | Haptic vibration + passive LED | **[IMPLEMENTED]** |
+| **C** | Near-field task support | Objects within arm's reach (3–40 cm) | Low-intensity haptic | **[IN DEV]** |
+| **D** | Position & consent gate | GPS fix + cellular connectivity | Outbound SMS coordinates | **[IMPLEMENTED]** |
+
+### 2.2 The Real-Time Isolation Boundary
+
+**This is the architectural thesis of the entire project.**
+
+#### Ranging Domain (Nodes A, B, C)
+An ultrasonic ranging cycle is a **microsecond-scale, timing-sensitive** operation:
+- Round-trip echo of a 40 kHz pulse measured with `pulseIn()`
+- Distance in cm = pulse width (µs) ÷ 58
+- **Any stall in the loop translates directly into missed or stale obstacle readings**
+- For a blind wearer, a silent node is a safety failure
+
+#### Telemetry Domain (Node D)
+A GSM location transaction is a **multi-second, blocking** sequence:
+- Register on 2G network
+- Wait for GPS fix (may block 30–90 seconds in poor conditions)
+- Complete `AT`-command SMS handshake
+- **Timing is dictated by cellular towers, not firmware**
+
+#### The Boundary
+**These two workloads must never share a processor.**
+
+If a slow tower blocks the location path, it **must not** interfere with ranging. Solution: **physical separation**. Nodes A/B/C and Node D are on independent AVR microcontrollers with independent power and no shared clock. A blocked cellular handshake cannot induce jitter, starvation, or a missed echo in the ranging domain.
+
+```
+  RANGING DOMAIN (Nodes A / B / C)            TELEMETRY DOMAIN (Node D)
+  ────────────────────────────────           ──────────────────────────────
+  loop() {                                    loop() {
+    d = getDistance(trig, echo);   //  µs        fix = readGPS();        // may block seconds
+    if (d < THRESHOLD_CM)          //  µs        if (queryAuthorized())  // waits on tower
+        pulseHaptic();             //  µs            sendSMS(fix);       // AT handshake, seconds
+  }                                             }
+        ▲                                              ▲
+        │                                              │
+        └──────  PHYSICAL SILICON BOUNDARY  ───────────┘
+             No shared clock. No shared loop.
+     A blocked cellular handshake cannot induce jitter,
+        starvation, or a missed echo in the ranging domain.
+```
+
+Because the boundary is **physical**, isolation is structural — no scheduler misconfiguration, no priority inversion to reason about.
+
+### 2.3 Hardware Dependencies (Design Rationale)
+
+Every part is chosen for regional sourceability and a **known, inspectable failure mode**:
+
+- **Commodity ultrasonic sensors (HC-SR04)** — cheap, repairable, universally available
+- **Haptic vibration arrays (ERM / coin motors)** — primary feedback in high-noise environments, independent of acoustics
+- **Redundant local audio (wired headphone / buzzer)** — second independent feedback path
+- **2G / GSM (SIM800 module + SIM)** — chosen for coverage, not speed; widest rural footprint and lowest signal floor
+- **GPS (u-blox NEO-6M)** — standalone, no assisted-GPS servers or mapped infrastructure
+- **Passive night visibility (LDR + LED)** — automatic, ambient-light-triggered marker making the wearer visible to others
+
+---
+
+## 3. Safety-Critical Specifications & Fault Management
+
+### 3.1 Baseline Engineering Reality (v2 Prototype)
+
+The current firmware is a direct, readable sense-and-alert loop:
+
+```c
+// Representative v2 ranging routine (smart shoe node)
+float getDistance(int trig, int echo) {
+    pinMode(trig, OUTPUT);
+    digitalWrite(trig, LOW);
+    delayMicroseconds(2);
+    digitalWrite(trig, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(trig, LOW);
+    pinMode(echo, INPUT);
+    return pulseIn(echo, HIGH) / 58.0;   // round-trip µs → cm
+}
+
+void loop() {
+    if (getDistance(TRIG, ECHO) < ALERT_CM) {
+        actuateFeedback(HIGH);             // haptic + audio
+    } else {
+        actuateFeedback(LOW);
+    }
+}
+```
+
+#### Known Limitation: Fail-Silent Baseline
+If a sensor is disconnected, mis-wired, occluded, or the supply voltage sags below operating range, `pulseIn()` returns a timeout or implausible value and the loop produces **no useful alert**. The wearer is given **no signal that the device has stopped protecting them**.
+
+For a sighted user this is a nuisance; for a blind user relying on the device, an unannounced failure is the most dangerous state the system can occupy.
+
+**Closing this gap is the top safety priority.**
+
+### 3.2 Active Fault Annunciation Layer [PLANNED]
+
+The Fault Annunciation Layer replaces the fail-silent baseline with a **deterministic, non-blocking fault state machine**:
+
+- **Deterministic states** — `OK`, `SENSOR_FAULT`, `VOLTAGE_SAG`, `DEGRADED` with defined transitions
+- **Non-blocking detection** — faults surfaced via **hardware interrupts and watchdog timer**, not polling
+- **Watchdog-enforced liveness** — if the main loop fails to service the watchdog, the node enters a known fault state and **announces** rather than resets silently
+- **Distinct haptic signatures** — triple-pulse for sensor loss vs. long-short cadence for voltage sag (user learns *what* is wrong)
+- **Announcement latency budget: ≤ 50 ms**
+
+> **Status: [PLANNED]**. The v2 prototype does **not yet** implement watchdog-driven annunciation. Do not deploy the current build in settings where unannounced sensor failure would be unacceptable.
+
+### 3.3 User-Centric Consent Architecture
+
+Location tracking of a vulnerable person is a privacy-critical capability and is treated as one.
+
+#### Design Law
+
+- **Location sharing is user-held and revocable.** The wearer controls whether the device will answer a location request and can disable sharing entirely.
+- **Covert family-side activation is structurally blocked.** No family member can silently switch the wearer into a tracked state.
+
+#### Current Implementation (v2)
+The prototype responds to an inbound authorized request by replying over SMS with current GPS coordinates. This is convenient but means the baseline device answers inbound requests, which is **not yet** a full consent gate.
+
+#### Roadmap [PLANNED]
+- **Physical consent control** — wearer-operated toggle that gates all outbound location messages
+- **Firmware allowlist** — only pre-authorized numbers can elicit a location reply
+- **Rate limiting** — prevent authorized-but-abusive party from turning device into continuous live tracker
+- **No remote-provisioning path** — no way to add a number or enable sharing without the wearer's physical action
+
+---
+
+## 4. The Validation Debt Ledger
+
+The single most important contribution of context-bounded design is refusing to imply guarantees the system has not earned.
+
+**"Validated"** = demonstrated on v2 hardware in field conditions (including blind support centre in Herat).  
+**"Not Validated"** = unverified, incomplete, or explicitly out of scope. Does **not** mean impossible — means **no claim is made**.
+
+### Complete Validation Matrix
+
+| Capability | Status | Notes / Open Debt |
+|-----------|--------|-------------------|
+| Near-range detection of static, unstructured obstacles (upper + lower) | **Validated For** | Field-tested with blind users; core sense-and-alert loop demonstrated |
+| Redundant haptic + local-audio alerting at tunable threshold (~50–70 cm) | **Validated For** | Per-node tunable; feedback fires on both channels simultaneously |
+| Two-modality feedback surviving high ambient acoustic noise | **Validated For** | Haptic path independent of audio; designed for market/street noise |
+| Standalone GPS fix + 2G/GSM location reporting in-region | **Validated For** | Works without broadband, Wi-Fi, or smartphone tether |
+| Passive after-dark visibility marker (LDR-triggered LED) | **Validated For** | Automatic activation below ambient-light threshold |
+| **Announced response to sensor or power failure** | **Not Validated For** | Fault Annunciation Layer is [PLANNED]; baseline is fail-silent |
+| **Full user-held/revocable consent gate** | **Not Validated For** | Consent architecture [PLANNED]; baseline answers inbound requests |
+| **Ingress protection / rain / dust resistance** | **Not Validated For** | Waterproofing in progress; no IP rating claimed |
+| **Long-term device-abandonment metrics** | **Not Validated For** | Open debt: no longitudinal retention study yet |
+| **Battery aging under sustained extreme heat** | **Not Validated For** | Thermal-cycle life not characterized |
+| **Dense, dynamic, or fast-moving obstacle fields** | **Not Validated For** | Ultrasonic cone + single-threshold logic not designed for crowds/traffic |
+| **Fall detection / medical-event detection** | **Not Validated For** | Out of scope for current architecture |
+| **Formal functional-safety certification** | **Not Validated For** | No safety-standard conformance claimed; field prototype only |
+| **Reflective, sound-absorbing, or acoustically transparent surfaces** | **Not Validated For** | Known limitation of ultrasonic (soft fabrics, some glass) |
+
+### Reading the Ledger
+
+**This ledger is a promise, not a disclaimer.** The right-hand column is the project's backlog. Items move from *Not Validated For* to *Validated For* only when there is hardware evidence — never because the roadmap sounds finished.
+
+---
+
+## Detailed Implementation Status Guide
+
+### [IMPLEMENTED] Features
+These are present and demonstrated on v2 hardware in field conditions.
+
+### [IN DEV] Features
+Partially built; behavior not yet stable or fully verified. Do not rely on these.
+
+### [PLANNED] Features
+Specified and designed, but not yet built. Treat as roadmap. No claims about timing.
+
+---
+
+**Last Updated:** 2026  
+**Status:** v2 Prototype  
+**Maintainer:** Said Mohaddes Sadeqi

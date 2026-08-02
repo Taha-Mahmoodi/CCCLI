@@ -1,0 +1,34 @@
+// Screen-reader announcements + focus helpers.
+// The live regions with these ids are rendered once in the root layout.
+
+export const LIVE_POLITE_ID = "sr-live-polite";
+export const LIVE_ASSERTIVE_ID = "sr-live-assertive";
+
+export function announce(message: string, assertive = false): void {
+  if (typeof document === "undefined") return;
+  const el = document.getElementById(assertive ? LIVE_ASSERTIVE_ID : LIVE_POLITE_ID);
+  if (!el) return;
+  // Clear first so an identical consecutive message still re-announces.
+  el.textContent = "";
+  requestAnimationFrame(() => {
+    el.textContent = message;
+  });
+}
+
+/**
+ * Move focus to the page's <h1> so screen readers land on the new view after
+ * client-side navigation (SPAs don't announce route changes on their own).
+ */
+export function focusMainHeading(): void {
+  if (typeof document === "undefined") return;
+  const h1 = document.querySelector("h1");
+  if (h1 instanceof HTMLElement) {
+    if (!h1.hasAttribute("tabindex")) h1.setAttribute("tabindex", "-1");
+    h1.focus();
+  }
+}
+
+export function prefersReducedMotion(): boolean {
+  if (typeof window === "undefined" || !window.matchMedia) return false;
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}

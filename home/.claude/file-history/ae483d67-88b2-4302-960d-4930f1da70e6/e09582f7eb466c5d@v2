@@ -1,0 +1,64 @@
+// Minimal IndexedDB store for recorded memos (metadata + audio Blob) in one
+// object store. Guards for SSR / no-IDB environments (tests) by no-op'ing.
+// ponytail: single store, no migrations; add the `idb` package only if the
+// schema grows beyond this.
+
+import type { StoredMemo } from "./types";
+
+const DB_NAME = "third-eye-world";
+const STORE = "memos";
+const VERSION = 1;
+
+const hasIDB = (): boolean => typeof indexedDB !== "undefined";
+
+function openDb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(STORE)) {
+        db.createObjectStore(STORE, { keyPath: "id" });
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function objectStore(mode: IDBTransactionMode): Promise<IDBObjectStore> {
+  const db = await openDb();
+  return db.transaction(STORE, mode).objectStore(STORE);
+}
+
+function toPromise<T>(req: IDBRequest<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+export async function putMemo(memo: StoredMemo): Promise<void> {
+  if (!hasIDB()) return;
+  const s = await objectStore("readwrite");
+  await toPromise(s.put(memo));
+}
+
+export async function getAllMemos(): Promise<StoredMemo[]> {
+  if (!hasIDB()) return [];
+  const s = await objectStore("readonly");
+  const all = await toPromise(s.getAll() as IDBRequest<StoredMemo[]>);
+  return all.sort((a, b) => a.createdAt - b.createdAt); // chronological — the stream has an order
+}
+
+export async function deleteMemo(id: string): Promise<void> {
+  if (!hasIDB()) return;
+  const s = await objectStore("readwrite");
+  await toPromise(s.delete(id));
+}
+
+export async function setLiked(id: string, liked: boolean): Promise<void> {
+  if (!hasIDB()) return;
+  const s = await objectStore("readwrite");
+  const existing = await toPromise(s.get(id) as IDBRequest<StoredMemo | undefined>);
+  if (existing) await toPromise(s.put({ ...existing, liked }));
+}

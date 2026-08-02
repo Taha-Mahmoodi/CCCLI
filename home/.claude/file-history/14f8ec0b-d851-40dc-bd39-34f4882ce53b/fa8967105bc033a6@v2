@@ -1,0 +1,238 @@
+# Third Eye Kit
+
+**A decentralized, low-cost wearable obstacle-detection and family-location system engineered for low-resource, high-gradient environments.**
+
+`Platform: Arduino / AVR` · `Status: Active Prototype (v2)` · `Manufacturing Target: $50–100 USD` · `Connectivity: 2G / GSM` · `Origin: Herat, Afghanistan`
+
+> **License:** MIT (hardware schematics), MIT (firmware)  
+> **Team:** ABRT01 (TEKNOFEST Barrier-Free Living Competition)
+
+---
+
+## Quick Links
+
+- 📖 **[Full Technical Spec](docs/TECHNICAL_SPEC.md)** — System architecture, validation ledger, safety critical specs
+- 📋 **[Initial Proposal](docs/PROPOSAL.md)** — First prototype design document
+- 🔗 **[External References & Coverage](docs/REFERENCES.md)** — News, competition records, field-test documentation
+- ⚙️ **[Build & Flash Guide](docs/BUILD.md)** — Setup, configuration, deployment
+- 📱 **[Bill of Materials](docs/BOM.md)** — Component sourcing and costs
+
+---
+
+## What is Third Eye Kit?
+
+Third Eye Kit gives blind and low-vision wearers **real-time, non-visual awareness** of obstacles above and below their line of travel, plus **family location tracking** over 2G cellular infrastructure — built for environments where first-world assistive tech doesn't apply.
+
+### Core Design Principles
+
+1. **Frugal Engineering** — $5 commodity sensors with known failure modes, not $500 black-box modules. Buildable and repairable in-region.
+2. **Hardware–Software Isolation** — Microsecond-scale ranging and multi-second GSM operations run on separate processors. A slow tower cannot blind the ranging loop.
+3. **Context-Bounded Design** — The system declares exactly where it's been validated, and refuses guarantees it hasn't earned.
+
+---
+
+## System Overview
+
+Four independent nodes, each a discrete AVR microcontroller:
+
+```
+                         ┌─────────────────────────────────────────────┐
+                         │              THE WEARER (user)               │
+                         └─────────────────────────────────────────────┘
+                                            ▲
+        ┌───────────────────────┬───────────┴──────────┬───────────────────────┐
+        │                       │                      │                       │
+┌───────┴────────┐    ┌─────────┴────────┐   ┌─────────┴────────┐   ┌──────────┴─────────┐
+│  NODE A        │    │  NODE B          │   │  NODE C          │   │  NODE D            │
+│  Upper Ranging │    │  Lower Ranging   │   │  Manual/Tactile  │   │  Location Telemetry│
+│  (Glasses)     │    │  (Shoes, L + R)  │   │  (Gloves)        │   │  (Belt/Pack)       │
+├────────────────┤    ├──────────────────┤   ├──────────────────┤   ├────────────────────┤
+│ Ultrasonic     │    │ Ultrasonic ×2    │   │ Ultrasonic       │   │ GPS  (NEO-6M)      │
+│ Local audio    │    │ Haptic (vib) ×2  │   │ Low-intensity    │   │ GSM  (SIM800-class)│
+│ (headphone)    │    │ LDR + LED        │   │ haptic           │   │ 2G SIM             │
+│                │    │ (passive vis.)   │   │                  │   │                    │
+│ [IMPLEMENTED]  │    │ [IMPLEMENTED]    │   │ [IN DEV]         │   │ [IMPLEMENTED]      │
+└────────────────┘    └──────────────────┘    └──────────────────┘   └────────────────────┘
+```
+
+| Node | Role | Status |
+|------|------|--------|
+| **A** | Head/torso hazards (branches, signage) | ✅ [IMPLEMENTED] |
+| **B** | Ground-plane hazards (curbs, holes) | ✅ [IMPLEMENTED] |
+| **C** | Near-field scanning (home, workplace) | 🔨 [IN DEV] |
+| **D** | Position reporting to authorized family | ✅ [IMPLEMENTED] |
+
+---
+
+## Validated Capabilities
+
+✅ Near-range detection of static, unstructured obstacles  
+✅ Redundant haptic + local-audio alerting at tunable thresholds (~50–70 cm)  
+✅ Two-modality feedback surviving high ambient acoustic noise  
+✅ Standalone GPS fix + 2G/GSM location reporting (no broadband/Wi-Fi needed)  
+✅ Passive after-dark visibility marker (automatic LDR-triggered LED)  
+
+**⚠️ Not Yet Validated:**
+- Announced (non-silent) response to sensor/power failure — Fault Annunciation Layer is [PLANNED]
+- Full user-held consent gate blocking covert activation — [PLANNED]
+- Waterproofing / IP rating — in progress
+- Long-term user retention metrics
+- Formal functional-safety certification
+
+See the [Validation Debt Ledger](docs/TECHNICAL_SPEC.md#4-the-validation-debt-ledger) for the complete accounting.
+
+---
+
+## Repository Structure
+
+```
+third-eye-kit/
+├── README.md                           # this file
+├── LICENSE                             # MIT
+├── CONTRIBUTING.md                     # development guidelines
+│
+├── firmware/
+│   ├── node-a-glasses/                 # Upper ranging  [IMPLEMENTED]
+│   │   └── node_a.ino
+│   ├── node-b-shoes/                   # Lower ranging  [IMPLEMENTED]
+│   │   ├── node_b_left.ino
+│   │   └── node_b_right.ino
+│   ├── node-c-gloves/                  # Manual/tactile [IN DEV]
+│   │   └── node_c.ino
+│   ├── node-d-telemetry/               # GPS + GSM      [IMPLEMENTED]
+│   │   └── node_d.ino
+│   └── common/
+│       ├── ranging.h                   # getDistance(), ALERT_CM, sensor utilities
+│       ├── haptic.h                    # feedback actuators (vibration, audio)
+│       └── fault_sm.h                  # Fault state machine  [PLANNED]
+│
+├── hardware/
+│   ├── wiring/
+│   │   ├── node-a-pinout.txt           # glasses node
+│   │   ├── node-b-pinout.txt           # shoe nodes
+│   │   ├── node-c-pinout.txt           # glove node
+│   │   └── node-d-pinout.txt           # telemetry node
+│   ├── schematics/                     # Circuit diagrams (SVG/PDF)
+│   └── enclosures/                     # 3D models / CAD files [IN DEV]
+│
+├── docs/
+│   ├── TECHNICAL_SPEC.md               # Full engineering spec (mirror of initial MD)
+│   ├── PROPOSAL.md                     # Initial prototype design
+│   ├── BUILD.md                        # Build, flash, and configure guide
+│   ├── BOM.md                          # Bill of Materials with sourcing
+│   ├── VALIDATION_LEDGER.md            # Detailed validation matrix
+│   ├── CONSENT_ARCHITECTURE.md         # Privacy & consent design
+│   ├── REFERENCES.md                   # External links & media coverage
+│   └── ARCHITECTURE.md                 # Deep dive into real-time isolation boundary
+│
+└── media/
+    ├── field-tests/                    # Photos / video captures from Herat trials
+    ├── schematics/                     # High-res circuit diagrams
+    └── photos/                         # Build and deployment photos
+```
+
+---
+
+## Getting Started
+
+### For Developers & Contributors
+
+1. **Read the [Technical Spec](docs/TECHNICAL_SPEC.md)** to understand the architecture and safety philosophy.
+2. **Review the [Bill of Materials](docs/BOM.md)** and [Wiring Guide](hardware/wiring/) for your node.
+3. **Flash your node** — see [Build & Flash](docs/BUILD.md) for step-by-step instructions.
+4. **Bench-test** with an obstacle sweep before field use.
+
+### For Users & Caretakers
+
+1. **Read the [Validation Debt Ledger](docs/TECHNICAL_SPEC.md#4-the-validation-debt-ledger)** — it states exactly what the system is and isn't ready for.
+2. **Understand the consent architecture** — the device respects user control of location sharing (see [Consent Architecture](docs/CONSENT_ARCHITECTURE.md)).
+3. **Pre-deployment safety gate** — manually verify every sensor and battery before each use.
+
+---
+
+## Key Design Decisions
+
+### Why Decentralized (Four Microcontrollers)?
+
+Ultrasonic ranging requires **microsecond-scale timing precision**. GPS + GSM location updates are **multi-second, blocking** operations dictated by cellular towers. These two workloads **cannot share a processor** — a delayed network handshake would stall the ranging loop and silently blind the user at the worst moment.
+
+The solution: **physical separation**. The ranging domain (Nodes A, B, C) and telemetry domain (Node D) run on independent AVR chips with independent power and no shared clock. A network stall cannot induce jitter, starvation, or a missed obstacle reading.
+
+### Why 2G/GSM Over LTE?
+
+2G has the widest rural coverage footprint and the lowest signal-strength floor in the deployment region (Afghanistan). It needs no broadband, no Wi-Fi tether, and no assisted-GPS servers. LTE/NB-IoT would be faster in dense urban areas but would abandon the user base where coverage matters most.
+
+### Why Passive Night Visibility?
+
+The wearer is a person who is blind and walking. Making *them* visible to oncoming traffic is as important as detecting hazards ahead. The LDR + LED pair is automatic (no user action required) and independent of the main sensing system — a second, orthogonal safety layer.
+
+---
+
+## Safety & Trust
+
+**This is a field prototype, not a certified medical or safety device.** Its guarantees are exactly those enumerated in the [Validation Debt Ledger](docs/TECHNICAL_SPEC.md#4-the-validation-debt-ledger) — no more, and no fewer.
+
+- Baselines and limitations are stated plainly in the engineering docs.
+- Privacy and consent are treated as first-class design constraints.
+- Known gaps (fault annunciation, waterproofing, long-term retention) are listed and mapped to the roadmap.
+- The system is fail-safe in the sense of declaring failure, not silencing it.
+
+---
+
+## Field-Test Sites & Deployment
+
+- **Primary field-test location:** Blind support centre, Herat, Afghanistan
+- **Testing protocol:** Live obstacle scenarios with blind and low-vision users
+- **Feedback loop:** User feedback directly informs design iteration
+
+See [References & Media Coverage](docs/REFERENCES.md) for published accounts and competition records.
+
+---
+
+## Contributing
+
+We welcome technical contributions, field feedback, and improvements to the engineering documentation.
+
+**Before opening a PR:**
+- Read [CONTRIBUTING.md](CONTRIBUTING.md)
+- Review the relevant section of the [Technical Spec](docs/TECHNICAL_SPEC.md)
+- If adding a feature, add a corresponding entry to the [Validation Debt Ledger](docs/TECHNICAL_SPEC.md#4-the-validation-debt-ledger)
+
+---
+
+## Team
+
+| Role | Contact |
+|------|---------|
+| **Maintainer / Lead** | Said Mohaddes Sadeqi |
+| **School** | Afgan-Türk Maarif Okulları — Herat Erkek Lisesi |
+| **Department** | Mechatronics |
+| **Community Partner** | Herat blind support centre |
+
+---
+
+## License
+
+- **Firmware:** MIT  
+- **Hardware schematics:** MIT (CERN OHL v1.2 recommended for production deployments)
+- **Documentation:** Creative Commons Attribution 4.0
+
+---
+
+## External Links & News
+
+See [References & Media Coverage](docs/REFERENCES.md) for:
+- Competition records (TEKNOFEST Barrier-Free Living)
+- Published news coverage
+- Field-test documentation
+- Program records and team history
+
+---
+
+## Questions?
+
+Open an [Issue](https://github.com/sadeqisaidmohaddes-star/third-eye-kit/issues) for technical questions, design feedback, or field observations. For sensitive privacy concerns, contact the maintainer directly.
+
+---
+
+_Third Eye Kit is a field prototype built under the Infrastructure Gradient. Its design prioritizes buildability, reparability, and honest assessment of what has and hasn't been validated._

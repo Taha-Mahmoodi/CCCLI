@@ -1,0 +1,93 @@
+{
+  "version": 2,
+  "plugins": {
+    "ponytail@ponytail": [
+      {
+        "scope": "user",
+        "installPath": "/Users/taha/.claude/plugins/cache/ponytail/ponytail/4.8.4",
+        "version": "4.8.4",
+        "installedAt": "2026-07-02T08:42:10.742Z",
+        "lastUpdated": "2026-07-02T08:42:10.742Z",
+        "gitCommitSha": "40e50d9e03242aa5dd53ac771950f9127362b25f"
+      }
+    ],
+    "superpowers@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/taha/.claude/plugins/cache/claude-plugins-official/superpowers/6.2.0",
+        "version": "6.2.0",
+        "installedAt": "2026-07-02T08:44:44.427Z",
+        "lastUpdated": "2026-07-25T04:29:56.758Z",
+        "gitCommitSha": "f268f7c953744036f0fa7e9d4b73535c04e57cb8"
+      }
+    ],
+    "diagram-design@diagram-design": [
+      {
+        "scope": "user",
+        "installPath": "/Users/taha/.claude/plugins/cache/diagram-design/diagram-design/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-07-07T11:52:03.516Z",
+        "lastUpdated": "2026-07-07T11:52:03.516Z",
+        "gitCommitSha": "0ab077f2291e9056554d48a90c4ff45f0b7029a5"
+      }
+    ],
+    "gsap-skills@gsap-skills": [
+      {
+        "scope": "user",
+        "installPath": "/Users/taha/.claude/plugins/cache/gsap-skills/gsap-skills/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-07-19T10:53:15.745Z",
+        "lastUpdated": "2026-07-19T10:53:15.745Z",
+        "gitCommitSha": "aed9cfd3277740755f6bfc1155c7aa645403b760"
+      }
+    ],
+    "frontend-design@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/taha/.claude/plugins/cache/claude-plugins-official/frontend-design/unknown",
+        "version": "unknown",
+        "installedAt": "2026-07-19T11:15:31.838Z",
+        "lastUpdated": "2026-08-02T13:17:44.649Z"
+      }
+    ],
+    "swift-lsp@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/taha/.claude/plugins/cache/claude-plugins-official/swift-lsp/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-07-20T04:03:01.527Z",
+        "lastUpdated": "2026-07-20T04:03:01.527Z"
+      }
+    ],
+    "legalzoom@claude-plugins-official": [
+      {
+        "scope": "user",
+        "installPath": "/Users/taha/.claude/plugins/cache/claude-plugins-official/legalzoom/1.0.0",
+        "version": "1.0.0",
+        "installedAt": "2026-07-20T11:19:37.935Z",
+        "lastUpdated": "2026-07-20T11:19:37.935Z",
+        "gitCommitSha": "f9fd8a0ca6e1421bc1aacb113a109663a7a6f6d8"
+      }
+    ],
+    "git-a-profile@git-a-profile": [
+      {
+        "scope": "user",
+        "installPath": "/Users/taha/.claude/plugins/cache/git-a-profile/git-a-profile/1.6.0",
+        "version": "1.6.0",
+        "installedAt": "2026-07-24T09:28:16.291Z",
+        "lastUpdated": "2026-07-24T09:28:16.291Z",
+        "gitCommitSha": "0f6bcdedbdc2125b321f576575d7a55aee66ddcb"
+      }
+    ],
+    "portfolio.me@portfolio.me": [
+      {
+        "scope": "user",
+        "installPath": "/Users/taha/.claude/plugins/cache/portfolio-me/portfolio-me/0.1.0",
+        "version": "0.1.0",
+        "installedAt": "2026-07-26T11:40:44.106Z",
+        "lastUpdated": "2026-07-26T11:40:44.106Z",
+        "gitCommitSha": "911c1a0a3d8c6cfbdf3a76381e2a455c7c473db8"
+      }
+    ]
+  }
+}

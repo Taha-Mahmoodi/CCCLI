@@ -1,0 +1,25 @@
+## UI Slice 2b-4 — Type-first note creation
+
+Edit-capable users can create a new note from the vault sidebar: click **+ New note**, pick or type a `type` (a datalist offers existing types), enter a `name`, and the note is created and opened.
+
+### What's in
+- **`createNote` API** + **`useCreateNote`** mutation (invalidates the `['vault-tree', …]` query so the new note appears in the sidebar).
+- **`NewNoteForm`** — type datalist + name input, client-side slug validation (`^[a-z0-9][a-z0-9-]*$`) on **both** fields *before* any network call, and server errors (409 collision / 400 invalid) surfaced via the shared `FormError` (`role="alert"`).
+- **`VaultLayout`** — a `canEdit`-gated "New note" toggle; on success it closes the form and navigates to the created note.
+
+### Grounded in the real backend
+`POST /vaults/:id/notes {type,name}` is `edit`-gated, returns the created note (with its `path` to navigate to), 409s on collision, 400s on invalid slug. `type` is set at creation (immutable afterward via PUT — consistent with 2b-3).
+
+### Permission-aware
+The create affordance appears only for `edit`/`owner` vaults (reuses `canEdit`); read-only collaborators never see it.
+
+### Out of scope (later)
+Note rename/delete (2b-5), editing an existing note's type, live-preview, wikilinks. Also carried (non-blocking): the open form has no explicit cancel, and inputs aren't whitespace-trimmed.
+
+### Verification
+`pnpm typecheck` (client + server), `pnpm lint` (0), **73 client tests**, `pnpm -C client build` — all green. Whole-branch review (independent) → Ready to merge. A review find was fixed on-branch: swapped a hand-rolled error `<p>` for the shared `FormError` (restores `role="alert"`) and added the missing invalid-name test.
+
+### Target
+Branches off `dev` and targets `dev` directly (the earlier slices are already merged in). Backend follow-up #66 (updateNote race) remains open.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)

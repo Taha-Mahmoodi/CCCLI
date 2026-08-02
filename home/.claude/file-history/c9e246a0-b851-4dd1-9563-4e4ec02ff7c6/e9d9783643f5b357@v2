@@ -1,0 +1,55 @@
+import Link from "next/link";
+import { ChatCircle } from "@phosphor-icons/react/dist/ssr";
+import { PostLikeButton } from "./post-like-button";
+import { relativeTime } from "@/lib/time";
+
+export type FeedPost = {
+  id: string;
+  body: string;
+  createdAt: Date;
+  author: { id: string; displayName: string };
+  likeCount: number;
+  commentCount: number;
+  liked: boolean;
+};
+
+export function PostCard({ post }: { post: FeedPost }) {
+  return (
+    <article className="rounded-2xl border border-border bg-surface p-5">
+      <div className="flex items-center gap-2 text-sm">
+        <Link
+          href={`/app/u/${post.author.id}`}
+          className="font-semibold text-fg hover:underline"
+        >
+          {post.author.displayName}
+        </Link>
+        <span aria-hidden className="text-muted">
+          ·
+        </span>
+        <time dateTime={post.createdAt.toISOString()} className="text-muted">
+          {relativeTime(post.createdAt)}
+        </time>
+      </div>
+
+      <p className="mt-2 whitespace-pre-wrap leading-relaxed text-fg">
+        {post.body}
+      </p>
+
+      <div className="mt-4 flex items-center gap-2">
+        <PostLikeButton
+          postId={post.id}
+          initialCount={post.likeCount}
+          initialLiked={post.liked}
+        />
+        <Link
+          href={`/app/post/${post.id}`}
+          className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-sm text-muted transition-colors hover:text-fg"
+        >
+          <ChatCircle size={16} aria-hidden />
+          <span>{post.commentCount}</span>
+          <span className="sr-only">replies. Open the discussion</span>
+        </Link>
+      </div>
+    </article>
+  );
+}

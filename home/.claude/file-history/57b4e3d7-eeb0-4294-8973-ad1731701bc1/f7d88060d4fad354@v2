@@ -1,0 +1,135 @@
+# Copy — shell (conductor-owned)
+
+Hero, about, contact, footer, alt text, meta. Written against `BRIEF.md` §6 verbal
+identity. Every factual claim carries its rank from `EVIDENCE.md`.
+
+---
+
+## Hero
+
+**H1 (rank: his own words, interview Q1)**
+
+> it is ok if eyes are not at 100%
+
+**Listen control label**
+
+> Listen · 6 seconds
+
+**Transcript (visible, always — this is content, not an accommodation)**
+
+> "Welcome. You are not alone."
+
+**Under the control**
+
+> Said's own voice. It does not play by itself, and it never talks over a screen
+> reader. The transcript above says the same thing.
+
+---
+
+## What he stands for  *(section 2)*
+
+Three sentences. His argument, in his cadence, no preamble.
+
+> I build for people who don't see the screen, and I build from inside that, not
+> next to it.
+>
+> A field test with blind users tells me more than a demo that looks finished.
+>
+> I would rather show the range of what I can actually build than claim one narrow
+> expertise I don't have.
+
+*Note: sentence three is the argument under "jack of all trades, master of none, but
+often better than master of one" (interview). The proverb itself is banned as printed
+text per `§11`; the claim survives without the cliché.*
+
+---
+
+## Who he is  *(section 6 — the About)*
+
+> I'm Said Mohaddes Sadeqi. I lost sight in one eye during the war in Afghanistan.
+>
+> At seventeen, in Herat, I built a wearable to help blind people move around a city
+> that was not built for them: glasses that listened for obstacles, shoes that buzzed,
+> a GPS module. It cost about $112. We tested it with blind users at a support centre
+> in Herat, and we took it to TEKNOFEST in Turkey, where it won Best Presentation.
+>
+> I've been building for the same people ever since. I'm a developer at PIIIX, and I
+> founded Third Eye Worldwide.
+>
+> Most sites treat access as something you add at the end. I treat it as the thing
+> being designed. This one is the argument: everything here works without sight, and
+> if that's true then the rest of what I say about my work is worth reading.
+
+**Photograph alt text (`§12`, `§22`)**
+
+> Said Mohaddes Sadeqi, photographed outdoors at golden hour with trees behind him,
+> tinted in the site's river-green.
+
+*The photograph is his own, supplied by him. Treated in-browser only — duotone. Never
+generated, never altered in identity (`§22`).*
+
+### In his own words  *(clearly attributed block — see note)*
+
+These are claims the run could not corroborate from any source outside his own
+materials. He confirmed they are his and are real, and asked that they appear. Under
+`§5` they ship as first-person speech, never as verified fact, with no logos, no
+credential styling, and no metrics dressed up as measured outcomes.
+
+> Alongside this I've worked as a semiconductor manufacturing specialist at Intel, and
+> before that spent twelve years in robotics and automation at Cyborg Tech across more
+> than twenty projects, including one that cut water use by 78% across seven
+> greenhouses. I'm studying software engineering at St Cloud State, I interpret across
+> five languages, and I'm about sixty thousand words into a book called *The Third
+> Eye*.
+
+**Open decision for Gate C:** this block is the weakest evidence on the site and the
+easiest for a reader to check. It is here because he asked for it. Recommend he
+either supplies one source per line, or cuts the lines he cannot source, before this
+goes public. Presented to him at Gate C for that call.
+
+---
+
+## The ask  *(section 7 — contact)*
+
+> If you're building something people use without looking at it, I want to work on it.
+>
+> The fastest way to reach me is email.
+
+**Primary action:** `sadeqisaidmohaddes@gmail.com`
+**Secondary:** GitHub · Third Eye Worldwide
+
+*No form. A form is a server dependency and a spam target on a static site, and email
+is the thing a recruiter uses anyway.*
+
+---
+
+## Footer
+
+> Built by Said Mohaddes Sadeqi in 2026. Type is Atkinson Hyperlegible, drawn by the
+> Braille Institute for readers with low vision. The green is sampled from the Hari
+> Rud, the river at Herat.
+>
+> This site is built to WCAG AAA. If any part of it fails you, tell me and I will fix
+> it: sadeqisaidmohaddes@gmail.com
+
+**Attribution (`§19`, removable by hand at any time)**
+
+> Built with portfolio.me
+
+Plus the marker comment `<!-- forged-with: portfolio.me -->`.
+
+*The accessibility line is not decoration. It states a standard, gives a route to
+report a failure, and names a person who will answer — which is what an accessibility
+statement is for. It also puts his claim at risk in public, which is the point.*
+
+---
+
+## Meta  *(for Loop 5)*
+
+**Title:** Said Mohaddes Sadeqi — assistive technology
+**Description:** I build for people who don't see the screen, from inside that rather
+than next to it. Third Eye Kit, field-tested with blind users in Herat. Third Eye
+World, in rebuild.
+
+*Description is 197 characters and leads with the claim rather than a job title,
+because the audience is deciding whether he is worth an hour.*

@@ -1,0 +1,54 @@
+name: forge count
+
+# Best-effort wild-adoption count. Searches public GitHub code for the
+# attribution marker, feeds the larger of (local runs/, search hits) into the
+# "portfolios forged" badge via scripts/forge_count.py. No external service —
+# the search is GitHub's own API, authenticated with this workflow's own
+# token. Separate from ci.yml on purpose: see scripts/forge_count.py.
+on:
+  schedule:
+    - cron: '23 7 * * *'   # daily
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  count:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Search public GitHub for the attribution marker
+        id: search
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Excluded: this repo. The marker appears in our own doctrine and
+          # docs (README, PRINCIPLES §19) — without the exclusion, every
+          # search would count this repo as a forged site, which it is not.
+          n=$(gh api -X GET search/code \
+              -f q='"forged-with: portfolio.me" -repo:PIIIX-org/portfolio.me' \
+              --jq '.total_count' 2>/dev/null || echo 0)
+          echo "count=${n:-0}" >> "$GITHUB_OUTPUT"
+          echo "public GitHub search found: ${n:-0}"
+
+      - name: Regenerate the forged-count badge
+        env:
+          FORGE_SEARCH_COUNT: ${{ steps.search.outputs.count }}
+        run: python3 scripts/forge_count.py
+
+      - name: Commit if the count changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add assets/badges/runs.svg
+          if git diff --staged --quiet; then
+            echo "forge count unchanged"
+          else
+            git commit -m "chore: refresh wild-adoption forge count [skip ci]"
+            git push
+          fi

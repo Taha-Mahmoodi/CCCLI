@@ -1,0 +1,517 @@
+# Tablet Release APK (Increment 1) Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Pushing a `tablet-vX.Y.Z` git tag produces a real, signed, installable Android release APK — pointed at `https://atlas.piiix.org` — published automatically to this repo's GitHub Releases page.
+
+**Architecture:** A new GitHub Actions workflow, triggered on tag push, mirrors the existing `tablet` CI job (Node build → Java/Android setup → Gradle) but runs `assembleRelease` instead of `assembleDebug`, using a release keystore stored as repo secrets and an `assembleRelease`-only signing config already spiked and verified locally. `versionCode`/`versionName` are derived deterministically from the tag itself via a small, independently-tested shell script — never from `github.run_number`, which resets on workflow rename and would silently break Android's "new versionCode must be higher" update contract.
+
+**Tech Stack:** GitHub Actions, Gradle (Groovy DSL), `keytool`/`apksigner` (JDK), `gh` CLI (release creation), POSIX shell.
+
+## Global Constraints
+
+- The release build's web bundle MUST be built with `VITE_API_BASE_URL=https://atlas.piiix.org` — Vite bakes this at build time; the `.env` default is `http://localhost:8000`, which would make the release APK silently useless on any real device. Set via a repo **variable** (`TABLET_API_BASE_URL`), not a secret — it isn't sensitive.
+- The keystore file is the one unrecoverable artifact in this project. GitHub Actions secrets are write-only (cannot be read back once set) — the local `.jks` file plus its passwords are the only durable copy. It must be handed to the user to archive off-machine before any local cleanup, and must never be committed to the repo (not even gitignored-but-present on disk inside the repo directory).
+- `versionCode` is derived from the git tag (`tablet-v1.2.3` → `1*10000 + 2*100 + 3`), never from `github.run_number` or any other CI-internal counter.
+- Adding the release `signingConfigs` block must NOT change `assembleDebug` behavior — verified locally already (see Task 2); this is a hard regression check, not optional.
+- No forced/silent anything in this increment — this plan only produces a downloadable release artifact, no in-app update mechanism (that's increment 2, a separate plan).
+
+---
+
+## Task 1: Generate the release keystore and configure GitHub secrets/variables
+
+This task is operational (no code to write/test in the traditional sense) — it produces the actual signing credential and wires it into the repo. Given the keystore is unrecoverable, **the controller performs this task directly rather than delegating it to a subagent.**
+
+**Files:** none (produces a local keystore file outside the repo, and repo-level GitHub secrets/variables — no repo files change).
+
+**Interfaces:**
+- Produces: a keystore file with a known alias/passwords (handed to the user), plus 4 GitHub Actions secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`) and 1 repo variable (`TABLET_API_BASE_URL`) that Task 4's workflow consumes by exact name.
+
+- [ ] **Step 1: Generate the keystore, outside the repo directory**
+
+```bash
+mkdir -p ~/atlas-fieldforce-release-keystore
+STOREPASS=$(openssl rand -base64 24)
+echo "$STOREPASS" > ~/atlas-fieldforce-release-keystore/.storepass
+keytool -genkeypair -v \
+  -keystore ~/atlas-fieldforce-release-keystore/atlas-fieldforce-release.jks \
+  -alias atlas-fieldforce-release \
+  -keyalg RSA -keysize 2048 -validity 10000 \
+  -storepass "$STOREPASS" -keypass "$STOREPASS" \
+  -dname "CN=Atlas Field Force, OU=Engineering, O=Atlas Field Force, C=US"
+```
+
+**Real gotcha, verified by actually running this:** modern `keytool` defaults to
+PKCS12 keystore format, which does not support separate store/key
+passwords — it silently prints `Warning: Different store and key passwords
+not supported for PKCS12 KeyStores. Ignoring user-specified -keypass
+value.` and uses the store password for both, regardless of what `-keypass`
+was given. Don't try to fight this or force JKS format — use the *same*
+value for `-storepass`/`-keypass` from the start (as above), and record
+**one** password, used for both `ANDROID_KEYSTORE_PASSWORD` and
+`ANDROID_KEY_PASSWORD` in Step 4. Confirmed by actually building and
+`apksigner verify`-ing a real APK with the store password supplied for
+both Gradle `storePassword` and `keyPassword` fields before this plan was
+written.
+
+- [ ] **Step 2: Verify the keystore is valid and record its details**
+
+```bash
+keytool -list -v -keystore ~/atlas-fieldforce-release-keystore/atlas-fieldforce-release.jks -storepass "$STOREPASS"
+```
+
+Expected: prints `Keystore type: PKCS12`, the certificate fingerprint, and
+confirms alias `atlas-fieldforce-release`, validity ~10000 days.
+
+- [ ] **Step 3: Hand the keystore + passwords to the user for off-machine archival**
+
+State explicitly to the user: "Here is the release keystore and its passwords — save these somewhere durable (password manager, encrypted backup) before I continue. GitHub only stores what I'm about to upload as write-only secrets; if this local file is lost and you don't have a copy, every future release becomes uninstall-and-reinstall for every device." Do not proceed to Step 4 until the user confirms they've saved it.
+
+- [ ] **Step 4: Base64-encode the keystore and set the 4 GitHub secrets**
+
+```bash
+base64 -i ~/atlas-fieldforce-release-keystore/atlas-fieldforce-release.jks | tr -d '\n' > /tmp/keystore.b64
+gh secret set ANDROID_KEYSTORE_BASE64 --repo Taha-Mahmoodi/atlas-fieldforce < /tmp/keystore.b64
+gh secret set ANDROID_KEYSTORE_PASSWORD --repo Taha-Mahmoodi/atlas-fieldforce
+gh secret set ANDROID_KEY_ALIAS --repo Taha-Mahmoodi/atlas-fieldforce
+gh secret set ANDROID_KEY_PASSWORD --repo Taha-Mahmoodi/atlas-fieldforce
+rm /tmp/keystore.b64
+```
+
+(`gh secret set NAME` without `< file` prompts interactively for the value — use that for the alias/passwords rather than passing them as shell arguments, which would leave them in shell history.)
+
+- [ ] **Step 5: Set the `TABLET_API_BASE_URL` repo variable**
+
+```bash
+gh variable set TABLET_API_BASE_URL --repo Taha-Mahmoodi/atlas-fieldforce --body "https://atlas.piiix.org"
+```
+
+- [ ] **Step 6: Verify all 5 are set (names only — values are never readable back)**
+
+```bash
+gh secret list --repo Taha-Mahmoodi/atlas-fieldforce
+gh variable list --repo Taha-Mahmoodi/atlas-fieldforce
+```
+
+Expected: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD` in the secrets list; `TABLET_API_BASE_URL` in the variables list.
+
+---
+
+## Task 2: Wire release signing + tag-derived versioning into Gradle
+
+**Files:**
+- Modify: `tablet/android/app/build.gradle`
+- Modify: `tablet/android/.gitignore`
+
+**Interfaces:**
+- Consumes: nothing from other tasks.
+- Produces: `assembleRelease` reads signing credentials from 4 environment variables — `RELEASE_KEYSTORE_PATH`, `RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD` — and `versionCode`/`versionName` from `RELEASE_VERSION_CODE`/`RELEASE_VERSION_NAME` (falling back to the existing hardcoded `1`/`"1.0"` when unset, so `assembleDebug` and any local build is unaffected). Task 4's workflow sets these 6 env vars by these exact names before invoking Gradle.
+
+This exact change was already spiked and verified locally before this plan was written: `assembleRelease` with these env vars set produces a real signed APK (confirmed via `apksigner verify --print-certs`), and `assembleDebug` with them unset still succeeds unchanged (confirmed by running it twice, before and after the edit).
+
+- [ ] **Step 1: Edit `tablet/android/app/build.gradle`'s `defaultConfig` block to read version from env**
+
+Change:
+```groovy
+        versionCode 1
+        versionName "1.0"
+```
+to:
+```groovy
+        versionCode (System.getenv("RELEASE_VERSION_CODE") ?: "1").toInteger()
+        versionName System.getenv("RELEASE_VERSION_NAME") ?: "1.0"
+```
+
+- [ ] **Step 2: Add the release `signingConfigs` block and wire it into `buildTypes.release`**
+
+Change:
+```groovy
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+```
+to:
+```groovy
+    signingConfigs {
+        release {
+            storeFile file(System.getenv("RELEASE_KEYSTORE_PATH") ?: "none")
+            storePassword System.getenv("RELEASE_KEYSTORE_PASSWORD")
+            keyAlias System.getenv("RELEASE_KEY_ALIAS")
+            keyPassword System.getenv("RELEASE_KEY_PASSWORD")
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
+    }
+}
+```
+
+- [ ] **Step 3: Verify `assembleDebug` still succeeds unchanged**
+
+```bash
+export JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+cd tablet && npm run build && npx cap sync android
+cd android && unset RELEASE_KEYSTORE_PATH RELEASE_KEYSTORE_PASSWORD RELEASE_KEY_ALIAS RELEASE_KEY_PASSWORD RELEASE_VERSION_CODE RELEASE_VERSION_NAME
+./gradlew assembleDebug
+```
+
+Expected: `BUILD SUCCESSFUL`, same as before this task's edit.
+
+- [ ] **Step 4: Verify `assembleRelease` produces a real signed APK with a throwaway keystore**
+
+```bash
+mkdir -p /tmp/gradle-verify-spike
+keytool -genkeypair -v -keystore /tmp/gradle-verify-spike/spike.jks -alias spike \
+  -keyalg RSA -keysize 2048 -validity 10000 -storepass spikepass123 -keypass spikepass123 \
+  -dname "CN=Spike, OU=Test, O=Test, L=Test, S=Test, C=US"
+export RELEASE_KEYSTORE_PATH=/tmp/gradle-verify-spike/spike.jks
+export RELEASE_KEYSTORE_PASSWORD=spikepass123
+export RELEASE_KEY_ALIAS=spike
+export RELEASE_KEY_PASSWORD=spikepass123
+export RELEASE_VERSION_CODE=10203
+export RELEASE_VERSION_NAME=1.2.3
+cd tablet/android && ./gradlew assembleRelease
+"$ANDROID_HOME"/build-tools/34.0.0/apksigner verify --print-certs app/build/outputs/apk/release/app-release.apk
+unzip -p app/build/outputs/apk/release/app-release.apk AndroidManifest.xml | strings | grep -i "1.2.3" || true
+rm -rf /tmp/gradle-verify-spike
+```
+
+Expected: `BUILD SUCCESSFUL`, `apksigner verify` prints the spike cert's DN, build succeeds with the injected version values (the manifest check is best-effort — binary XML doesn't grep cleanly, the real proof is `aapt dump badging` if you want to confirm precisely, but `BUILD SUCCESSFUL` with these env vars set is sufficient here since Task 4's real-tag-push end-to-end test is the actual acceptance check for version correctness).
+
+- [ ] **Step 5: Update `.gitignore` to explicitly exclude any locally-created keystore/properties files**
+
+In `tablet/android/.gitignore`, uncomment these two existing lines:
+```
+#*.jks
+#*.keystore
+```
+to:
+```
+*.jks
+*.keystore
+```
+and add one new line beneath them:
+```
+keystore.properties
+```
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add tablet/android/app/build.gradle tablet/android/.gitignore
+git commit -m "feat(tablet): env-driven release signing + tag-derived versioning"
+```
+
+---
+
+## Task 3: Tag → version derivation script (with a standalone test)
+
+**Files:**
+- Create: `.github/scripts/tag-to-version.sh`
+- Test: `.github/scripts/test-tag-to-version.sh`
+
+**Interfaces:**
+- Consumes: nothing.
+- Produces: `tag-to-version.sh <tag>` — on stdout, two lines `VERSION_NAME=X.Y.Z` and `VERSION_CODE=N` for a valid `tablet-vX.Y.Z` tag; exits non-zero with a message on stderr for anything else. Task 4's workflow calls this script and captures its output.
+
+- [ ] **Step 1: Write the test script first**
+
+```sh
+#!/bin/sh
+set -e
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+SCRIPT="$SCRIPT_DIR/tag-to-version.sh"
+
+check() {
+  tag="$1"
+  expected="$2"
+  actual="$("$SCRIPT" "$tag")"
+  if [ "$actual" != "$expected" ]; then
+    echo "FAIL: tag-to-version.sh $tag"
+    echo "  expected: $expected"
+    echo "  actual:   $actual"
+    exit 1
+  fi
+}
+
+check "tablet-v1.2.3" "VERSION_NAME=1.2.3
+VERSION_CODE=10203"
+
+check "tablet-v0.0.1" "VERSION_NAME=0.0.1
+VERSION_CODE=1"
+
+check "tablet-v12.34.56" "VERSION_NAME=12.34.56
+VERSION_CODE=123456"
+
+if "$SCRIPT" "not-a-valid-tag" >/dev/null 2>&1; then
+  echo "FAIL: expected tag-to-version.sh to reject 'not-a-valid-tag'"
+  exit 1
+fi
+
+if "$SCRIPT" "v1.2.3" >/dev/null 2>&1; then
+  echo "FAIL: expected tag-to-version.sh to reject 'v1.2.3' (missing tablet- prefix)"
+  exit 1
+fi
+
+echo "all tag-to-version.sh tests passed"
+```
+
+Save to `.github/scripts/test-tag-to-version.sh`, then `chmod +x .github/scripts/test-tag-to-version.sh`.
+
+- [ ] **Step 2: Run the test to verify it fails (script doesn't exist yet)**
+
+```bash
+sh .github/scripts/test-tag-to-version.sh
+```
+
+Expected: fails immediately — `.github/scripts/tag-to-version.sh: No such file or directory` (or similar).
+
+- [ ] **Step 3: Write the implementation**
+
+```sh
+#!/bin/sh
+set -e
+
+TAG="$1"
+
+case "$TAG" in
+  tablet-v*)
+    VERSION="${TAG#tablet-v}"
+    ;;
+  *)
+    echo "Invalid tag: '$TAG' (expected tablet-vX.Y.Z)" >&2
+    exit 1
+    ;;
+esac
+
+case "$VERSION" in
+  [0-9]*.[0-9]*.[0-9]*)
+    ;;
+  *)
+    echo "Invalid version '$VERSION' in tag '$TAG' (expected X.Y.Z)" >&2
+    exit 1
+    ;;
+esac
+
+MAJOR="${VERSION%%.*}"
+REST="${VERSION#*.}"
+MINOR="${REST%%.*}"
+PATCH="${REST#*.}"
+
+case "$MAJOR$MINOR$PATCH" in
+  *[!0-9]*|"")
+    echo "Invalid version '$VERSION' in tag '$TAG' (non-numeric component)" >&2
+    exit 1
+    ;;
+esac
+
+VERSION_CODE=$((MAJOR * 10000 + MINOR * 100 + PATCH))
+
+echo "VERSION_NAME=$VERSION"
+echo "VERSION_CODE=$VERSION_CODE"
+```
+
+Save to `.github/scripts/tag-to-version.sh`, then `chmod +x .github/scripts/tag-to-version.sh`.
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+```bash
+sh .github/scripts/test-tag-to-version.sh
+```
+
+Expected: `all tag-to-version.sh tests passed`
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add .github/scripts/tag-to-version.sh .github/scripts/test-tag-to-version.sh
+git commit -m "feat(ci): tag-to-version derivation script for tablet releases"
+```
+
+---
+
+## Task 4: `tablet-release.yml` GitHub Actions workflow
+
+**Files:**
+- Create: `.github/workflows/tablet-release.yml`
+
+**Interfaces:**
+- Consumes: Task 1's secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`) and variable (`TABLET_API_BASE_URL`); Task 2's env var contract (`RELEASE_KEYSTORE_PATH`/`RELEASE_KEYSTORE_PASSWORD`/`RELEASE_KEY_ALIAS`/`RELEASE_KEY_PASSWORD`/`RELEASE_VERSION_CODE`/`RELEASE_VERSION_NAME`); Task 3's `tag-to-version.sh` output format.
+- Produces: a GitHub Release named after the pushed tag, with the signed APK attached as `app-release.apk`.
+
+- [ ] **Step 1: Write the workflow file**
+
+```yaml
+# .github/workflows/tablet-release.yml
+name: Tablet Release
+
+on:
+  push:
+    tags:
+      - 'tablet-v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tablet
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Derive version from tag
+        id: version
+        run: |
+          OUTPUT="$(../.github/scripts/tag-to-version.sh "${GITHUB_REF_NAME}")"
+          echo "$OUTPUT" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: tablet/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web layer
+        env:
+          VITE_API_BASE_URL: ${{ vars.TABLET_API_BASE_URL }}
+        run: npm run build
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: android-actions/setup-android@v4
+
+      - name: Sync Android project
+        run: npx cap sync android
+
+      - name: Decode release keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > "$RUNNER_TEMP/release.jks"
+
+      - name: Build signed release APK
+        env:
+          RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          RELEASE_VERSION_CODE: ${{ env.VERSION_CODE }}
+          RELEASE_VERSION_NAME: ${{ env.VERSION_NAME }}
+        run: |
+          cd android
+          ./gradlew assembleRelease
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            android/app/build/outputs/apk/release/app-release.apk \
+            --title "Tablet ${GITHUB_REF_NAME}" \
+            --notes "Automated release build, version ${{ env.VERSION_NAME }} (versionCode ${{ env.VERSION_CODE }}). Points at ${{ vars.TABLET_API_BASE_URL }}."
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add .github/workflows/tablet-release.yml
+git commit -m "feat(ci): tablet-release workflow, builds+signs+publishes on tag push"
+```
+
+- [ ] **Step 3: Push and cut the first real release**
+
+```bash
+git push origin main
+git tag tablet-v1.0.0
+git push origin tablet-v1.0.0
+```
+
+- [ ] **Step 4: Verify the workflow run and the resulting release, for real**
+
+```bash
+gh run watch --repo Taha-Mahmoodi/atlas-fieldforce
+gh release view tablet-v1.0.0 --repo Taha-Mahmoodi/atlas-fieldforce
+gh release download tablet-v1.0.0 --repo Taha-Mahmoodi/atlas-fieldforce --dir /tmp/release-verify
+"$ANDROID_HOME"/build-tools/34.0.0/apksigner verify --print-certs /tmp/release-verify/app-release.apk
+rm -rf /tmp/release-verify
+```
+
+Expected: workflow run succeeds end to end; `gh release view` shows a release named `tablet-v1.0.0` with `app-release.apk` attached; the downloaded APK's signer cert matches the real keystore from Task 1 (**not** the spike cert from Task 2's local verification — if it matches the spike cert instead, the CI secrets are wrong).
+
+This is the real acceptance test for the whole increment — a tag push produces a real, downloadable, correctly-signed, correctly-versioned APK. Nothing after this task is required for the increment to be considered done; Task 5 is documentation only.
+
+---
+
+## Task 5: Tablet README — release-build notes
+
+**Files:**
+- Modify: `tablet/README.md`
+
+**Interfaces:**
+- Consumes: nothing (documents Tasks 1-4's outcome).
+- Produces: nothing consumed by other tasks — pure documentation.
+
+- [ ] **Step 1: Add a "Release builds" section to `tablet/README.md`**
+
+Append after the existing "Building the Android app" section:
+
+```markdown
+## Release builds
+
+Signed release APKs are built and published automatically by CI — push a
+`tablet-vX.Y.Z` tag and a signed `.apk` appears on this repo's
+[Releases page](https://github.com/Taha-Mahmoodi/atlas-fieldforce/releases)
+within a few minutes:
+
+\`\`\`bash
+git tag tablet-v1.0.1
+git push origin tablet-v1.0.1
+\`\`\`
+
+The release build points at `https://atlas.piiix.org` (baked in via CI, not
+your local `.env`) and is signed with the project's release keystore — a
+different key than the debug builds `npm run build:android` produces
+locally. Two things worth knowing before installing on a real device:
+
+- **A release-signed APK cannot install over an existing debug build on the
+  same device.** Android treats them as different signers for the same
+  package ID and refuses with `INSTALL_FAILED_UPDATE_INCOMPATIBLE` —
+  uninstall any debug build first.
+- **Sideloading prompts an "install unknown apps" permission screen**, and
+  Google Play Protect may show a warning since this isn't a Play Store
+  install. Both are expected for a directly-distributed APK, not a sign
+  anything is broken.
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add tablet/README.md
+git commit -m "docs(tablet): release build + install notes"
+```
+
+---
+
+## Self-Review Notes
+
+- **Spec coverage:** Increment 1's design doc sections (keystore, Gradle wiring, CI workflow, `versionCode` derivation, secrets/variables, docs) each map to Task 1/2/3/4/5 respectively — no gaps.
+- **Placeholder scan:** none found — every step has real, already-spiked-and-verified code or a concrete command with expected output.
+- **Type consistency:** env var names (`RELEASE_KEYSTORE_PATH`, `RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS`, `RELEASE_KEY_PASSWORD`, `RELEASE_VERSION_CODE`, `RELEASE_VERSION_NAME`) match exactly between Task 2's Gradle changes and Task 4's workflow `env:` blocks; secret/variable names (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`, `TABLET_API_BASE_URL`) match exactly between Task 1's `gh secret set`/`gh variable set` and Task 4's `${{ secrets.* }}`/`${{ vars.* }}` references; `tag-to-version.sh`'s `VERSION_NAME=`/`VERSION_CODE=` output lines match exactly what Task 4's workflow appends to `$GITHUB_ENV` and reads back as `${{ env.VERSION_NAME }}`/`${{ env.VERSION_CODE }}`.

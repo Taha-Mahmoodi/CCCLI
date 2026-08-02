@@ -1,0 +1,146 @@
+import * as THREE from "three";
+import {
+  effectiveStage,
+  mulberry32,
+  remnantFactor,
+  type Project,
+  type Stage,
+} from "./data";
+import { softSprite } from "./scene";
+
+// Stage palettes: core -> rim gradient per evolution stage. Warm-gold dominant,
+// blue reserved for the top tier — deliberately inverts the cyan-on-black cliché.
+const PALETTE: Record<Stage, { core: number; rim: number; glow: number }> = {
+  "nebula": { core: 0xb9a6dd, rim: 0x6d5a96, glow: 0.34 },
+  "red-dwarf": { core: 0xffb08a, rim: 0xa5432e, glow: 0.5 },
+  "main-sequence": { core: 0xfff3da, rim: 0xd9a05e, glow: 0.75 },
+  "blue-giant": { core: 0xeaf2ff, rim: 0x7fa8f4, glow: 1.0 },
+  "black-hole": { core: 0x120b07, rim: 0xff9d5c, glow: 0.9 },
+};
+
+export interface GalaxyNode {
+  group: THREE.Group;
+  project: Project;
+  /** world-space radius, used for camera framing */
+  radius: number;
+  spinSpeed: number;
+}
+
+/** Aggregate galaxy shape for the multi-galaxy tier. Semantic LOD tier 1:
+ *  one particle swirl per project — individual stars/planets never render here. */
+export function buildGalaxy(
+  project: Project,
+  now: number,
+  sprite: THREE.Texture,
+): GalaxyNode {
+  const stage = effectiveStage(project, now);
+  const pal = PALETTE[stage];
+  const rnd = mulberry32(project.id.length * 7919 + project.noteCount);
+
+  const radius = 8 + Math.sqrt(project.noteCount) * 0.9;
+  const count = Math.min(2200 + project.noteCount * 10, 14000);
+  const arms = stage === "nebula" ? 0 : 2 + Math.floor(rnd() * 3);
+  const dim = remnantFactor(project, now) * pal.glow;
+
+  const pos = new Float32Array(count * 3);
+  const col = new Float32Array(count * 3);
+  const core = new THREE.Color(pal.core);
+  const rim = new THREE.Color(pal.rim);
+  const c = new THREE.Color();
+
+  for (let i = 0; i < count; i++) {
+    const t = Math.pow(rnd(), 0.6); // density bias toward the core
+    const r = t * radius;
+    let angle = rnd() * Math.PI * 2;
+    if (arms > 0) {
+      // logarithmic spiral arms with gaussian scatter that widens outward
+      const arm = Math.floor(rnd() * arms);
+      const armAngle = (arm / arms) * Math.PI * 2;
+      const swirl = t * 2.6;
+      const scatter = (rnd() - 0.5 + rnd() - 0.5) * (0.18 + t * 0.55);
+      angle = armAngle + swirl + scatter;
+    }
+    const y = (rnd() - 0.5 + rnd() - 0.5) * radius * 0.09 * (1.25 - t);
+    pos[i * 3] = Math.cos(angle) * r;
+    pos[i * 3 + 1] = y;
+    pos[i * 3 + 2] = Math.sin(angle) * r;
+
+    c.lerpColors(core, rim, Math.pow(t, 0.8)).multiplyScalar(dim * 1.45);
+    col[i * 3] = c.r;
+    col[i * 3 + 1] = c.g;
+    col[i * 3 + 2] = c.b;
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+
+  const mat = new THREE.PointsMaterial({
+    size: stage === "nebula" ? 2.4 : 1.6,
+    map: sprite,
+    vertexColors: true,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    sizeAttenuation: true,
+  });
+
+  const group = new THREE.Group();
+  group.add(new THREE.Points(geo, mat));
+
+  if (stage === "black-hole") {
+    group.add(...blackHoleExtras(radius, dim));
+  }
+
+  // slight random tilt so the sky doesn't read as a flat sheet of discs
+  group.rotation.set((rnd() - 0.5) * 0.8, rnd() * Math.PI * 2, (rnd() - 0.5) * 0.8);
+
+  return {
+    group,
+    project,
+    radius,
+    spinSpeed: (0.02 + rnd() * 0.035) * (stage === "black-hole" ? 2.2 : 1),
+  };
+}
+
+/** Dark core + warm accretion ring. Gravity, not brightness. */
+function blackHoleExtras(radius: number, dim: number): THREE.Object3D[] {
+  const coreGeo = new THREE.SphereGeometry(radius * 0.16, 32, 32);
+  const coreMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const core = new THREE.Mesh(coreGeo, coreMat);
+
+  const ringGeo = new THREE.TorusGeometry(radius * 0.24, radius * 0.018, 16, 96);
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: new THREE.Color(0xff9d5c).multiplyScalar(dim * 1.6),
+    transparent: true,
+    opacity: 0.9,
+  });
+  const ring = new THREE.Mesh(ringGeo, ringMat);
+  ring.rotation.x = Math.PI / 2.15;
+
+  return [core, ring];
+}
+
+/** Flattened-disc layout with min-distance rejection sampling; biggest lands
+ *  nearest the origin so the opening flight has a natural destination. */
+export function layoutGalaxies(nodes: GalaxyNode[], seed = 11): void {
+  const rnd = mulberry32(seed);
+  const sorted = [...nodes].sort((a, b) => b.radius - a.radius);
+  const placed: { x: number; z: number; r: number }[] = [];
+
+  sorted.forEach((node, i) => {
+    const ringR = 60 + Math.pow(i, 0.78) * 34;
+    let x = 0;
+    let z = 0;
+    for (let attempt = 0; attempt < 40; attempt++) {
+      const a = rnd() * Math.PI * 2;
+      const r = ringR * (0.75 + rnd() * 0.5);
+      x = Math.cos(a) * r;
+      z = Math.sin(a) * r;
+      const pad = node.radius * 2.6;
+      if (placed.every((p) => Math.hypot(p.x - x, p.z - z) > p.r + pad)) break;
+    }
+    placed.push({ x, z, r: node.radius * 2.6 });
+    node.group.position.set(x, (rnd() - 0.5) * 46, z);
+  });
+}

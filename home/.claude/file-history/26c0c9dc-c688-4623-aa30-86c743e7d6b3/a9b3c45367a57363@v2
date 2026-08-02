@@ -1,0 +1,54 @@
+# Competitive chart — <client>
+
+Written by `market-analyst` in Loop 1c. Read by the conductor at 1e, shown to the
+client at Gate B1 as the competitor overlay, and read by every `section-designer` in
+Loop 2a.
+
+This chart is the fence (`§3`). Whatever five of six competitors look like is what this
+site does not look like. A board that could sit in this chart unnoticed has failed.
+
+Evidence, not opinion. Verbatim, not paraphrase. Sample the hexes, do not describe
+them. Screenshots in `runs/<slug>/competitors/`.
+
+## The chart
+
+3–6 competitors — the ones that appear when the ICP searches, not the ones on the board
+slide. Include the market leader even if the client says they do not compete, and
+include at least one the client did not name.
+
+| | Competitor A | Competitor B | Competitor C |
+|---|---|---|---|
+| **Hero line** (verbatim) | | | |
+| **Sub-line and CTA** (verbatim, + friction rung) | | | |
+| **Claimed differentiator** | | | |
+| **Lead proof** | | | |
+| **Pricing visibility** | | | |
+| **Offer, and its friction** | | | |
+| **Page shape** (section order) | | | |
+| **Product visibility** | | | |
+| **Style family** (`STYLES.md`) | | | |
+| **Palette** (sampled hexes) | | | |
+| **Type** | | | |
+| **Objections answered, and where** | | | |
+| **Weak on** | | | |
+| **Screenshot** | | | |
+| **Page last updated** | | | |
+
+## Finding 1 — the cluster
+
+What most of them look like and sound like, named concretely. "Four of six use a
+purple-to-blue gradient and an abstract node diagram" beats "they look similar".
+
+## Finding 2 — the empty position
+
+The claim nobody is making, the proof nobody is showing, the page nobody has. Say
+whether it is empty because it is an opening or empty because it does not work, and
+why you think so.
+
+## Finding 3 — the comparison the buyer will run
+
+They will open three tabs. On which dimensions does the client lose? Plainly.
+
+## Worth stealing structurally, never visually
+
+A page type that works, an objection handled well, a proof format. Not a look (`§3`).

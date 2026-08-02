@@ -1,0 +1,72 @@
+// Generates the demo seed: speaks each memo with the author's macOS voice,
+// encodes to Opus/WebM (universally playable in Chromium AND what the app
+// records first — see apps/web/lib/audio/mime.ts), and writes a manifest the
+// /seed loader reads into IndexedDB.
+//
+// Opus/WebM on purpose: headless/open Chromium often ships without AAC, so an
+// .m4a seed would load and play *silently*. (Trade-off: iOS Safari can't play
+// WebM — regenerate an .m4a variant if you ever test in real Safari.)
+//
+// Requires macOS `say` + ffmpeg + ffprobe. Run: node scripts/seed/generate.mjs
+// Set LIMIT=1 to generate a single clip while proving the pipeline end-to-end.
+
+import { execFileSync } from "node:child_process";
+import { mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+import { users, channels, memos } from "./content.mjs";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const outDir = resolve(here, "../../apps/web/public/seed");
+const tmpDir = resolve(here, ".tmp");
+mkdirSync(outDir, { recursive: true });
+mkdirSync(tmpDir, { recursive: true });
+
+const limit = process.env.LIMIT ? Number(process.env.LIMIT) : memos.length;
+const userByHandle = Object.fromEntries(users.map((u) => [u.handle, u]));
+const now = Date.now();
+
+const manifestMemos = [];
+memos.slice(0, limit).forEach((m, i) => {
+  const id = `seed-${String(i + 1).padStart(3, "0")}`;
+  const user = userByHandle[m.handle];
+  if (!user) throw new Error(`unknown handle: ${m.handle}`);
+
+  const aiff = resolve(tmpDir, `${id}.aiff`);
+  const webm = resolve(outDir, `${id}.webm`);
+
+  // say → AIFF, then ffmpeg → mono Opus/WebM (tiny, ~4.5 KB/s).
+  execFileSync("say", ["-v", user.voice, "-o", aiff, m.text]);
+  execFileSync("ffmpeg", [
+    "-y", "-i", aiff, "-ac", "1", "-c:a", "libopus", "-b:a", "32k", "-f", "webm", webm,
+  ], { stdio: "ignore" });
+
+  const durationSec = Number(
+    execFileSync("ffprobe", [
+      "-v", "error", "-show_entries", "format=duration", "-of", "default=nk=1:nw=1", webm,
+    ]).toString().trim(),
+  );
+
+  manifestMemos.push({
+    id,
+    createdAt: now - m.hoursAgo * 3_600_000,
+    durationMs: Math.round(durationSec * 1000),
+    mime: "audio/webm;codecs=opus",
+    liked: !!m.liked,
+    channelId: m.channelId,
+    machineTranscript: m.machineError ?? m.text,
+    ...(m.machineError ? { correctedTranscript: m.text } : {}),
+    authorHandle: user.handle,
+    authorName: user.name,
+    audio: `/seed/${id}.webm`,
+  });
+
+  console.log(`✓ ${id}  @${user.handle} (${user.voice})  ${durationSec.toFixed(1)}s  ${m.channelId}`);
+});
+
+writeFileSync(
+  resolve(outDir, "manifest.json"),
+  JSON.stringify({ channels, memos: manifestMemos }, null, 2),
+);
+rmSync(tmpDir, { recursive: true, force: true });
+console.log(`\nWrote ${manifestMemos.length} memos → apps/web/public/seed/manifest.json`);

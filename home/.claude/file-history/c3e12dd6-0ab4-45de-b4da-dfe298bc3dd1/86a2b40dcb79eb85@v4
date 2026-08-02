@@ -1,0 +1,56 @@
+import json, csv
+from openpyxl import Workbook
+from openpyxl.utils import get_column_letter
+
+with open("/private/tmp/claude-501/-Users-taha/c3e12dd6-0ab4-45de-b4da-dfe298bc3dd1/scratchpad/leads_data.json") as f:
+    rows = json.load(f)
+
+rows.sort(key=lambda r: r["estimated_fit_score"], reverse=True)
+
+CAMPAIGN_NAME = "texas-bars-batch-1"
+GEO_SLUG = "texas"
+
+HEADERS = [
+    "Business Name", "Country", "Region/State", "City", "Area/Neighborhood", "Category",
+    "Phone", "Public Email", "Email Source URL", "Website URL", "Website Status",
+    "Why Outdated", "Strengths", "Weaknesses", "Maps/Directory URL", "Social URLs",
+    "Estimated Fit Score", "Notes", "Research Date", "Campaign Name", "Geo Slug",
+]
+
+def to_row(r):
+    return [
+        r["business_name"], r["country"], r["region_state"], r["city"], r["area_neighborhood"], r["category"],
+        r["phone"], r["public_email"], r["email_source_url"], r["website_url"], r["website_status"],
+        r["why_outdated"], r["strengths"], r["weaknesses"], r["maps_directory_url"], r["social_urls"],
+        r["estimated_fit_score"], r["notes"], r["research_date"], CAMPAIGN_NAME, GEO_SLUG,
+    ]
+
+data_rows = [to_row(r) for r in rows]
+
+out_dir = "/private/tmp/claude-501/-Users-taha/c3e12dd6-0ab4-45de-b4da-dfe298bc3dd1/scratchpad/website-pitch-pipeline/leads"
+
+with open(f"{out_dir}/texas-business-leads-batch-1.csv", "w", newline="", encoding="utf-8") as f:
+    w = csv.writer(f)
+    w.writerow(HEADERS)
+    w.writerows(data_rows)
+
+wb = Workbook()
+ws = wb.active
+ws.title = "Leads"
+ws.append(HEADERS)
+for row in data_rows:
+    ws.append(row)
+
+ws.freeze_panes = "A2"
+ws.auto_filter.ref = f"A1:{get_column_letter(len(HEADERS))}{len(data_rows) + 1}"
+
+widths = [20, 8, 12, 14, 16, 18, 14, 22, 30, 30, 14, 45, 45, 45, 40, 30, 10, 45, 12, 20, 10]
+for i, w in enumerate(widths, start=1):
+    ws.column_dimensions[get_column_letter(i)].width = w
+
+for cell in ws[1]:
+    cell.font = cell.font.copy(bold=True)
+
+wb.save(f"{out_dir}/texas-business-leads-batch-1.xlsx")
+
+print(f"Wrote {len(data_rows)} rows to CSV + XLSX")

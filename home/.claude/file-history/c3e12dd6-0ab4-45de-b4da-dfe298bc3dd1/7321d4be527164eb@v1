@@ -1,0 +1,20 @@
+---
+name: website-pitch-pipeline-cost-estimator
+description: "website-pitch-pipeline — cost estimator (Loop 0a) and forged blueprint README, both live as of 2026-07-24"
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: 54878c37-ff59-4cbe-a1af-88cbdb00e1d7
+  modified: 2026-07-24T10:23:11.750Z
+---
+
+**PIIIX-org/website-pitch-pipeline state as of 2026-07-24** (local clone: /tmp/website-pitch-pipeline — note /tmp, survives unlike scratchpad but not guaranteed; repo is modify-only, NEVER run its pipeline).
+
+**1. Universal AI cost estimator (Loop 0a):** `utils/cost-estimator.js` (231 lines, zero deps) + `loops/00a-cost-estimate.md` + `utils/README.md`. Prices a campaign across 12 models / 4 providers (`node utils/cost-estimator.js estimate <leads> <businesses> <sites>`). Caution: these files were written in an earlier session that *claimed* to push them but never committed them; they only landed in commit `e5740fb` (2026-07-24). Known doc inconsistency: loops/00a prose says quality strategy costs "$50–200" but the formula tops out ~$32 for a 5/5/5 campaign.
+
+**2. README forged via the git-a-profile plugin** (user's own PIIIX-org/git-a-profile, installed as Claude plugin). First attempt (indigo badges + invented logo) was reverted; second run followed the full pipeline (intake → research → Gate A → asset fan-out → Gate B → build → Gate C → live screenshot verify) and shipped commit `830ddb4`.
+- Approved intake: vibe = "heist crew with blueprints"; must-haves = cost estimator, human gates, PIIIX name, custom tags; do-nots = **never invent a PIIIX logo**, hero banner required.
+- Concept: "The Drawing Set, filed clean" (blueprint sheet set + job-file furniture). Palette: charcoal `#272625` + porcelain `#f5f9fb` (sampled from PIIIX org avatar), cyanotype blues `#0E2A3F/#2E5C8A/#9CC3E0`, stamp red `#B3402F` reserved for human/gate moments only.
+- 9 committed SVGs in `assets/`: hero-banner, tag-metabar, sheet-register, takeoff-chart, gate-slips, tag-lifecycle, section-tab, footer-strip. All: own charcoal background, mono type, one-shot animation gated by prefers-reduced-motion, alt text, no badge services. README carries `<!-- forged-with: git-a-profile -->` + visible removable credit (never re-add if Taha deletes it).
+- RESEARCH.md in the clone is deliberately uncommitted working material.
+- git-a-profile's Loop 4 run report (`runs/<slug>/REPORT.md` in the *plugin* repo) — pending Taha's decision at session end 2026-07-24.

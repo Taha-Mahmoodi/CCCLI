@@ -1,0 +1,19 @@
+export default function Home() {
+  return (
+    <main
+      id="main"
+      className="flex flex-1 flex-col items-center justify-center gap-6 px-6 py-24 text-center"
+    >
+      <p className="text-sm font-medium uppercase tracking-widest text-zinc-500">
+        Third Eye
+      </p>
+      <h1 className="max-w-2xl text-balance text-4xl font-semibold leading-tight sm:text-5xl">
+        Feel the world in real time. Feel, don&apos;t wait.
+      </h1>
+      <p className="max-w-xl text-lg leading-8 text-zinc-600 dark:text-zinc-400">
+        A wearable that lets a blind person feel the world through the body,
+        instantly. The full Third Eye World experience is being built here.
+      </p>
+    </main>
+  );
+}

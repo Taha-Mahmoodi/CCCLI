@@ -1,0 +1,32 @@
+import * as React from "react";
+
+export interface AvatarProps {
+  /** Person's name; the first initial is shown. */
+  name: string;
+  /** Warm-palette background color (hex). */
+  color: string;
+  size?: number;
+}
+
+/**
+ * Illustrative avatar: a solid warm-color tile with the first initial.
+ * Decorative (aria-hidden) — the name is always shown as adjacent text, so the
+ * avatar adds no information for screen-reader users (design system: no pity
+ * imagery, no stock photos).
+ */
+export function Avatar({ name, color, size = 56 }: AvatarProps) {
+  return (
+    <span
+      aria-hidden="true"
+      className="grid flex-none place-items-center rounded-pill font-display font-extrabold text-surface"
+      style={{
+        width: size,
+        height: size,
+        background: color,
+        fontSize: Math.round(size * 0.42),
+      }}
+    >
+      {name.trim().charAt(0).toUpperCase()}
+    </span>
+  );
+}

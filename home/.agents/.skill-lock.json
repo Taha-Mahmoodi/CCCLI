@@ -1,0 +1,15 @@
+{
+  "version": 3,
+  "skills": {
+    "apify-ultimate-scraper": {
+      "source": "apify/agent-skills",
+      "sourceType": "github",
+      "sourceUrl": "https://github.com/apify/agent-skills.git",
+      "skillPath": "skills/apify-ultimate-scraper/SKILL.md",
+      "skillFolderHash": "60dad2a729161ecebd5e3429fbb219c1e3029f93",
+      "installedAt": "2026-07-20T11:04:52.352Z",
+      "updatedAt": "2026-07-20T11:04:52.352Z"
+    }
+  },
+  "dismissed": {}
+}

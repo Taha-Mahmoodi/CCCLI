@@ -1,0 +1,233 @@
+import SwiftUI
+import ThirdEyeCore
+
+/// Where "already onboarded to v1" is remembered. Matches the web key so the
+/// concept is the same across platforms.
+private let onboardedKey = "tew:onboarded:v1"
+
+public enum OnboardingStore {
+  public static var hasOnboarded: Bool {
+    get { UserDefaults.standard.bool(forKey: onboardedKey) }
+    set { UserDefaults.standard.set(newValue, forKey: onboardedKey) }
+  }
+}
+
+/// The v1 first-run wizard — teaches the four moves and has the user practise
+/// each before reaching the deck (the script lives in `ThirdEyeCore` so all
+/// platforms teach the same words).
+///
+/// Never a trap: every step is skippable, the whole tour is skippable, each
+/// action can be practised by gesture OR by button OR by VoiceOver rotor action,
+/// and each success is announced. Practice is encouragement, not a gate.
+public struct OnboardingWizardScreen: View {
+  @State private var stepIndex = 0
+  @State private var practiced: Set<Int> = []
+  @State private var dragX: CGFloat = 0
+  @State private var dragY: CGFloat = 0
+  @State private var rightHitAt: Double?
+
+  private let onFinish: () -> Void
+
+  public init(onFinish: @escaping () -> Void) {
+    self.onFinish = onFinish
+  }
+
+  private var step: OnboardingStep { onboardingSteps[stepIndex] }
+  private var isLast: Bool { stepIndex == onboardingSteps.count - 1 }
+  private var didPractice: Bool { practiced.contains(stepIndex) }
+
+  public var body: some View {
+    VStack(alignment: .leading, spacing: 16) {
+      Text("Step \(stepIndex + 1) of \(onboardingSteps.count)")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+
+      Text(step.title)
+        .font(.title2.weight(.semibold))
+        .accessibilityAddTraits(.isHeader)
+
+      Text(step.body)
+        .font(.callout)
+        .fixedSize(horizontal: false, vertical: true)
+
+      if let practice = step.practice {
+        Text(practice).font(.subheadline.weight(.medium))
+        practiceSurface
+        if didPractice {
+          Text("✓ Nicely done. Continue when you're ready.")
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(.tint)
+        }
+      }
+
+      Spacer(minLength: 8)
+      controls
+    }
+    .padding(24)
+    .onChange(of: stepIndex) { _ in
+      announceA11y("\(step.title). \(step.body)")
+    }
+  }
+
+  // MARK: - Practice
+
+  @ViewBuilder
+  private var practiceSurface: some View {
+    switch step.kind {
+    case .record:
+      recordPractice
+    case .like, .skip, .likeNext:
+      cardPractice
+    default:
+      EmptyView()
+    }
+  }
+
+  private var recordPractice: some View {
+    Button {
+      pass("A tap works too — that starts and stops recording.")
+    } label: {
+      Image(systemName: "mic.fill").font(.title)
+        .frame(width: 64, height: 64)
+    }
+    .buttonStyle(.borderedProminent)
+    .clipShape(Circle())
+    .frame(maxWidth: .infinity)
+    .accessibilityLabel("Practice record button. Press and hold, or tap.")
+    .onLongPressGesture(minimumDuration: 0.22) {
+      pass("You held to record. Let go when you're done.")
+    }
+  }
+
+  private var cardPractice: some View {
+    VStack(spacing: 12) {
+      Text(didPractice ? "✓ Practice memo" : "Practice memo")
+        .frame(maxWidth: .infinity, minHeight: 96)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .offset(x: dragX)
+        .gesture(
+          DragGesture()
+            .onChanged { v in
+              dragX = v.translation.width
+              dragY = v.translation.height
+            }
+            .onEnded { _ in
+              let action = classifySwipe(dx: Double(dragX), dy: Double(dragY))
+              withAnimation(.easeOut(duration: 0.2)) { dragX = 0 }
+              dragY = 0
+              handlePractice(action)
+            },
+        )
+
+      Button(practiceButtonLabel) { practiceViaButton() }
+        .buttonStyle(.bordered)
+        .frame(minHeight: 44)
+    }
+    // The screen-reader route: a rotor action, since VoiceOver eats the swipe.
+    .accessibilityElement(children: .contain)
+    .accessibilityLabel("Practice card. Swipe it, use the button, or use this action.")
+    .accessibilityAction(named: practiceButtonLabel) { practiceViaButton() }
+  }
+
+  private var practiceButtonLabel: String {
+    switch step.kind {
+    case .like: return "Like"
+    case .skip: return "Skip"
+    case .likeNext: return "Like and next"
+    default: return "Try it"
+    }
+  }
+
+  private func practiceViaButton() {
+    switch step.kind {
+    case .like: pass("That's a like.")
+    case .skip: pass("Skipped. Well done.")
+    case .likeNext: pass("Liked, and on to the next.")
+    default: break
+    }
+  }
+
+  private func handlePractice(_ action: SwipeAction?) {
+    switch (step.kind, action) {
+    case (.like, .like): pass("That's a like.")
+    case (.skip, .skip): pass("Skipped. Well done.")
+    case (.likeNext, .like):
+      // Two quick right swipes = the "twice fast" double.
+      let now = Date().timeIntervalSince1970
+      if isDoubleActivation(previous: rightHitAt, now: now) {
+        rightHitAt = nil
+        pass("Liked, and on to the next. That's the double.")
+      } else {
+        rightHitAt = now
+        announceA11y("Once more, quickly.")
+      }
+    default:
+      break
+    }
+  }
+
+  private func pass(_ message: String) {
+    guard !didPractice else { return }
+    practiced.insert(stepIndex)
+    announceA11y(message)
+  }
+
+  // MARK: - Controls (never a trap)
+
+  private var controls: some View {
+    HStack(spacing: 12) {
+      if stepIndex > 0 {
+        Button("Back") { stepIndex -= 1 }
+          .buttonStyle(.bordered)
+          .frame(minHeight: 44)
+      }
+
+      Button(primaryLabel) {
+        if isLast {
+          finish()
+        } else {
+          stepIndex += 1
+        }
+      }
+      .buttonStyle(.borderedProminent)
+      .frame(minHeight: 44)
+
+      if !isLast {
+        Spacer()
+        Button("Skip the tour") { finish() }
+          .buttonStyle(.plain)
+          .foregroundStyle(.secondary)
+          .frame(minHeight: 44)
+      }
+    }
+  }
+
+  private var primaryLabel: String {
+    if isLast { return "Enter Third Eye World" }
+    if step.practice != nil && !didPractice { return "Skip this step" }
+    return "Next"
+  }
+
+  private func finish() {
+    OnboardingStore.hasOnboarded = true
+    onFinish()
+  }
+}
+
+/// Gates the app: the wizard on first run, the deck thereafter.
+public struct RootScreen: View {
+  @ObservedObject private var vm: RadioViewModel
+  @State private var needsOnboarding = !OnboardingStore.hasOnboarded
+
+  public init(vm: RadioViewModel) {
+    self.vm = vm
+  }
+
+  public var body: some View {
+    if needsOnboarding {
+      OnboardingWizardScreen { needsOnboarding = false }
+    } else {
+      CardDeckScreen(vm: vm)
+    }
+  }
+}

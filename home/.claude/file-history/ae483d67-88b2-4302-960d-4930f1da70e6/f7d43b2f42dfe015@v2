@@ -1,0 +1,125 @@
+// The radio player store — single source of truth for the timeline and
+// playback. Kept pure (persistence + object URLs are guarded side-effects) so
+// its state transitions are unit-testable without a DOM.
+//
+// Non-negotiables enforced here:
+//  #3 the stream ends — next() past the last memo yields status "ended".
+//  #4 no engagement machinery — likes are per-user state only, never counted.
+
+import { create } from "zustand";
+import type { Memo, StoredMemo } from "@/lib/types";
+import { getAllMemos, putMemo, setLiked as persistLiked } from "@/lib/idb";
+
+export type PlayerStatus = "idle" | "playing" | "paused" | "ended";
+
+type PlayerState = {
+  memos: Memo[];
+  urls: Record<string, string>; // memo id -> object URL
+  currentIndex: number;
+  isPlaying: boolean;
+  status: PlayerStatus;
+  hydrated: boolean;
+  replayNonce: number; // bumped to ask the player to seek current back to 0
+
+  hydrate: () => Promise<void>;
+  addMemo: (blob: Blob, durationMs: number, mime: string) => Promise<Memo>;
+  play: () => void;
+  pause: () => void;
+  togglePlay: () => void;
+  next: () => void;
+  previous: () => void;
+  replay: () => void;
+  playFrom: (index: number) => void;
+  toggleLike: (id: string) => void;
+  reset: () => void; // back to the start of the stream
+};
+
+function makeId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  return `memo_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+}
+
+function objectUrl(blob: Blob): string {
+  if (typeof URL !== "undefined" && "createObjectURL" in URL) return URL.createObjectURL(blob);
+  return "";
+}
+
+export const usePlayer = create<PlayerState>((set, get) => ({
+  memos: [],
+  urls: {},
+  currentIndex: 0,
+  isPlaying: false,
+  status: "idle",
+  hydrated: false,
+  replayNonce: 0,
+
+  hydrate: async () => {
+    if (get().hydrated) return;
+    const stored = await getAllMemos();
+    const urls: Record<string, string> = {};
+    const memos: Memo[] = stored.map((m) => {
+      urls[m.id] = objectUrl(m.blob);
+      const { blob: _blob, ...meta } = m;
+      void _blob;
+      return meta;
+    });
+    set({ memos, urls, hydrated: true, currentIndex: 0 });
+  },
+
+  addMemo: async (blob, durationMs, mime) => {
+    const memo: Memo = { id: makeId(), createdAt: Date.now(), durationMs, mime, liked: false };
+    void putMemo({ ...memo, blob } satisfies StoredMemo); // fire-and-forget persistence
+    const url = objectUrl(blob);
+    set((s) => ({
+      memos: [...s.memos, memo],
+      urls: { ...s.urls, [memo.id]: url },
+      // If the stream had ended, a fresh memo re-opens it at the new item.
+      currentIndex: s.status === "ended" ? s.memos.length : s.currentIndex,
+      status: s.status === "ended" ? "paused" : s.status,
+    }));
+    return memo;
+  },
+
+  play: () => {
+    if (get().memos.length === 0) return;
+    set({ isPlaying: true, status: "playing" });
+  },
+  pause: () => set((s) => (s.status === "playing" ? { isPlaying: false, status: "paused" } : {})),
+  togglePlay: () => (get().isPlaying ? get().pause() : get().play()),
+
+  next: () => {
+    const { currentIndex, memos } = get();
+    if (currentIndex < memos.length - 1) {
+      set({ currentIndex: currentIndex + 1 });
+    } else {
+      set({ isPlaying: false, status: "ended" }); // the stream ends (#3)
+    }
+  },
+
+  previous: () =>
+    set((s) => ({
+      currentIndex: Math.max(0, s.currentIndex - 1),
+      status: s.status === "ended" ? "paused" : s.status,
+    })),
+
+  replay: () =>
+    set((s) => ({
+      replayNonce: s.replayNonce + 1,
+      isPlaying: true,
+      status: "playing",
+    })),
+
+  playFrom: (index) => {
+    const { memos } = get();
+    if (index < 0 || index >= memos.length) return;
+    set({ currentIndex: index, isPlaying: true, status: "playing" });
+  },
+
+  toggleLike: (id) => {
+    set((s) => ({ memos: s.memos.map((m) => (m.id === id ? { ...m, liked: !m.liked } : m)) }));
+    const m = get().memos.find((x) => x.id === id);
+    if (m) void persistLiked(id, m.liked);
+  },
+
+  reset: () => set({ currentIndex: 0, status: "idle", isPlaying: false }),
+}));

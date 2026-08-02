@@ -1,0 +1,22 @@
+## UI Slice 2b-6 — Inline markdown rendering (live-preview, part 1)
+
+The CodeMirror note editor now renders markdown formatting **inline** as you type: headings are larger/bold, `**bold**` is bold, `*italic*` is italic, `` `code` `` is monospace, and links/quotes/strikethrough are styled.
+
+### What's in
+- A CodeMirror 6 **`HighlightStyle`** in `useCodeMirrorEditor` mapping the markdown parser's highlight tags (`heading1–6`, `strong`, `emphasis`, `monospace`, `link`, `quote`, `strikethrough`) to **fixed `.cm-md-*` class names**, registered via `syntaxHighlighting(...)`.
+- Matching style rules in the editor's theme (heading sizes/weights, bold/italic, mono code, accent links, muted quotes) — using only existing design tokens (`--primary`, `--muted-foreground`, `--font-mono`).
+
+Fixed class names (rather than CM6's generated ones) make the styling directly testable — the test asserts `.cm-md-h1/-strong/-emphasis/-code` render for real markdown source.
+
+### Honest scope boundary
+This is the **rendering** half of live-preview. The raw syntax markers (`#`, `**`, `` ` ``) are still **shown** (just styled). Hiding them "at rest" when the cursor isn't on the line — true Obsidian-style live-preview — is the next increment (2b-7), a `ViewPlugin` + `Decoration.replace`. Deliberately split, not dropped.
+
+### Dependencies
+`@codemirror/language@6.12.4` + `@lezer/highlight@1.2.3` — already in the lockfile as transitive deps of `@codemirror/lang-markdown`, promoted to direct deps so they're importable. No new resolution, no lockfile churn.
+
+### Verification
+`pnpm typecheck` (client + server), `pnpm lint` (0), **85 client tests**, `pnpm -C client build` — all green. Whole-branch review → Ready to merge. (Note: a headless test only confirms the styling *classes* are applied; the actual visual look is worth a browser glance when convenient.)
+
+Targets `dev` directly. Backend follow-up #66 (updateNote race) remains open.
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)

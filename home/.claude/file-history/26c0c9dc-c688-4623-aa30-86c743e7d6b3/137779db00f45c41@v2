@@ -1,0 +1,472 @@
+#!/usr/bin/env python3
+"""Pre-flight check for a webcrab site, before Gate C and again in Loop 7.
+
+Turns the mechanical half of the six hard rules into a gate you can run. It does
+not judge design, prose, positioning, or whether a claim is true — a human does
+that at the gate. It catches the things that are true or false: a production
+noindex, a tracker firing before consent, a form with nowhere to post, an image
+with no alt, a redirect row that 404s.
+
+    python3 scripts/preflight.py path/to/site            # a built directory
+    python3 scripts/preflight.py path/to/index.html      # one file
+    python3 scripts/preflight.py https://example.com     # a live URL
+    python3 scripts/preflight.py <target> --check-urls   # also resolve every asset
+    python3 scripts/preflight.py <target> --evidence runs/<slug>/EVIDENCE.md
+    python3 scripts/preflight.py https://example.com --redirects runs/<slug>/redirects.csv
+    python3 scripts/preflight.py --selftest
+
+Exit 0 = no failures (warnings allowed). Exit 1 = at least one failure.
+
+What this CANNOT do, and what still needs a human (`§18`, `§16`):
+a lead arriving in the CRM, an autoresponder staying out of spam, a consent
+banner that actually blocks the request, a page that looks right. Nothing here
+discharges a hard rule. It only catches the silent, mechanical half.
+"""
+import sys, re, os, glob, csv
+
+# §14: a public endpoint going down should never take the site with it.
+CDN_HOSTS = [
+    "cdn.jsdelivr.net", "unpkg.com", "cdnjs.cloudflare.com", "esm.sh",
+    "skypack.dev", "fonts.googleapis.com", "fonts.gstatic.com",
+    "ajax.googleapis.com", "code.jquery.com", "stackpath.bootstrapcdn.com",
+]
+# §6 / §25: never hotlink someone else's photograph.
+STOCK_HOSTS = [
+    "images.unsplash.com", "unsplash.com/photos", "pexels.com",
+    "istockphoto.com", "shutterstock.com", "gettyimages.",
+]
+# §16: nothing in this list may load before the visitor has consented.
+TRACKERS = [
+    "google-analytics.com", "googletagmanager.com", "connect.facebook.net",
+    "hotjar.com", "segment.com", "mixpanel.com", "clarity.ms",
+    "doubleclick.net", "linkedin.com/px", "snap.licdn.com", "fullstory.com",
+    "mouseflow.com", "luckyorange.com", "static.ads-twitter.com",
+]
+# Consent platforms and the usual homegrown markers. Presence is not proof the
+# gate works — the network tab is (`§16`) — but absence alongside a tracker is
+# a finding on its own.
+CONSENT_MARKERS = [
+    "cookiebot", "onetrust", "klaro", "osano", "cookieyes", "termly",
+    "usercentrics", "iubenda", "cookieconsent", "consentmanager",
+    "data-consent", "data-cookieconsent", "window.consent", "hasConsent",
+]
+
+SHELL_BUDGET = 100 * 1024   # §19
+
+
+def load(src):
+    if src.startswith("http"):
+        from urllib.request import urlopen
+        return urlopen(src, timeout=20).read().decode("utf-8", "replace")
+    with open(src, encoding="utf-8") as f:
+        return f.read()
+
+
+def targets(src):
+    """One (name, html) per page to check."""
+    if src.startswith("http") or os.path.isfile(src):
+        return [(src, load(src))]
+    pages = sorted(glob.glob(os.path.join(src, "**", "*.html"), recursive=True))
+    if not pages:
+        print(f"no .html found under {src}")
+        sys.exit(2)
+    return [(p, load(p)) for p in pages]
+
+
+def images(html):
+    """(src, alt, has_dims) for every image. alt=None means the attribute is absent."""
+    out = []
+    for m in re.finditer(r"<img\b[^>]*>", html, re.I):
+        tag = m.group(0)
+        s = (re.search(r'src\s*=\s*["\']([^"\']*)', tag, re.I) or [None, ""])[1]
+        a = re.search(r'alt\s*=\s*["\']([^"\']*)', tag, re.I)
+        dims = bool(re.search(r'\bwidth\s*=', tag, re.I)
+                    and re.search(r'\bheight\s*=', tag, re.I))
+        out.append((s, a.group(1) if a else None, dims))
+    return out
+
+
+def externals(html):
+    """Every off-origin URL the page pulls at runtime."""
+    pat = r'(?:src|href)\s*=\s*["\'](https?://[^"\']+)'
+    return re.findall(pat, html, re.I)
+
+
+def form_fields(html):
+    """(tag, type, id, labelled) for every field a visitor has to fill."""
+    out = []
+    labelled_ids = set(re.findall(r'<label\b[^>]*\bfor\s*=\s*["\']([^"\']+)',
+                                  html, re.I))
+    for m in re.finditer(r"<(input|select|textarea)\b[^>]*>", html, re.I):
+        tag_name, tag = m.group(1).lower(), m.group(0)
+        t = (re.search(r'\btype\s*=\s*["\']([^"\']*)', tag, re.I) or [None, "text"])[1]
+        if t.lower() in ("hidden", "submit", "button", "reset", "image"):
+            continue
+        fid = (re.search(r'\bid\s*=\s*["\']([^"\']*)', tag, re.I) or [None, ""])[1]
+        labelled = bool(
+            (fid and fid in labelled_ids)
+            or re.search(r'\baria-label(?:ledby)?\s*=', tag, re.I)
+            or (t.lower() == "checkbox" and re.search(r'\btitle\s*=', tag, re.I))
+        )
+        out.append((tag_name, t, fid, labelled))
+    return out
+
+
+def check(name, html, opts):
+    fails, warns, oks = [], [], []
+    imgs = images(html)
+    ext = externals(html)
+
+    # ---- §13 (hard) — the two silent catastrophes, checked first -----------
+
+    if re.search(r'<meta[^>]+name\s*=\s*["\']robots["\'][^>]*noindex', html, re.I) \
+            or re.search(r'<meta[^>]+noindex[^>]*name\s*=\s*["\']robots', html, re.I):
+        fails.append("production `noindex` in the page (§13) — the site is "
+                     "invisible and nobody notices for weeks. STOP EVERYTHING")
+    else:
+        oks.append("no noindex")
+
+    # ---- §16 (hard) — nothing tracks before consent ------------------------
+
+    track = [u for u in ext if any(h in u for h in TRACKERS)]
+    has_consent = any(mk.lower() in html.lower() for mk in CONSENT_MARKERS)
+    if track and not has_consent:
+        fails.append(f"{len(track)} tracker(s) in the initial HTML with no consent "
+                     f"gate anywhere on the page (§16): "
+                     + ", ".join(sorted({u.split('/')[2] for u in track})[:3]))
+    elif track:
+        warns.append(f"{len(track)} tracker(s) present alongside a consent "
+                     f"mechanism — a script that loads and then declines to "
+                     f"report is already the violation. Prove it on the network "
+                     f"tab with consent rejected (§16)")
+    else:
+        oks.append("no third-party trackers in the initial HTML")
+
+    # ---- §18 (hard) — the form goes somewhere ------------------------------
+
+    forms = re.findall(r"<form\b[^>]*>", html, re.I)
+    if forms:
+        no_target = [f for f in forms
+                     if not re.search(r'\baction\s*=\s*["\'][^"\']+', f, re.I)
+                     and not re.search(r'\bon(?:submit|click)\s*=', f, re.I)
+                     and not re.search(r'\bdata-[a-z-]*(?:form|endpoint|action)', f, re.I)]
+        if no_target and not re.search(r"<script", html, re.I):
+            fails.append(f"{len(no_target)} form(s) with no action and no script "
+                         f"to submit them (§18) — this posts to nowhere")
+        else:
+            warns.append(f"{len(forms)} form(s) have an endpoint. §18 is not "
+                         f"discharged until a real submission was watched "
+                         f"arriving at the far end")
+
+        unlabelled = [f for f in form_fields(html) if not f[3]]
+        if unlabelled:
+            fails.append(f"{len(unlabelled)} form field(s) with no associated "
+                         f"label (§17): "
+                         + ", ".join(f"{t}[{ty}]" for t, ty, _, _ in unlabelled[:4]))
+        else:
+            oks.append("every form field has an associated label")
+
+    # ---- §17 (hard) — accessibility basics ---------------------------------
+
+    missing = [s for s, a, _ in imgs if a is None]
+    empty_alt = [s for s, a, _ in imgs if a is not None and not a.strip()]
+    if missing:
+        fails.append(f"{len(missing)} image(s) with no alt attribute (§17): "
+                     + ", ".join(os.path.basename(s or "?") for s in missing[:4]))
+    elif imgs:
+        note = f" ({len(empty_alt)} decorative)" if empty_alt else ""
+        oks.append(f"alt text on all {len(imgs)} images{note}")
+
+    if re.search(r"@keyframes|animation\s*:|transition\s*:", html, re.I):
+        if "prefers-reduced-motion" in html:
+            oks.append("animation carries a prefers-reduced-motion state")
+        else:
+            fails.append("animation with no prefers-reduced-motion state (§17)")
+
+    if not re.search(r"<html[^>]*\blang\s*=", html, re.I):
+        fails.append("<html> has no lang attribute (§17, §26)")
+    else:
+        oks.append("lang declared")
+
+    h1s = re.findall(r"<h1\b", html, re.I)
+    if len(h1s) != 1:
+        warns.append(f"{len(h1s)} `h1` on this page — one page, one h1 (§7, loop 7 #20)")
+
+    # ---- §19 — performance constraints that are checkable ------------------
+
+    no_dims = [s for s, _, d in imgs if not d]
+    if no_dims:
+        warns.append(f"{len(no_dims)} image(s) with no width/height — layout "
+                     f"shift after paint is the cheapest CWV failure to avoid (§19)")
+
+    # ---- §14 — own every asset ---------------------------------------------
+
+    cdn = [u for u in ext if any(h in u for h in CDN_HOSTS)]
+    if cdn:
+        fails.append(f"{len(cdn)} CDN asset(s) — vendor and self-host (§14): "
+                     + ", ".join(sorted({u.split('/')[2] for u in cdn})[:3]))
+    else:
+        oks.append("no CDN assets — everything self-hosted")
+
+    stock = [u for u in ext if any(h in u for h in STOCK_HOSTS)]
+    if stock:
+        fails.append(f"{len(stock)} hotlinked stock image(s) (§14, §25)")
+
+    # ---- the share layer, and the meta a redesign breaks quietly -----------
+
+    if not re.search(r'property\s*=\s*["\']og:image', html, re.I):
+        warns.append("no og:image — the link unfurls as a gray box, and the "
+                     "unfurl is the buying committee's first impression (loop 5)")
+    else:
+        og = re.search(r'property\s*=\s*["\']og:image["\'][^>]*content\s*=\s*["\']([^"\']+)',
+                       html, re.I)
+        if og and not og.group(1).startswith("http"):
+            fails.append("og:image is a relative URL — unfurls fail silently")
+        else:
+            oks.append("og:image present and absolute")
+
+    canon = re.search(r'<link[^>]+rel\s*=\s*["\']canonical["\'][^>]*href\s*=\s*["\']([^"\']+)',
+                      html, re.I)
+    if not canon:
+        warns.append("no canonical (loop 7 #20)")
+    elif not canon.group(1).startswith("http"):
+        fails.append("canonical is relative — it must be absolute and "
+                     "self-referential (§13, loop 7 #20)")
+    else:
+        oks.append("canonical absolute")
+
+    title = re.search(r"<title[^>]*>(.*?)</title>", html, re.I | re.S)
+    if not title or not title.group(1).strip():
+        fails.append("no title (loop 7 #20)")
+    elif len(title.group(1).strip()) > 65:
+        warns.append(f"title is {len(title.group(1).strip())} chars — it will "
+                     f"truncate in the results page")
+
+    desc = re.search(r'<meta[^>]+name\s*=\s*["\']description["\'][^>]*content\s*=\s*["\']([^"\']*)',
+                     html, re.I)
+    if not desc or not desc.group(1).strip():
+        warns.append("no meta description — the results-page snippet is written "
+                     "for you (loop 7 #20)")
+
+    # ---- §27 — attribution (informational; removable by design) ------------
+
+    if "forged-with: webcrab" in html:
+        oks.append("attribution marker present")
+    else:
+        warns.append("no 'forged-with: webcrab' marker (fine if the human "
+                     "removed the credit by hand — §27 allows it)")
+
+    # ---- §19 — shell budget, local files only ------------------------------
+
+    if not name.startswith("http") and os.path.isfile(name):
+        size = os.path.getsize(name)
+        css = sum(os.path.getsize(f) for f in
+                  glob.glob(os.path.join(os.path.dirname(name), "**", "*.css"),
+                            recursive=True))
+        shell = size + css
+        if shell > SHELL_BUDGET:
+            warns.append(f"shell is {shell/1024:.0f}KB, over the 100KB budget "
+                         f"(§19) — confirm the heavy layer is deferred")
+        else:
+            oks.append(f"shell {shell/1024:.0f}KB, inside the 100KB budget")
+
+    # ---- --check-urls: every asset actually resolves ------------------------
+
+    if opts.get("check_urls"):
+        from urllib.request import Request, urlopen
+        bad = []
+        for u in set(ext):
+            try:
+                urlopen(Request(u, method="HEAD"), timeout=15)
+            except Exception:
+                bad.append(u)
+        if bad:
+            fails.append(f"{len(bad)} URL(s) did not resolve: "
+                         + ", ".join(b.split("/")[2] for b in bad[:4]))
+        elif ext:
+            oks.append(f"all {len(ext)} external URLs resolve")
+
+    return fails, warns, oks
+
+
+def robots_check(base):
+    """§13 — the other silent catastrophe. Live targets only."""
+    from urllib.request import urlopen
+    url = base.rstrip("/") + "/robots.txt"
+    try:
+        body = urlopen(url, timeout=15).read().decode("utf-8", "replace")
+    except Exception as e:
+        return [], [f"could not fetch {url} ({e}) — check it by hand (§13)"], []
+    for line in body.splitlines():
+        if re.match(r"\s*Disallow\s*:\s*/\s*$", line, re.I):
+            return ([f"robots.txt has `Disallow: /` in production (§13) — the "
+                     f"site is invisible. STOP EVERYTHING"], [], [])
+    oks = ["robots.txt does not block the site"]
+    if "sitemap:" not in body.lower():
+        return [], ["robots.txt references no sitemap (loop 7 #17)"], oks
+    return [], [], oks + ["robots.txt references a sitemap"]
+
+
+def redirects_check(path, domain):
+    """§13 (hard) — every row of the map, 301 and single hop."""
+    from urllib.request import Request, urlopen
+    from urllib.error import HTTPError
+    if not os.path.exists(path):
+        return [f"redirect map not found: {path} (§13)"], [], []
+    base = domain if domain.startswith("http") else "https://" + domain
+    bad, chained, rows = [], [], 0
+    with open(path, encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            old = (row.get("old_path") or "").strip()
+            if not old:
+                continue
+            rows += 1
+            try:
+                r = urlopen(Request(base + old, method="HEAD"), timeout=15)
+                # Followed to a 200 — fine only if it landed somewhere new.
+                if r.url.rstrip("/") == (base + old).rstrip("/"):
+                    bad.append(f"{old} still serves 200 at the old URL")
+            except HTTPError as e:
+                if e.code in (301, 308):
+                    continue
+                if e.code == 302:
+                    chained.append(f"{old} returned 302, not 301")
+                else:
+                    bad.append(f"{old} returned {e.code}")
+            except Exception as e:
+                bad.append(f"{old} failed ({type(e).__name__})")
+    fails = [f"{len(bad)} redirect row(s) broken (§13): " + "; ".join(bad[:5])] if bad else []
+    warns = [f"{len(chained)} row(s) not a 301: " + "; ".join(chained[:5])] if chained else []
+    oks = [f"all {rows} redirect rows resolve"] if rows and not bad else []
+    return fails, warns, oks
+
+
+def evidence_check(path, pages):
+    """§6 (hard) — every number on the site should appear in EVIDENCE.md."""
+    if not os.path.exists(path):
+        return [f"evidence file not found: {path} (§6)"], [], []
+    ev = load(path)
+    text = " ".join(re.sub(r"<[^>]+>", " ", h) for _, h in pages)
+    nums = set(re.findall(r"\b\d[\d,]*(?:\.\d+)?\s*(?:%|x|K|M|B)?\b", text))
+    nums = {n.strip() for n in nums if len(n.strip()) > 2}   # skip 1-2 digit noise
+    unsourced = sorted(n for n in nums if n not in ev)[:6]
+    if unsourced:
+        return [], [f"{len(unsourced)} figure(s) on the site not found in "
+                    f"EVIDENCE.md — every one is an advertising claim the client "
+                    f"carries (§6): " + ", ".join(unsourced)], []
+    return [], [], ["every figure on the site appears in EVIDENCE.md"]
+
+
+def report(label, triple, totals):
+    f, w, o = triple
+    if label:
+        print(f"\n{label}")
+    for x in o:
+        print(f"  ok    {x}")
+    for x in w:
+        print(f"  warn  {x}")
+    for x in f:
+        print(f"  FAIL  {x}")
+    totals[0] += len(f)
+    totals[1] += len(w)
+
+
+def selftest():
+    """One runnable check per rule the script claims to enforce."""
+    ok_page = """<!doctype html><html lang="en"><head><title>T</title>
+      <meta name="description" content="d">
+      <link rel="canonical" href="https://x.test/">
+      <meta property="og:image" content="https://x.test/og.png"></head>
+      <body><h1>H</h1><img src="a.png" alt="a" width="10" height="10">
+      <!-- forged-with: webcrab -->
+      <form action="/lead"><label for="e">Email</label>
+      <input id="e" type="email"></form></body></html>"""
+    f, w, o = check("mem", ok_page, {})
+    assert not f, f"clean page should pass: {f}"
+
+    f, _, _ = check("mem", ok_page.replace('name="description"', 'name="robots" content="noindex" data-x'), {})
+    assert any("noindex" in x for x in f), "must catch a production noindex"
+
+    f, _, _ = check("mem", ok_page.replace("</body>",
+                    '<script src="https://www.google-analytics.com/a.js"></script></body>'), {})
+    assert any("§16" in x for x in f), "must catch an ungated tracker"
+
+    _, w, _ = check("mem", ok_page.replace("</body>",
+                    '<script src="https://www.google-analytics.com/a.js"></script>'
+                    '<script>window.consent=1</script></body>'), {})
+    assert any("§16" in x for x in w), "a consent marker downgrades it to a warning"
+
+    f, _, _ = check("mem", ok_page.replace('<label for="e">Email</label>', ""), {})
+    assert any("label" in x for x in f), "must catch an unlabelled field"
+
+    f, _, _ = check("mem", ok_page.replace(' alt="a"', ""), {})
+    assert any("alt" in x for x in f), "must catch a missing alt"
+
+    f, _, _ = check("mem", ok_page.replace("a.png", "https://cdn.jsdelivr.net/a.png"), {})
+    assert any("§14" in x for x in f), "must catch a CDN asset"
+
+    f, _, _ = check("mem", ok_page.replace('href="https://x.test/"', 'href="/"'), {})
+    assert any("canonical" in x for x in f), "must catch a relative canonical"
+
+    f, _, _ = check("mem", ok_page.replace('action="/lead"', "").replace(
+        "<!-- forged-with: webcrab -->", ""), {})
+    assert any("§18" in x for x in f), "must catch a form with nowhere to post"
+
+    _, w, _ = check("mem", ok_page.replace(' width="10" height="10"', ""), {})
+    assert any("§19" in x for x in w), "must warn on a missing width/height"
+
+    print("selftest: all checks pass")
+
+
+def main():
+    if "--selftest" in sys.argv:
+        selftest()
+        return
+
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    flags = {a for a in sys.argv if a.startswith("--")}
+    # Drop values that belong to a preceding flag.
+    for flag in ("--evidence", "--redirects", "--domain"):
+        if flag in sys.argv:
+            v = sys.argv[sys.argv.index(flag) + 1]
+            if v in args:
+                args.remove(v)
+    if not args:
+        print(__doc__)
+        sys.exit(2)
+
+    opts = {"check_urls": "--check-urls" in flags}
+    target = args[0]
+    pages = targets(target)
+    totals = [0, 0]
+
+    for name, html in pages:
+        label = None if len(pages) == 1 else os.path.relpath(name, target)
+        report(label, check(name, html, opts), totals)
+
+    if target.startswith("http"):
+        report(None, robots_check(target), totals)
+
+    if "--redirects" in sys.argv:
+        path = sys.argv[sys.argv.index("--redirects") + 1]
+        domain = (sys.argv[sys.argv.index("--domain") + 1]
+                  if "--domain" in sys.argv else target)
+        report(None, redirects_check(path, domain), totals)
+
+    if "--evidence" in sys.argv:
+        report(None, evidence_check(sys.argv[sys.argv.index("--evidence") + 1], pages),
+               totals)
+
+    print()
+    if totals[0]:
+        print(f"pre-flight: {totals[0]} failure(s), {totals[1]} warning(s). "
+              f"Fix before Gate C.")
+        sys.exit(1)
+    print(f"pre-flight: passed ({totals[1]} warning(s)).")
+    print("This checks what a machine can check. Whether the lead arrives, "
+          "whether consent actually blocks the request, whether the design is "
+          "right, and whether a claim is true are the human's call (§18, §16, §6).")
+
+
+if __name__ == "__main__":
+    main()

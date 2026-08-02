@@ -1,0 +1,27 @@
+# Web app (Next.js) — standalone production server.
+# Build context is the repo root (monorepo). Multi-stage: build with the full
+# workspace, then ship only the standalone output.
+
+FROM node:22-slim AS build
+RUN npm install -g pnpm@11.13.1
+WORKDIR /repo
+COPY . .
+# Install only the web app's dependency closure.
+RUN pnpm install --frozen-lockfile --filter web...
+# NEXT_PUBLIC_* is baked at build time — point the browser at your API's public
+# URL. Defaults to localhost for a local `docker compose up`.
+ARG NEXT_PUBLIC_API_URL=http://localhost:4000
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+RUN pnpm --filter web build
+
+FROM node:22-slim AS web
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+# Standalone server + static assets + public/ (which includes the seed content).
+COPY --from=build /repo/apps/web/.next/standalone ./
+COPY --from=build /repo/apps/web/.next/static ./apps/web/.next/static
+COPY --from=build /repo/apps/web/public ./apps/web/public
+EXPOSE 3000
+CMD ["node", "apps/web/server.js"]

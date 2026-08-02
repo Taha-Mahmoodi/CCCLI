@@ -1,0 +1,11 @@
+# Copy to `.env` on the VPS and fill in real values.
+# docker-compose.prod.yml derives DATABASE_URL and AUTH_URL from these.
+
+# The domain that points at this VPS (A/AAAA record). Caddy gets HTTPS for it.
+APP_DOMAIN=commons.example.com
+
+# Session signing secret. Generate a fresh one:  openssl rand -base64 32
+AUTH_SECRET=replace-with-a-32-byte-base64-secret
+
+# Database password (used for the bundled Postgres).
+POSTGRES_PASSWORD=replace-with-a-strong-password

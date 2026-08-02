@@ -1,0 +1,76 @@
+# Deploying Third Eye World to a VPS
+
+The whole stack runs as two Docker containers, defined in `docker-compose.yml` at
+the repo root:
+
+- **web** — the Next.js app (radio timeline, recording, channels, the `/seed`
+  demo loader). Port `3000`.
+- **api** — the Hono + SQLite backend (moderation, auth, DM relay, IVR). Port
+  `4000`, with a named volume `tew-data` for the SQLite DB and uploaded audio.
+
+Both images build from the repo root and were verified with `docker compose up`
+locally: web serves the app and the seed content, api answers on `/timeline`.
+
+## Quick start on the VPS
+
+```bash
+git clone <this repo> && cd third-eye-world-mono
+cp .env.example .env
+# edit .env — at minimum set NEXT_PUBLIC_API_URL (see below) and a moderator token
+docker compose up -d --build
+```
+
+That's it — `web` is on `:3000`, `api` on `:4000`.
+
+## `.env`
+
+| Variable | What it does |
+|---|---|
+| `NEXT_PUBLIC_API_URL` | The API's **public** URL as the browser will reach it (e.g. `https://tew.example.com/api`). **Baked into the web bundle at build time** — change it and rebuild web (`docker compose up -d --build web`). Only the moderator console needs it; the radio timeline works without it. |
+| `TEW_MODERATOR_TOKENS` | Moderator-console logins: `token:moderatorId,token2:mod2`. Blank falls back to a dev token — change before anything public. |
+| `TEW_DEV_AUTH` | `1` makes magic-link auth return the token in the response. Testing only; leave `0`. |
+
+## Reverse proxy + TLS (you provide this)
+
+Compose exposes plain HTTP on `:3000` and `:4000`. Put your own TLS-terminating
+proxy in front. Example nginx:
+
+```nginx
+server {
+  server_name tew.example.com;
+  location /     { proxy_pass http://127.0.0.1:3000; }
+  location /api/ { proxy_pass http://127.0.0.1:4000/; }
+  # + your certbot / TLS block
+}
+```
+
+If you route the API under `/api` like this, set
+`NEXT_PUBLIC_API_URL=https://tew.example.com/api` in `.env` **before building**.
+
+## Loading the demo content
+
+The seed is client-side (per-browser IndexedDB), so load it from whatever browser
+you're testing in:
+
+1. Open `https://your-domain/seed`
+2. Click **Load demo content** — 19 memos from 7 fictional users across 6 stations,
+   with real spoken audio.
+3. Click **Open the app**.
+
+**Clear all content** on the same page wipes it. It only touches that one browser.
+
+To regenerate or change the seed (macOS, needs `say` + `ffmpeg`):
+
+```bash
+node scripts/seed/generate.mjs      # edit scripts/seed/content.mjs first
+```
+
+## Notes / honest limits
+
+- Seed audio is **Opus/WebM** — plays in Chromium and matches what the app
+  records first. iOS Safari can't play WebM (spec §5.2); regenerate an `.m4a`
+  variant if you need to test in real Safari.
+- Real ASR (Whisper) and TTS (Piper) are **off** unless you set their env vars
+  (`TEW_WHISPER_BIN`/`TEW_WHISPER_MODEL`, `TEW_PIPER_BIN`/`TEW_PIPER_MODEL`); the
+  API falls back to the honest stub. Wiring those needs the binaries on the box.
+- This is the **beta** line. The v1 gesture deck lives on the `v1` branch.

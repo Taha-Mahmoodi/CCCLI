@@ -1,0 +1,40 @@
+# @tew/dm — real E2EE direct messages (libsignal)
+
+The spec (§7) mandates **libsignal** for E2EE DMs. This package is the real
+thing — the audited Signal protocol (PQXDH prekey bundles + Double Ratchet), not
+hand-rolled crypto. It **replaces the unaudited franking sketch** in
+`packages/crypto` as the actual DM path.
+
+The server only ever relays **ciphertext**; keys live on the devices (iOS
+Keychain/Secure Enclave, Android Keystore). The in-memory stores here stand in
+for the device-backed stores the native apps use.
+
+## Standalone — outside the pnpm workspace
+
+libsignal ships a **54 MB native tarball** (prebuilt binaries for every
+platform). pnpm's fetcher times out on it over a slow link, so this package is
+**excluded from the pnpm workspace** (`!packages/dm` in `pnpm-workspace.yaml`)
+and installed with plain `npm`, which handles it fine. The main workspace,
+lockfile, and JS CI are untouched by it.
+
+## Verify
+
+```bash
+cd packages/dm
+npm install          # fetches libsignal's prebuilt binary
+npm run verify       # → "✓ 5 real-libsignal E2EE checks passed"
+```
+
+`verify.mjs` runs a real roundtrip: Alice establishes a session from Bob's
+prekey bundle, encrypts (PreKey message), Bob decrypts to the exact plaintext; a
+ratcheted follow-up and a bidirectional reply decrypt; a tampered ciphertext is
+rejected. Runs in CI on its own `e2ee-dm` job. Verified locally against
+libsignal 0.86.16.
+
+## Wiring into the product (remaining, needs the native apps)
+
+- Devices generate identity keys + prekeys, stored in the platform keystore.
+- The API relays: publish prekey bundles, deliver ciphertext to a request queue
+  (a stranger sends one memo, no notification; a thread opens on acceptance),
+  minimise metadata (sealed-sender), keep nothing but reported audio.
+- Reporting uses libsignal's own message franking — no server access to plaintext.

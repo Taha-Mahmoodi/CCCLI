@@ -1,0 +1,173 @@
+import * as THREE from "three";
+import { CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import {
+  mockNotes,
+  mulberry32,
+  orbitRadiusByRank,
+  rankNotesByRecency,
+  type Vault,
+} from "./data";
+
+// Semantic LOD tier 3: inside one vault's star system. Notes are planets
+// lit by their star (a real point light); sub-notes are moons.
+//
+// Orrery physics rules (from flight feedback — orbits must never cross):
+// - radii are rank-spaced with a constant gap (orbitRadiusByRank), fresh
+//   notes on the inner ranks
+// - each orbit's ring AND its planet live in the same inclined plane
+//   object, so what you see is exactly the path the planet flies
+// - inclinations are shallow (±0.05 rad) — enough depth to feel 3D,
+//   never enough for adjacent rings to visually intersect
+// - planet radius is capped well under half the orbit gap, and moon
+//   orbits stay inside that clearance too
+
+interface Orbiter {
+  pivot: THREE.Object3D;
+  speed: number;
+}
+
+export interface NoteSystem {
+  group: THREE.Group;
+  vault: Vault;
+  orbiters: Orbiter[];
+  labels: CSS2DObject[];
+  light: THREE.PointLight;
+  /** fade handle: 0..1, applied to all system materials */
+  setOpacity(o: number): void;
+}
+
+const PLANET_TINTS = [0xc9a687, 0x9db4c9, 0xb79d8a, 0x8fae9c, 0xc9b487, 0xa593b5];
+const MAX_PLANET_R = 0.26; // < ORBIT_GAP/2 minus moon clearance
+
+export function buildNoteSystem(
+  vault: Vault,
+  now: number,
+  palCore: number,
+  sprite: THREE.Texture,
+): NoteSystem {
+  const rnd = mulberry32(vault.id.length * 811 + vault.noteCount * 3);
+  const notes = rankNotesByRecency(mockNotes(vault));
+  const group = new THREE.Group();
+  const orbiters: Orbiter[] = [];
+  const labels: CSS2DObject[] = [];
+  const fadeMats: { mat: THREE.Material & { opacity: number }; base: number }[] = [];
+
+  // the star: emissive core + corona kept INSIDE the first orbit's clearance
+  const starColor = new THREE.Color(palCore);
+  const starMat = new THREE.MeshBasicMaterial({
+    color: starColor,
+    transparent: true,
+  });
+  const star = new THREE.Mesh(new THREE.SphereGeometry(0.34, 24, 24), starMat);
+  group.add(star);
+  fadeMats.push({ mat: starMat, base: 1 });
+
+  const coronaMat = new THREE.SpriteMaterial({
+    map: sprite,
+    color: starColor,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  const corona = new THREE.Sprite(coronaMat);
+  corona.scale.setScalar(1.7);
+  group.add(corona);
+  fadeMats.push({ mat: coronaMat, base: 1 });
+
+  const light = new THREE.PointLight(starColor, 26, 40, 2);
+  group.add(light);
+  // soft fill so night sides read as form, not holes
+  const fill = new THREE.HemisphereLight(0x28324a, 0x0a0c12, 0.4);
+  group.add(fill);
+
+  notes.forEach((note, rank) => {
+    const orbitR = orbitRadiusByRank(rank);
+    const planetR = Math.min(0.09 + Math.sqrt(note.size) * 0.05, MAX_PLANET_R);
+
+    // one plane object per orbit: the ring and the planet share it exactly
+    const orbitPlane = new THREE.Object3D();
+    orbitPlane.rotation.x = (rnd() - 0.5) * 0.1;
+    orbitPlane.rotation.z = (rnd() - 0.5) * 0.06;
+    group.add(orbitPlane);
+
+    const ringGeo = new THREE.RingGeometry(orbitR - 0.005, orbitR + 0.005, 128);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x8f9bb8,
+      transparent: true,
+      opacity: 0.16,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = Math.PI / 2;
+    orbitPlane.add(ring);
+    fadeMats.push({ mat: ringMat, base: 0.16 });
+
+    const pivot = new THREE.Object3D();
+    pivot.rotation.y = rnd() * Math.PI * 2;
+    orbitPlane.add(pivot);
+
+    const mat = new THREE.MeshStandardMaterial({
+      color: PLANET_TINTS[rank % PLANET_TINTS.length],
+      roughness: 0.72,
+      metalness: 0.05,
+      emissive: 0x0a0c14, // night side never fully black
+      transparent: true,
+    });
+    const planet = new THREE.Mesh(new THREE.SphereGeometry(planetR, 22, 22), mat);
+    planet.position.x = orbitR;
+    pivot.add(planet);
+    fadeMats.push({ mat, base: 1 });
+    // closer orbits move faster — Kepler-flavored, slow enough to feel calm
+    orbiters.push({ pivot, speed: 0.12 / Math.pow(orbitR, 1.5) });
+
+    // moons: kept inside the orbit gap's clearance so they never graze
+    // a neighboring ring
+    for (let m = 0; m < note.subCount; m++) {
+      const moonPivot = new THREE.Object3D();
+      moonPivot.rotation.y = rnd() * Math.PI * 2;
+      planet.add(moonPivot);
+      const moonMat = new THREE.MeshStandardMaterial({
+        color: 0xb8bcc9,
+        roughness: 0.9,
+        emissive: 0x07080e,
+        transparent: true,
+      });
+      const moon = new THREE.Mesh(
+        new THREE.SphereGeometry(planetR * 0.24, 12, 12),
+        moonMat,
+      );
+      moon.position.x = planetR * (1.5 + m * 0.35);
+      moonPivot.add(moon);
+      fadeMats.push({ mat: moonMat, base: 1 });
+      orbiters.push({ pivot: moonPivot, speed: 0.9 + rnd() * 0.7 });
+    }
+
+    const el = document.createElement("div");
+    el.className = "yz-label";
+    el.textContent = note.title;
+    const label = new CSS2DObject(el);
+    label.position.set(0, planetR + 0.24, 0);
+    planet.add(label);
+    labels.push(label);
+  });
+
+  group.visible = false;
+  return {
+    group,
+    vault,
+    orbiters,
+    labels,
+    light,
+    setOpacity(o: number) {
+      for (const f of fadeMats) f.mat.opacity = f.base * o;
+      light.intensity = 26 * o;
+      fill.intensity = 0.4 * o;
+      group.visible = o > 0.01;
+    },
+  };
+}
+
+export function tickNoteSystem(sys: NoteSystem, dt: number): void {
+  for (const o of sys.orbiters) o.pivot.rotation.y += o.speed * dt;
+}

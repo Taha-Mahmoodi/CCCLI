@@ -1,0 +1,26 @@
+---
+name: website-pitch-pipeline-cost-estimator
+description: "website-pitch-pipeline — cost estimator (Loop 0a), forged blueprint README, and first real campaign (texas-bars-batch-1) started 2026-07-25"
+metadata: 
+  node_type: memory
+  type: project
+  originSessionId: 54878c37-ff59-4cbe-a1af-88cbdb00e1d7
+  modified: 2026-07-26T09:13:01.345Z
+---
+
+**PIIIX-org/website-pitch-pipeline state as of 2026-07-25** (local clone was at /tmp/website-pitch-pipeline as of 2026-07-24, gone by 2026-07-25 — re-cloned into scratchpad, which does NOT survive sessions; re-clone each time). **"Repo is modify-only, never run it" is LIFTED as of 2026-07-25 — user explicitly said "let's run it".** The pipeline itself has real guardrails (see PIPELINE.md): human gates A/B/C between loops, public-contact-only data with source URLs required, emails only ever drafted never auto-sent, honest "sales concept" positioning required.
+
+**First real campaign: texas-bars-batch-1.** GEOGRAPHY=Texas statewide (13 cities/towns spread), VERTICALS=bars, ORG=PIIIX-org, LOCALE=en, batch size = pipeline default (15 leads/5 plans/5 sites). Loop 0a estimate on Sonnet 5: ~$7.80 / ~2.1h for full batch. Loop 1 (research) done 2026-07-25: 15 real bars found via WebSearch/WebFetch (general-purpose agent), each verified against a real Maps/Yelp/directory source URL, no invented contacts (12/15 public phone, only 1/15 public email — rest genuinely unlisted). Full data (with contact info) only ever lived in scratchpad + sent to Taha as files — **scratchpad wipes between turns/sessions, so it must be regenerated from `leads_data.json`+`build_leads.py` if needed again, they don't persist.**
+
+**Gitignore discovery:** `leads/`, `*.xlsx`, `nyc-leads/`, `pipeline-runs/` are gitignored in this repo by design — real business contact data is deliberately kept out of git history; only `runs/` is meant to be tracked. Pushed anyway per Taha's request as a **sanitized** (no phone/email) test-validation commit: `leads/test-1/texas-bars-test-1.md` + `texas-summary.md`, commit `02b3cce` 2026-07-25, force-added past the gitignore since content has no PII. Treat `leads/test-1/` as the established pattern for future test-run commits of this pipeline — sanitize contact fields, markdown not xlsx (xlsx is gitignored), force-add only the specific sanitized file.
+
+**Gate A for the full (unsanitized) sheet is still pending Taha's approval** as of end of 2026-07-25 session — do not start Loop 2 (per-business plans/repos) until he explicitly approves it.
+
+**1. Universal AI cost estimator (Loop 0a):** `utils/cost-estimator.js` (231 lines, zero deps) + `loops/00a-cost-estimate.md` + `utils/README.md`. Prices a campaign across 12 models / 4 providers (`node utils/cost-estimator.js estimate <leads> <businesses> <sites>`). Caution: these files were written in an earlier session that *claimed* to push them but never committed them; they only landed in commit `e5740fb` (2026-07-24). Known doc inconsistency: loops/00a prose says quality strategy costs "$50–200" but the formula tops out ~$32 for a 5/5/5 campaign.
+
+**2. README forged via the git-a-profile plugin** (user's own PIIIX-org/git-a-profile, installed as Claude plugin). First attempt (indigo badges + invented logo) was reverted; second run followed the full pipeline (intake → research → Gate A → asset fan-out → Gate B → build → Gate C → live screenshot verify) and shipped commit `830ddb4`.
+- Approved intake: vibe = "heist crew with blueprints"; must-haves = cost estimator, human gates, PIIIX name, custom tags; do-nots = **never invent a PIIIX logo**, hero banner required.
+- Concept: "The Drawing Set, filed clean" (blueprint sheet set + job-file furniture). Palette: charcoal `#272625` + porcelain `#f5f9fb` (sampled from PIIIX org avatar), cyanotype blues `#0E2A3F/#2E5C8A/#9CC3E0`, stamp red `#B3402F` reserved for human/gate moments only.
+- 9 committed SVGs in `assets/`: hero-banner, tag-metabar, sheet-register, takeoff-chart, gate-slips, tag-lifecycle, section-tab, footer-strip. All: own charcoal background, mono type, one-shot animation gated by prefers-reduced-motion, alt text, no badge services. README carries `<!-- forged-with: git-a-profile -->` + visible removable credit (never re-add if Taha deletes it).
+- RESEARCH.md in the clone is deliberately uncommitted working material.
+- git-a-profile's Loop 4 run report (`runs/<slug>/REPORT.md` in the *plugin* repo) — pending Taha's decision at session end 2026-07-24.

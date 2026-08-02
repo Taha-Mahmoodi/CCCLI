@@ -1,0 +1,145 @@
+"use client";
+
+// The stream: station picker, transcript on/off toggle, transcript search, and
+// the memo list. Stations (channels) filter both what's shown and what plays;
+// search filters by transcript text (spec §3.1).
+
+import { useState } from "react";
+import { usePlayer } from "@/stores/player";
+import { ALL } from "@/lib/channels";
+import { MemoList } from "@/components/MemoList";
+import { Button } from "@/components/ui/button";
+
+export function StreamSection() {
+  const [query, setQuery] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState("");
+
+  const hasMemos = usePlayer((s) => s.memos.length > 0);
+  const channels = usePlayer((s) => s.channels);
+  const activeChannel = usePlayer((s) => s.activeChannel);
+  const setActiveChannel = usePlayer((s) => s.setActiveChannel);
+  const createChannel = usePlayer((s) => s.createChannel);
+  const showTranscripts = usePlayer((s) => s.showTranscripts);
+  const toggleTranscripts = usePlayer((s) => s.toggleTranscripts);
+  const shuffle = usePlayer((s) => s.shuffle);
+  const toggleShuffle = usePlayer((s) => s.toggleShuffle);
+
+  const tabs = [{ id: ALL, name: "All" }, ...channels];
+
+  const submitNew = () => {
+    const name = newName.trim();
+    if (!name) return;
+    createChannel(name);
+    setNewName("");
+    setCreating(false);
+  };
+
+  return (
+    <section aria-labelledby="stream-title" className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <h2 id="stream-title" className="text-lg font-semibold">
+          Your stream
+        </h2>
+        {hasMemos && (
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant={shuffle ? "default" : "outline"}
+              className="h-10 rounded-full px-4 text-sm"
+              aria-pressed={shuffle}
+              aria-label={shuffle ? "Turn shuffle off" : "Shuffle this station"}
+              onClick={toggleShuffle}
+            >
+              {shuffle ? "Shuffle on" : "Shuffle"}
+            </Button>
+            <Button
+              type="button"
+              variant={showTranscripts ? "default" : "outline"}
+              className="h-10 rounded-full px-4 text-sm"
+              aria-pressed={showTranscripts}
+              aria-label={showTranscripts ? "Hide transcripts" : "Show transcripts"}
+              onClick={toggleTranscripts}
+            >
+              {showTranscripts ? "Transcripts on" : "Transcripts off"}
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Stations */}
+      <div role="group" aria-label="Stations" className="flex flex-wrap items-center gap-2">
+        {tabs.map((c) => (
+          <Button
+            key={c.id}
+            type="button"
+            variant={activeChannel === c.id ? "default" : "outline"}
+            className="h-10 rounded-full px-4 text-sm"
+            aria-pressed={activeChannel === c.id}
+            onClick={() => setActiveChannel(c.id)}
+          >
+            {c.name}
+          </Button>
+        ))}
+
+        {creating ? (
+          <span className="flex items-center gap-2">
+            <label htmlFor="new-station" className="sr-only">
+              New station name
+            </label>
+            <input
+              id="new-station"
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitNew();
+                if (e.key === "Escape") setCreating(false);
+              }}
+              placeholder="Station name"
+              autoFocus
+              className="h-10 w-40 rounded-full border border-border bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            />
+            <Button type="button" size="sm" className="h-10 px-4" onClick={submitNew}>
+              Create
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-10 px-3"
+              onClick={() => {
+                setCreating(false);
+                setNewName("");
+              }}
+            >
+              Cancel
+            </Button>
+          </span>
+        ) : (
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-10 rounded-full px-4 text-sm"
+            aria-label="Create a new station"
+            onClick={() => setCreating(true)}
+          >
+            + New station
+          </Button>
+        )}
+      </div>
+
+      {hasMemos && (
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search transcripts…"
+          aria-label="Search your stream by transcript"
+          className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+        />
+      )}
+
+      <MemoList query={query} />
+    </section>
+  );
+}

@@ -1,0 +1,177 @@
+"use client";
+
+import * as React from "react";
+import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import { t } from "@/lib/i18n";
+
+export interface Column<T> {
+  key: string;
+  header: string;
+  align?: "left" | "right";
+  sortable?: boolean;
+  /** Custom cell content; defaults to String(row[key]). */
+  render?: (row: T) => React.ReactNode;
+  /** Value used for sorting; defaults to render-less row[key]. */
+  sortValue?: (row: T) => string | number;
+}
+
+interface SortState {
+  key: string;
+  dir: "asc" | "desc";
+}
+
+/**
+ * Accessible data table: real `<table>` with a `<caption>`, `<thead>`, and
+ * `<th scope="col">`. Sortable columns are keyboard-operable `<button>`s; the
+ * `<th>`'s `aria-sort` reflects state and a live region announces each change.
+ */
+export function DataTable<T>({
+  caption,
+  columns,
+  rows,
+  getRowKey,
+  captionVisible = false,
+  emptyText,
+}: {
+  caption: string;
+  columns: Column<T>[];
+  rows: T[];
+  getRowKey: (row: T, index: number) => string;
+  captionVisible?: boolean;
+  emptyText?: string;
+}) {
+  const [sort, setSort] = React.useState<SortState | null>(null);
+  const [announce, setAnnounce] = React.useState("");
+
+  const sorted = React.useMemo(() => {
+    if (!sort) return rows;
+    const col = columns.find((c) => c.key === sort.key);
+    if (!col) return rows;
+    const value = (row: T): string | number =>
+      col.sortValue
+        ? col.sortValue(row)
+        : ((row as Record<string, unknown>)[col.key] as string | number);
+    const factor = sort.dir === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      const av = value(a);
+      const bv = value(b);
+      if (av < bv) return -1 * factor;
+      if (av > bv) return 1 * factor;
+      return 0;
+    });
+  }, [rows, sort, columns]);
+
+  function toggleSort(col: Column<T>) {
+    setSort((prev) => {
+      const dir: "asc" | "desc" =
+        prev?.key === col.key && prev.dir === "asc" ? "desc" : "asc";
+      setAnnounce(
+        t("table.sortedBy", {
+          column: col.header,
+          direction: t(dir === "asc" ? "table.ascending" : "table.descending"),
+        }),
+      );
+      return { key: col.key, dir };
+    });
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-card border border-border">
+      <table className="w-full border-collapse text-left text-base">
+        <caption
+          className={captionVisible ? "px-4 py-3 text-left text-h3" : "sr-only"}
+        >
+          {caption}
+        </caption>
+        <thead>
+          <tr className="border-b border-border bg-surface-sunk">
+            {columns.map((col) => {
+              const active = sort?.key === col.key;
+              const ariaSort = active
+                ? sort.dir === "asc"
+                  ? "ascending"
+                  : "descending"
+                : "none";
+              return (
+                <th
+                  key={col.key}
+                  scope="col"
+                  aria-sort={col.sortable ? ariaSort : undefined}
+                  className={[
+                    "px-4 py-3 text-sm font-bold text-ink-soft",
+                    col.align === "right" ? "text-right" : "text-left",
+                  ].join(" ")}
+                >
+                  {col.sortable ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleSort(col)}
+                      className={[
+                        "inline-flex items-center gap-1 rounded-sm font-bold text-ink-soft hover:text-ink",
+                        col.align === "right" ? "flex-row-reverse" : "",
+                      ].join(" ")}
+                    >
+                      {col.header}
+                      {active ? (
+                        sort.dir === "asc" ? (
+                          <ChevronUp size={15} strokeWidth={2.5} aria-hidden="true" />
+                        ) : (
+                          <ChevronDown size={15} strokeWidth={2.5} aria-hidden="true" />
+                        )
+                      ) : (
+                        <ChevronsUpDown
+                          size={15}
+                          strokeWidth={2}
+                          aria-hidden="true"
+                          className="text-ink-faint"
+                        />
+                      )}
+                    </button>
+                  ) : (
+                    col.header
+                  )}
+                </th>
+              );
+            })}
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.length === 0 ? (
+            <tr>
+              <td
+                colSpan={columns.length}
+                className="px-4 py-6 text-center text-base text-ink-soft"
+              >
+                {emptyText ?? t("table.empty")}
+              </td>
+            </tr>
+          ) : (
+            sorted.map((row, i) => (
+              <tr
+                key={getRowKey(row, i)}
+                className="border-b border-border last:border-0"
+              >
+                {columns.map((col) => (
+                  <td
+                    key={col.key}
+                    className={[
+                      "px-4 py-3 text-ink",
+                      col.align === "right" ? "text-right" : "text-left",
+                    ].join(" ")}
+                  >
+                    {col.render
+                      ? col.render(row)
+                      : String((row as Record<string, unknown>)[col.key] ?? "")}
+                  </td>
+                ))}
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+      <div className="sr-only" aria-live="polite">
+        {announce}
+      </div>
+    </div>
+  );
+}

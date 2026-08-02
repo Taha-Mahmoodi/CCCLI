@@ -1,0 +1,9 @@
+{
+  "id": "11",
+  "subject": "Task 4: Build debug APK + manual on-device verification protocol",
+  "description": "Requires the user's physical Android tablet — cannot be delegated to a subagent.",
+  "activeForm": "Running Task 4 (on-device verification)",
+  "status": "pending",
+  "blocks": [],
+  "blockedBy": []
+}
